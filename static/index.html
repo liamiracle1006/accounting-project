@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AgentLedger V1.0</title>
+  <style>
+    :root {
+      --bg: #f4f6f9;
+      --surface: #ffffff;
+      --border: #e2e8f0;
+      --primary: #3b6cf8;
+      --primary-dark: #2d55d4;
+      --text: #1a202c;
+      --text-muted: #718096;
+      --success: #38a169;
+      --warning: #d69e2e;
+      --error: #e53e3e;
+      --radius: 8px;
+      --shadow: 0 1px 4px rgba(0,0,0,0.08);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, "PingFang SC", "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 14px;
+      min-height: 100vh;
+    }
+
+    /* ── Header ── */
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 0 24px;
+      height: 56px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: var(--shadow);
+    }
+    .logo {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--primary);
+      letter-spacing: -0.3px;
+    }
+    .logo span { color: var(--text-muted); font-weight: 400; font-size: 13px; margin-left: 4px; }
+    header nav { margin-left: auto; display: flex; gap: 6px; }
+    header nav a {
+      padding: 5px 12px;
+      border-radius: var(--radius);
+      text-decoration: none;
+      color: var(--text-muted);
+      font-size: 13px;
+      transition: background 0.15s;
+    }
+    header nav a:hover, header nav a.active { background: var(--bg); color: var(--text); }
+
+    /* ── Layout ── */
+    .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+    .grid { display: grid; grid-template-columns: 380px 1fr; gap: 20px; align-items: start; }
+
+    /* ── Card ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+    .card-header {
+      padding: 16px 20px 14px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .card-title { font-weight: 600; font-size: 14px; }
+    .card-body { padding: 20px; }
+
+    /* ── Form ── */
+    textarea {
+      width: 100%;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 10px 12px;
+      font-size: 14px;
+      font-family: inherit;
+      resize: vertical;
+      min-height: 100px;
+      color: var(--text);
+      line-height: 1.6;
+      transition: border-color 0.15s;
+    }
+    textarea:focus { outline: none; border-color: var(--primary); }
+    textarea::placeholder { color: #a0aec0; }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 16px;
+      border-radius: var(--radius);
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      border: none;
+      transition: all 0.15s;
+    }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-primary:hover { background: var(--primary-dark); }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-outline {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text-muted);
+    }
+    .btn-outline:hover { border-color: #a0aec0; color: var(--text); }
+
+    .form-actions { margin-top: 12px; display: flex; gap: 8px; align-items: center; }
+
+    /* ── Image Upload Placeholder ── */
+    .upload-placeholder {
+      margin-top: 16px;
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 18px;
+      text-align: center;
+      position: relative;
+      background: #fafbfc;
+      cursor: not-allowed;
+      opacity: 0.7;
+    }
+    .upload-placeholder .upload-icon { font-size: 28px; margin-bottom: 8px; }
+    .upload-placeholder .upload-label {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+    .coming-soon-badge {
+      position: absolute;
+      top: -10px;
+      right: 12px;
+      background: var(--warning);
+      color: #fff;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 20px;
+      letter-spacing: 0.5px;
+    }
+    .upload-placeholder .upload-hint {
+      font-size: 11px;
+      color: #a0aec0;
+      margin-top: 6px;
+    }
+
+    /* ── Status Badge ── */
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.3px;
+    }
+    .badge-processed { background: #c6f6d5; color: #276749; }
+    .badge-pending   { background: #bee3f8; color: #2a69ac; }
+    .badge-manual    { background: #feebc8; color: #9c4221; }
+
+    /* ── Tabs ── */
+    .tabs { display: flex; gap: 4px; padding: 0 20px; border-bottom: 1px solid var(--border); }
+    .tab {
+      padding: 10px 14px;
+      font-size: 13px;
+      color: var(--text-muted);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      transition: all 0.15s;
+    }
+    .tab:hover { color: var(--text); }
+    .tab.active { color: var(--primary); border-bottom-color: var(--primary); font-weight: 600; }
+
+    /* ── Table ── */
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; }
+    th {
+      text-align: left;
+      padding: 10px 16px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--text-muted);
+      background: #f7fafc;
+      border-bottom: 1px solid var(--border);
+    }
+    td {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      font-size: 13px;
+      vertical-align: middle;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr.clickable { cursor: pointer; }
+    tr.clickable:hover td { background: #f7fafc; }
+
+    .text-preview {
+      max-width: 260px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--text);
+    }
+    .record-id { color: var(--text-muted); font-size: 12px; font-family: monospace; }
+
+    .link-btn {
+      color: var(--primary);
+      background: none;
+      border: none;
+      cursor: pointer;
+      font-size: 13px;
+      padding: 0;
+      text-decoration: underline;
+    }
+    .link-btn:hover { color: var(--primary-dark); }
+
+    /* ── Empty / Loading state ── */
+    .empty-state {
+      text-align: center;
+      padding: 48px 20px;
+      color: var(--text-muted);
+    }
+    .empty-state .empty-icon { font-size: 36px; margin-bottom: 12px; }
+    .spinner {
+      width: 20px; height: 20px;
+      border: 2px solid var(--border);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      display: inline-block;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Toast ── */
+    #toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      padding: 12px 20px;
+      border-radius: var(--radius);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 500;
+      z-index: 999;
+      opacity: 0;
+      transform: translateY(8px);
+      transition: all 0.25s;
+      pointer-events: none;
+      max-width: 360px;
+    }
+    #toast.show { opacity: 1; transform: translateY(0); }
+    #toast.success { background: var(--success); }
+    #toast.error { background: var(--error); }
+
+    /* ── Modal ── */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.4);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: var(--surface);
+      border-radius: 12px;
+      width: 100%;
+      max-width: 680px;
+      max-height: 90vh;
+      overflow-y: auto;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+    }
+    .modal-header {
+      padding: 18px 24px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .modal-title { font-weight: 700; font-size: 15px; }
+    .modal-close {
+      background: none;
+      border: none;
+      font-size: 20px;
+      cursor: pointer;
+      color: var(--text-muted);
+      line-height: 1;
+      padding: 2px 6px;
+      border-radius: 4px;
+    }
+    .modal-close:hover { background: var(--bg); }
+    .modal-body { padding: 20px 24px 24px; }
+
+    .info-row { display: flex; gap: 8px; margin-bottom: 8px; font-size: 13px; }
+    .info-label { color: var(--text-muted); min-width: 80px; }
+    .info-value { color: var(--text); word-break: break-all; }
+
+    .section-title { font-weight: 600; font-size: 13px; margin: 18px 0 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
+
+    .voucher-table th { background: #f0f4ff; color: #3b6cf8; }
+    .debit { color: #2d6a4f; font-weight: 600; }
+    .credit { color: #9b2226; font-weight: 600; }
+    .amount { font-family: "SF Mono", monospace; }
+
+    .total-row td { font-weight: 700; background: #f7fafc; }
+
+    /* ── Responsive ── */
+    @media (max-width: 760px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">AgentLedger <span>V1.0 · 智能业财系统</span></div>
+  <nav>
+    <a href="#" class="active" onclick="showSection('records'); return false;">流水记录</a>
+    <a href="/docs" target="_blank">API 文档</a>
+  </nav>
+</header>
+
+<div class="container">
+  <div class="grid">
+
+    <!-- ── 左栏：输入 ── -->
+    <div>
+      <div class="card">
+        <div class="card-header">
+          <span>📝</span>
+          <span class="card-title">录入业务流水</span>
+        </div>
+        <div class="card-body">
+          <textarea id="rawText"
+            placeholder="用自然语言描述业务，例如：&#10;今天向供应商张三支付货款 8500 元，通过工行转账。&#10;&#10;收到客户李四的预付款 20000 元，已到账。"
+            rows="5"
+          ></textarea>
+          <div class="form-actions">
+            <button class="btn btn-primary" id="submitBtn" onclick="submitRecord()">
+              提交处理
+            </button>
+            <button class="btn btn-outline" onclick="clearInput()">清空</button>
+            <span id="submitSpinner" style="display:none"><span class="spinner"></span></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 图片上传占位 -->
+      <div class="card" style="margin-top:16px">
+        <div class="card-header">
+          <span>🧾</span>
+          <span class="card-title">票据 / 发票识别</span>
+        </div>
+        <div class="card-body" style="padding-top:12px">
+          <div class="upload-placeholder" title="图片 OCR 功能开发中">
+            <span class="coming-soon-badge">即将推出</span>
+            <div class="upload-icon">📄</div>
+            <div class="upload-label">拍照或上传增值税发票、收据、付款凭证</div>
+            <div class="upload-hint">支持 JPG / PNG / PDF · 自动提取金额、日期、摘要</div>
+          </div>
+          <!-- TODO: 接入 Qwen-VL 图片 OCR，完成后替换上方占位区 -->
+        </div>
+      </div>
+    </div>
+
+    <!-- ── 右栏：记录列表 ── -->
+    <div class="card">
+      <div class="tabs">
+        <div class="tab active" onclick="filterRecords('', this)">全部</div>
+        <div class="tab" onclick="filterRecords('PROCESSED', this)">已处理</div>
+        <div class="tab" onclick="filterRecords('PENDING', this)">处理中</div>
+        <div class="tab" onclick="filterRecords('MANUAL_REVIEW', this)">待审核</div>
+      </div>
+      <div id="recordsContainer">
+        <div class="empty-state">
+          <div class="spinner"></div>
+          <p style="margin-top:12px">加载中…</p>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ── 凭证详情 Modal ── -->
+<div class="modal-overlay" id="voucherModal" onclick="closeModalOnOverlay(event)">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title" id="modalTitle">凭证详情</span>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body" id="modalBody">
+      <!-- 动态内容 -->
+    </div>
+  </div>
+</div>
+
+<!-- ── Toast ── -->
+<div id="toast"></div>
+
+<script>
+  const API = '';  // same origin
+  let currentFilter = '';
+
+  // ── 初始化 ──
+  document.addEventListener('DOMContentLoaded', () => {
+    loadRecords();
+    // 按 Ctrl+Enter 提交
+    document.getElementById('rawText').addEventListener('keydown', e => {
+      if (e.ctrlKey && e.key === 'Enter') submitRecord();
+    });
+  });
+
+  // ── 提交流水 ──
+  async function submitRecord() {
+    const raw_text = document.getElementById('rawText').value.trim();
+    if (!raw_text) { showToast('请先输入业务描述', 'error'); return; }
+
+    const btn = document.getElementById('submitBtn');
+    const spinner = document.getElementById('submitSpinner');
+    btn.disabled = true;
+    spinner.style.display = 'inline';
+
+    try {
+      const res = await fetch(`${API}/api/records`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ raw_text }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showToast('✅ 已提交，凭证生成成功', 'success');
+        document.getElementById('rawText').value = '';
+        loadRecords();
+      } else {
+        showToast(`❌ 处理失败：${data.detail || '未知错误'}`, 'error');
+        loadRecords();  // 可能已落库为 MANUAL_REVIEW
+      }
+    } catch (err) {
+      showToast(`网络错误：${err.message}`, 'error');
+    } finally {
+      btn.disabled = false;
+      spinner.style.display = 'none';
+    }
+  }
+
+  function clearInput() {
+    document.getElementById('rawText').value = '';
+    document.getElementById('rawText').focus();
+  }
+
+  // ── 加载记录列表 ──
+  async function loadRecords() {
+    const params = currentFilter ? `?status=${currentFilter}&limit=50` : '?limit=50';
+    try {
+      const res = await fetch(`${API}/api/records${params}`);
+      const records = await res.json();
+      renderRecords(records);
+    } catch (err) {
+      document.getElementById('recordsContainer').innerHTML = `
+        <div class="empty-state"><p style="color:var(--error)">加载失败：${err.message}</p></div>`;
+    }
+  }
+
+  function filterRecords(status, el) {
+    currentFilter = status;
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
+    loadRecords();
+  }
+
+  function renderRecords(records) {
+    const container = document.getElementById('recordsContainer');
+    if (!records.length) {
+      container.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-icon">📋</div>
+          <p>暂无流水记录</p>
+        </div>`;
+      return;
+    }
+
+    const rows = records.map(r => `
+      <tr class="clickable" onclick="openRecord(${r.record_id})">
+        <td><span class="record-id">#${r.record_id}</span></td>
+        <td><div class="text-preview">${escHtml(r.raw_text)}</div></td>
+        <td>${statusBadge(r.status)}</td>
+        <td>
+          ${r.status === 'PROCESSED'
+            ? `<button class="link-btn" onclick="event.stopPropagation(); openRecord(${r.record_id})">查看凭证</button>`
+            : '—'}
+        </td>
+      </tr>`).join('');
+
+    container.innerHTML = `
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>业务描述</th>
+              <th>状态</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  }
+
+  // ── 查看记录 / 凭证 ──
+  async function openRecord(recordId) {
+    showModal('加载中…', '<div style="text-align:center;padding:32px"><span class="spinner"></span></div>');
+
+    try {
+      const recRes = await fetch(`${API}/api/records/${recordId}`);
+      const rec = await recRes.json();
+
+      let voucherHtml = '';
+      // 尝试加载凭证（假设 voucher_id = record_id，若后端有关联字段可改）
+      if (rec.status === 'PROCESSED') {
+        try {
+          const vRes = await fetch(`${API}/api/vouchers/${recordId}`);
+          if (vRes.ok) {
+            const v = await vRes.json();
+            voucherHtml = renderVoucher(v);
+          }
+        } catch (_) {}
+      }
+
+      const errHtml = rec.error_message
+        ? `<div style="padding:10px 12px;background:#fff5f5;border-radius:6px;color:var(--error);font-size:13px;margin-top:12px">⚠️ ${escHtml(rec.error_message)}</div>`
+        : '';
+
+      const body = `
+        <div class="info-row"><span class="info-label">流水 ID</span><span class="info-value">#${rec.record_id}</span></div>
+        <div class="info-row"><span class="info-label">状态</span><span class="info-value">${statusBadge(rec.status)}</span></div>
+        <div class="info-row"><span class="info-label">原始描述</span><span class="info-value">${escHtml(rec.raw_text)}</span></div>
+        ${errHtml}
+        ${voucherHtml}
+      `;
+
+      showModal(`流水记录 #${recordId}`, body);
+    } catch (err) {
+      showModal('错误', `<p style="color:var(--error)">${err.message}</p>`);
+    }
+  }
+
+  function renderVoucher(v) {
+    let debitTotal = 0, creditTotal = 0;
+    const lines = v.lines.map(l => {
+      const isDebit = l.direction === 'DEBIT';
+      if (isDebit) debitTotal += l.amount; else creditTotal += l.amount;
+      return `
+        <tr>
+          <td>${escHtml(l.subject_code)}</td>
+          <td class="${isDebit ? 'debit' : ''}">${isDebit ? fmt(l.amount) : ''}</td>
+          <td class="${!isDebit ? 'credit' : ''}">${!isDebit ? fmt(l.amount) : ''}</td>
+          <td style="color:var(--text-muted)">${escHtml(l.memo || '—')}</td>
+        </tr>`;
+    }).join('');
+
+    return `
+      <div class="section-title">会计凭证 #${v.voucher_id}</div>
+      <div class="info-row"><span class="info-label">凭证日期</span><span class="info-value">${v.voucher_date}</span></div>
+      <div class="info-row"><span class="info-label">摘要</span><span class="info-value">${escHtml(v.memo || '—')}</span></div>
+      <table class="voucher-table" style="margin-top:12px">
+        <thead>
+          <tr>
+            <th>科目代码</th>
+            <th>借方 (¥)</th>
+            <th>贷方 (¥)</th>
+            <th>备注</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${lines}
+          <tr class="total-row">
+            <td>合计</td>
+            <td class="amount debit">${fmt(debitTotal)}</td>
+            <td class="amount credit">${fmt(creditTotal)}</td>
+            <td>${debitTotal.toFixed(2) === creditTotal.toFixed(2) ? '✅ 借贷平衡' : '❌ 不平衡'}</td>
+          </tr>
+        </tbody>
+      </table>`;
+  }
+
+  // ── Modal helpers ──
+  function showModal(title, body) {
+    document.getElementById('modalTitle').textContent = title;
+    document.getElementById('modalBody').innerHTML = body;
+    document.getElementById('voucherModal').classList.add('open');
+  }
+  function closeModal() {
+    document.getElementById('voucherModal').classList.remove('open');
+  }
+  function closeModalOnOverlay(e) {
+    if (e.target.id === 'voucherModal') closeModal();
+  }
+
+  // ── Toast ──
+  let _toastTimer;
+  function showToast(msg, type = 'success') {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className = `show ${type}`;
+    clearTimeout(_toastTimer);
+    _toastTimer = setTimeout(() => el.classList.remove('show'), 3500);
+  }
+
+  // ── Utils ──
+  function statusBadge(s) {
+    const map = {
+      PROCESSED:     ['badge-processed', '已处理'],
+      PENDING:       ['badge-pending',   '处理中'],
+      MANUAL_REVIEW: ['badge-manual',    '待审核'],
+    };
+    const [cls, label] = map[s] || ['', s];
+    return `<span class="badge ${cls}">${label}</span>`;
+  }
+
+  function fmt(n) {
+    return Number(n).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+
+  function escHtml(s) {
+    if (!s) return '';
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+</script>
+</body>
+</html>
