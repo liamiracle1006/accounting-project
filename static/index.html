@@ -490,12 +490,44 @@
 </div>
 </div><!-- /page-records -->
 
-<!-- ══ 财务报表页（后续补充）══ -->
+<!-- ══ 财务报表页 ══ -->
 <div id="page-reports" class="page">
   <div class="container">
-    <div class="empty-state" style="padding:80px 0">
-      <div class="empty-icon">📊</div>
-      <p>财务报表加载中，请稍候…</p>
+    <!-- 日期筛选栏 -->
+    <div class="period-bar" style="margin-bottom:16px">
+      <label style="font-size:13px;color:var(--text-muted)">统计期间：</label>
+      <input type="date" id="rpt-from" style="padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);font-size:13px">
+      <span style="color:var(--text-muted)">至</span>
+      <input type="date" id="rpt-to"   style="padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);font-size:13px">
+      <button class="btn btn-outline" onclick="loadReports()">查询</button>
+    </div>
+
+    <!-- 报表 Tabs -->
+    <div class="card">
+      <div class="tabs">
+        <div class="tab active" id="rpt-tab-ie" onclick="switchRptTab('ie',this)">收支明细</div>
+        <div class="tab" id="rpt-tab-tb" onclick="switchRptTab('tb',this)">科目余额表</div>
+      </div>
+
+      <!-- 收支明细 -->
+      <div id="rpt-panel-ie">
+        <div style="padding:12px 20px;display:flex;justify-content:flex-end">
+          <button class="btn btn-outline" onclick="exportCsv('ie')">导出 CSV</button>
+        </div>
+        <div class="table-wrap" id="rpt-ie-body">
+          <div class="empty-state"><div class="spinner"></div></div>
+        </div>
+      </div>
+
+      <!-- 科目余额表 -->
+      <div id="rpt-panel-tb" style="display:none">
+        <div style="padding:12px 20px;display:flex;justify-content:flex-end">
+          <button class="btn btn-outline" onclick="exportCsv('tb')">导出 CSV</button>
+        </div>
+        <div class="table-wrap" id="rpt-tb-body">
+          <div class="empty-state"><div class="spinner"></div></div>
+        </div>
+      </div>
     </div>
   </div>
 </div>
@@ -570,6 +602,7 @@
   // ── 初始化 ──
   document.addEventListener('DOMContentLoaded', () => {
     initYearSelect();
+    initReportDates();
     loadDashboard();
     // 按 Ctrl+Enter 提交
     document.getElementById('rawText').addEventListener('keydown', e => {
@@ -828,6 +861,146 @@
     if (!s) return '';
     return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
   }
+
+  // ── 财务报表 ──
+  let _rptIeData = [], _rptTbData = [];
+  let _activeRptTab = 'ie';
+
+  function initReportDates() {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    document.getElementById('rpt-from').value = `${y}-01-01`;
+    document.getElementById('rpt-to').value   = `${y}-${m}-${String(now.getDate()).padStart(2,'0')}`;
+  }
+
+  function switchRptTab(tab, el) {
+    _activeRptTab = tab;
+    document.querySelectorAll('.tab[id^="rpt-tab-"]').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
+    document.getElementById('rpt-panel-ie').style.display = tab === 'ie' ? '' : 'none';
+    document.getElementById('rpt-panel-tb').style.display = tab === 'tb' ? '' : 'none';
+  }
+
+  async function loadReports() {
+    const from = document.getElementById('rpt-from').value;
+    const to   = document.getElementById('rpt-to').value;
+    if (!from || !to) { showToast('请选择日期范围', 'error'); return; }
+
+    // 从日期推算年月用于收支明细（取 from 的年月）
+    const [year, month] = from.split('-');
+
+    document.getElementById('rpt-ie-body').innerHTML = '<div class="empty-state"><div class="spinner"></div></div>';
+    document.getElementById('rpt-tb-body').innerHTML = '<div class="empty-state"><div class="spinner"></div></div>';
+
+    const [ieRes, tbRes] = await Promise.all([
+      fetch(`${API}/api/reports/income-expense?year=${year}&month=${parseInt(month)}`),
+      fetch(`${API}/api/reports/trial-balance?date_from=${from}&date_to=${to}`),
+    ]);
+
+    _rptIeData = ieRes.ok ? await ieRes.json() : [];
+    _rptTbData = tbRes.ok ? await tbRes.json() : [];
+
+    renderIeTable();
+    renderTbTable();
+  }
+
+  function renderIeTable() {
+    const el = document.getElementById('rpt-ie-body');
+    if (!_rptIeData.length) {
+      el.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><p>本期无收支记录</p></div>';
+      return;
+    }
+    const income  = _rptIeData.filter(r => r.subject_type === '收入');
+    const expense = _rptIeData.filter(r => r.subject_type === '费用');
+    const totalIn  = income.reduce((s, r) => s + r.net_amount, 0);
+    const totalExp = expense.reduce((s, r) => s + r.net_amount, 0);
+
+    const rows = r => r.map(x => `
+      <tr>
+        <td>${escHtml(x.subject_code)}</td>
+        <td>${escHtml(x.subject_name)}</td>
+        <td><span class="badge" style="background:#e9f5ee;color:#276749">${x.subject_type}</span></td>
+        <td class="amount" style="text-align:right">${fmt(x.net_amount)}</td>
+        <td style="text-align:right;color:var(--text-muted)">${x.tx_count}</td>
+      </tr>`).join('');
+
+    el.innerHTML = `<table>
+      <thead><tr><th>科目代码</th><th>科目名称</th><th>类型</th><th style="text-align:right">发生额 (¥)</th><th style="text-align:right">笔数</th></tr></thead>
+      <tbody>
+        <tr><td colspan="5" style="background:#f0f4ff;font-weight:600;padding:8px 16px;font-size:12px;color:#3b6cf8">收入</td></tr>
+        ${rows(income)}
+        <tr class="total-row"><td colspan="3">收入合计</td><td class="amount" style="text-align:right;color:#276749">${fmt(totalIn)}</td><td></td></tr>
+        <tr><td colspan="5" style="background:#fff5f5;font-weight:600;padding:8px 16px;font-size:12px;color:#c53030">费用</td></tr>
+        ${rows(expense)}
+        <tr class="total-row"><td colspan="3">费用合计</td><td class="amount" style="text-align:right;color:#c53030">${fmt(totalExp)}</td><td></td></tr>
+        <tr class="total-row" style="border-top:2px solid var(--border)">
+          <td colspan="3" style="font-weight:700">净利润</td>
+          <td class="amount" style="text-align:right;font-weight:700;color:${totalIn - totalExp >= 0 ? '#2b4acb' : '#c53030'}">${fmt(totalIn - totalExp)}</td>
+          <td></td>
+        </tr>
+      </tbody>
+    </table>`;
+  }
+
+  function renderTbTable() {
+    const el = document.getElementById('rpt-tb-body');
+    if (!_rptTbData.length) {
+      el.innerHTML = '<div class="empty-state"><div class="empty-icon">📋</div><p>期间内无发生额</p></div>';
+      return;
+    }
+    const totalDebit  = _rptTbData.reduce((s, r) => s + r.debit_total, 0);
+    const totalCredit = _rptTbData.reduce((s, r) => s + r.credit_total, 0);
+
+    const rows = _rptTbData.map(r => `
+      <tr>
+        <td>${escHtml(r.subject_code)}</td>
+        <td>${escHtml(r.subject_name)}</td>
+        <td>${escHtml(r.subject_type)}</td>
+        <td class="amount debit"  style="text-align:right">${r.debit_total  > 0 ? fmt(r.debit_total)  : '—'}</td>
+        <td class="amount credit" style="text-align:right">${r.credit_total > 0 ? fmt(r.credit_total) : '—'}</td>
+        <td class="amount" style="text-align:right;font-weight:600">${fmt(r.balance)}</td>
+      </tr>`).join('');
+
+    el.innerHTML = `<table>
+      <thead><tr>
+        <th>科目代码</th><th>科目名称</th><th>类型</th>
+        <th style="text-align:right">借方合计 (¥)</th>
+        <th style="text-align:right">贷方合计 (¥)</th>
+        <th style="text-align:right">期末余额 (¥)</th>
+      </tr></thead>
+      <tbody>
+        ${rows}
+        <tr class="total-row">
+          <td colspan="3">合计</td>
+          <td class="amount debit"  style="text-align:right">${fmt(totalDebit)}</td>
+          <td class="amount credit" style="text-align:right">${fmt(totalCredit)}</td>
+          <td class="amount" style="text-align:right">${totalDebit.toFixed(2) === totalCredit.toFixed(2) ? '✅ 借贷平衡' : '⚠️ 不平衡'}</td>
+        </tr>
+      </tbody>
+    </table>`;
+  }
+
+  // CSV 导出
+  function exportCsv(type) {
+    let rows, filename, headers;
+    if (type === 'ie') {
+      headers = ['科目代码','科目名称','类型','发生额','笔数'];
+      rows = _rptIeData.map(r => [r.subject_code, r.subject_name, r.subject_type, r.net_amount.toFixed(2), r.tx_count]);
+      filename = 'income_expense.csv';
+    } else {
+      headers = ['科目代码','科目名称','类型','借方合计','贷方合计','期末余额'];
+      rows = _rptTbData.map(r => [r.subject_code, r.subject_name, r.subject_type, r.debit_total.toFixed(2), r.credit_total.toFixed(2), r.balance.toFixed(2)]);
+      filename = 'trial_balance.csv';
+    }
+    const csv = [headers, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',')).join('\n');
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    a.click();
+  }
+
 </script>
 </body>
 </html>
