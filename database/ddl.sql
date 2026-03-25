@@ -108,3 +108,55 @@ CREATE TABLE IF NOT EXISTS voucher_line (
     CONSTRAINT chk_direction  CHECK (direction IN ('DEBIT', 'CREDIT')),
     CONSTRAINT chk_amount_pos CHECK (amount > 0)
 );
+
+-- ------------------------------------------------------------
+-- 7. Boss Decision Log — intercept record awaiting boss choice
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS boss_decision_log (
+    decision_id         BIGINT       NOT NULL AUTO_INCREMENT,
+    record_id           BIGINT       NOT NULL,           -- FK → operational_record
+    ai_options_json     TEXT         NOT NULL,           -- full JSON: options[], recommendation, snapshot
+    boss_choice         VARCHAR(50)  NULL,               -- chosen option id (e.g. ONE_TIME)
+    chosen_action_code  VARCHAR(50)  NULL,               -- action_code of chosen option
+    status              VARCHAR(30)  NOT NULL DEFAULT 'PENDING_DECISION',
+                                                         -- PENDING_DECISION / DECIDED / EXPIRED
+    expires_at          DATETIME     NULL,               -- auto-expire after N days
+    decided_at          DATETIME     NULL,
+    created_at          DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (decision_id),
+    CONSTRAINT fk_bdl_record FOREIGN KEY (record_id)
+        REFERENCES operational_record (record_id)
+);
+
+-- ------------------------------------------------------------
+-- 8. Asset Register — fixed asset ledger with depreciation
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS asset_register (
+    asset_id                    BIGINT          NOT NULL AUTO_INCREMENT,
+    voucher_id                  BIGINT          NOT NULL,  -- FK → voucher_header
+    decision_id                 BIGINT          NULL,      -- FK → boss_decision_log
+    asset_name                  VARCHAR(200)    NOT NULL,
+    asset_category              VARCHAR(50)     NOT NULL DEFAULT '通用设备',
+                                                           -- 电子设备/通用机械/车辆/建筑装修/通用设备
+    original_value              DECIMAL(18, 2)  NOT NULL,
+    net_salvage_value           DECIMAL(18, 2)  NOT NULL DEFAULT 0.00,
+    depreciation_method         VARCHAR(20)     NOT NULL,
+                                                           -- STRAIGHT_LINE / ACCELERATED / ONE_TIME
+    useful_life_months          INT             NOT NULL,
+    monthly_depreciation        DECIMAL(18, 2)  NOT NULL,
+    accumulated_depreciation    DECIMAL(18, 2)  NOT NULL DEFAULT 0.00,
+    depreciation_months_elapsed INT             NOT NULL DEFAULT 0,
+    status                      VARCHAR(20)     NOT NULL DEFAULT 'IN_USE',
+                                                           -- IN_USE / FULLY_DEPRECIATED / DISPOSED
+    purchase_date               DATE            NOT NULL,
+    depreciation_start_month    VARCHAR(7)      NOT NULL,  -- YYYY-MM, starts next month after purchase
+    notes                       TEXT            NULL,
+    created_at                  DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at                  DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP
+                                                ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (asset_id),
+    CONSTRAINT fk_ar_voucher  FOREIGN KEY (voucher_id)
+        REFERENCES voucher_header (voucher_id),
+    CONSTRAINT fk_ar_decision FOREIGN KEY (decision_id)
+        REFERENCES boss_decision_log (decision_id)
+);

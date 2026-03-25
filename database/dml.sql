@@ -23,6 +23,8 @@ INSERT INTO enterprise_profile (
 INSERT INTO account_subject (subject_code, subject_name, subject_type, direction) VALUES
 -- 资产类
 ('1001', '库存现金',       '资产', 'DEBIT'),
+('1601', '固定资产',       '资产', 'DEBIT'),
+('1602', '累计折旧',       '资产', 'CREDIT'),  -- 固定资产备抵科目（贷方增加）
 ('1002', '银行存款',       '资产', 'DEBIT'),
 ('1012', '其他货币资金',   '资产', 'DEBIT'),
 ('1122', '应收账款',       '资产', 'DEBIT'),

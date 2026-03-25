@@ -4,6 +4,8 @@ from models.operational_record import OperationalRecord
 from models.voucher_header import VoucherHeader
 from models.voucher_line import VoucherLine
 from models.enterprise_profile import EnterpriseProfile
+from models.boss_decision_log import BossDecisionLog
+from models.asset_register import AssetRegister
 
 __all__ = [
     "AccountSubject",
@@ -12,4 +14,6 @@ __all__ = [
     "VoucherHeader",
     "VoucherLine",
     "EnterpriseProfile",
+    "BossDecisionLog",
+    "AssetRegister",
 ]
