@@ -11,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 
 from config.settings import APP_DEBUG
 from api.routes import router
+from api.enterprise_routes import router as enterprise_router
 
 logging.basicConfig(
     level=logging.DEBUG if APP_DEBUG else logging.INFO,
@@ -18,9 +19,9 @@ logging.basicConfig(
 )
 
 app = FastAPI(
-    title="AgentLedger V1.0",
-    description="基于 LLM 的小微企业智能业财融合系统 MVP",
-    version="1.0.0",
+    title="AgentLedger V2.0",
+    description="基于 LLM 的智能业财融合系统（小微 + 一般企业双模式）",
+    version="2.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
 )
@@ -33,6 +34,7 @@ app.add_middleware(
 )
 
 app.include_router(router)
+app.include_router(enterprise_router)
 
 _STATIC = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=_STATIC), name="static")

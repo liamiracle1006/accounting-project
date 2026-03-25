@@ -1,6 +1,20 @@
 -- ============================================================
--- AgentLedger V1.0 — DML 初始化种子数据
+-- AgentLedger V2.0 — DML 初始化种子数据
 -- ============================================================
+
+-- ------------------------------------------------------------
+-- 企业档案默认数据（示例：小微企业）
+-- 生产环境请通过 POST /api/enterprise/profile 接口创建真实数据
+-- ------------------------------------------------------------
+INSERT INTO enterprise_profile (
+    company_name, company_type, industry_code,
+    tax_payer_type, applicable_income_tax_rate,
+    vat_rate, decision_threshold, accounting_standard, is_active
+) VALUES (
+    '示例企业（请修改）', 'MICRO', '通用',
+    'SMALL_SCALE', 0.2000,
+    0.0300, 5000.00, 'SMALL_BIZ', 1
+) ON DUPLICATE KEY UPDATE company_name = VALUES(company_name);
 
 -- ------------------------------------------------------------
 -- 会计科目 (Account Subject) 初始数据

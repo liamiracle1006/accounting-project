@@ -4,9 +4,10 @@ from database.connection import Base
 
 
 class RecordStatus:
-    PENDING       = "PENDING"
-    PROCESSED     = "PROCESSED"
-    MANUAL_REVIEW = "MANUAL_REVIEW"
+    PENDING                = "PENDING"                 # 刚收到，等待 LLM 处理
+    PROCESSED              = "PROCESSED"               # 自动记账完成（小额普通流水）
+    PENDING_BOSS_DECISION  = "PENDING_BOSS_DECISION"   # 大额/敏感流水，等待老板决策
+    MANUAL_REVIEW          = "MANUAL_REVIEW"           # AI 解析失败，需人工介入
 
 
 class OperationalRecord(Base):
