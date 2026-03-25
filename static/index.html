@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AgentLedger V1.0</title>
+  <title>AgentLedger V2.0</title>
   <style>
     :root {
       --bg: #f4f6f9;
@@ -16,6 +16,8 @@
       --success: #38a169;
       --warning: #d69e2e;
       --error: #e53e3e;
+      --decision: #d97706;
+      --decision-bg: #fffbeb;
       --radius: 8px;
       --shadow: 0 1px 4px rgba(0,0,0,0.08);
     }
@@ -172,6 +174,7 @@
     .badge-processed { background: #c6f6d5; color: #276749; }
     .badge-pending   { background: #bee3f8; color: #2a69ac; }
     .badge-manual    { background: #feebc8; color: #9c4221; }
+    .badge-decision  { background: var(--decision-bg); color: var(--decision); border: 1px solid #fcd34d; }
 
     /* ── Tabs ── */
     .tabs { display: flex; gap: 4px; padding: 0 20px; border-bottom: 1px solid var(--border); }
@@ -315,6 +318,34 @@
 
     .section-title { font-weight: 600; font-size: 13px; margin: 18px 0 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
 
+    /* ── Form fields ── */
+    .field-label { display:block; font-size:12px; font-weight:600; color:var(--text-muted); margin-bottom:5px; text-transform:uppercase; letter-spacing:0.4px; }
+    .field-input { width:100%; padding:8px 10px; border:1px solid var(--border); border-radius:var(--radius); font-size:13px; font-family:inherit; color:var(--text); background:var(--surface); }
+    .field-input:focus { outline:none; border-color:var(--primary); }
+    select.field-input { cursor:pointer; }
+
+    /* ── Decision cards ── */
+    .decision-item { border:1px solid var(--border); border-radius:var(--radius); padding:14px 16px; margin-bottom:10px; cursor:pointer; transition:border-color .15s,box-shadow .15s; }
+    .decision-item:hover { border-color:var(--decision); box-shadow:0 2px 8px rgba(217,119,6,.15); }
+    .decision-snapshot { display:flex;gap:16px;padding:12px 20px;background:#f8faff;border-bottom:1px solid var(--border);font-size:13px; }
+    .snapshot-item { text-align:center; }
+    .snapshot-label { font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px; }
+    .snapshot-value { font-size:18px;font-weight:700;margin-top:2px; }
+    .option-grid { display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;padding:16px 20px; }
+    .option-card { border:2px solid var(--border);border-radius:var(--radius);padding:14px;position:relative;transition:border-color .15s; }
+    .option-card.recommended { border-color:#f59e0b;background:#fffbeb; }
+    .option-card.not-recommended { opacity:.55; }
+    .option-card .rec-badge { position:absolute;top:-10px;left:12px;background:#f59e0b;color:#fff;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px; }
+    .option-card .opt-title { font-weight:700;font-size:14px;margin-bottom:4px; }
+    .option-card .opt-text { font-size:12px;color:var(--text-muted);line-height:1.5;margin-bottom:8px; }
+    .option-card .opt-savings { font-size:13px;color:#276749;font-weight:600;margin-bottom:2px; }
+    .option-card .opt-risk { font-size:11px;color:#9c4221;margin-bottom:10px; }
+    .option-card .opt-btn { width:100%;padding:7px;border:none;border-radius:6px;font-size:13px;font-weight:600;cursor:pointer;background:var(--primary);color:#fff;transition:background .15s; }
+    .option-card .opt-btn:hover { background:var(--primary-dark); }
+    .option-card.recommended .opt-btn { background:#f59e0b; }
+    .option-card.recommended .opt-btn:hover { background:#d97706; }
+    .tax-analysis { padding:10px 20px;background:#f0f4ff;font-size:13px;color:#3b6cf8;border-bottom:1px solid #dbeafe; }
+
     .voucher-table th { background: #f0f4ff; color: #3b6cf8; }
     .debit { color: #2d6a4f; font-weight: 600; }
     .credit { color: #9b2226; font-weight: 600; }
@@ -372,11 +403,14 @@
 <body>
 
 <header>
-  <div class="logo">AgentLedger <span>V1.0 · 智能业财系统</span></div>
+  <div class="logo">AgentLedger <span>V2.0 · 智能业财系统</span></div>
   <nav id="mainNav">
     <a href="#" class="active" data-page="dashboard" onclick="navTo('dashboard',this);return false;">仪表盘</a>
-    <a href="#" data-page="records" onclick="navTo('records',this);return false;">流水记录</a>
-    <a href="#" data-page="reports" onclick="navTo('reports',this);return false;">财务报表</a>
+    <a href="#" data-page="records"  onclick="navTo('records',this);return false;">流水记录</a>
+    <a href="#" data-page="decisions" onclick="navTo('decisions',this);return false;">老板决策台 <span id="nav-decision-badge" style="display:none;background:var(--decision);color:#fff;border-radius:10px;padding:1px 6px;font-size:11px;margin-left:2px">0</span></a>
+    <a href="#" data-page="assets"   onclick="navTo('assets',this);return false;">固定资产</a>
+    <a href="#" data-page="reports"  onclick="navTo('reports',this);return false;">财务报表</a>
+    <a href="#" data-page="settings" onclick="navTo('settings',this);return false;">企业设置</a>
     <a href="/docs" target="_blank">API 文档</a>
   </nav>
 </header>
@@ -417,6 +451,11 @@
         <div class="summary-label">本期凭证数</div>
         <div class="summary-amount" id="s-vouchers">--</div>
         <div class="summary-sub" id="s-review"></div>
+      </div>
+      <div class="summary-card" style="background:var(--decision-bg);border-color:#fcd34d;cursor:pointer" onclick="navTo('decisions', document.querySelector('[data-page=decisions]'))">
+        <div class="summary-label" style="color:var(--decision)">待老板决策</div>
+        <div class="summary-amount" id="s-decisions" style="color:var(--decision)">--</div>
+        <div class="summary-sub">点击进入决策台</div>
       </div>
     </div>
     <p style="font-size:12px;color:var(--text-muted);text-align:center">
@@ -476,6 +515,7 @@
         <div class="tab active" onclick="filterRecords('', this)">全部</div>
         <div class="tab" onclick="filterRecords('PROCESSED', this)">已处理</div>
         <div class="tab" onclick="filterRecords('PENDING', this)">处理中</div>
+        <div class="tab" onclick="filterRecords('PENDING_BOSS_DECISION', this)" style="color:var(--decision)">待老板决策</div>
         <div class="tab" onclick="filterRecords('MANUAL_REVIEW', this)">待审核</div>
       </div>
       <div id="recordsContainer">
@@ -532,6 +572,184 @@
   </div>
 </div>
 
+<!-- ══ 老板决策台页 ══ -->
+<div id="page-decisions" class="page">
+  <div class="container">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div>
+        <h2 style="font-size:16px;font-weight:700">老板决策台</h2>
+        <p style="font-size:12px;color:var(--text-muted);margin-top:2px">以下流水涉及大额支出或特殊税务处理，请选择处理方案</p>
+      </div>
+      <button class="btn btn-outline" onclick="loadDecisions()">刷新</button>
+    </div>
+    <div id="decisions-container">
+      <div class="empty-state"><div class="spinner"></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ 固定资产台账页 ══ -->
+<div id="page-assets" class="page">
+  <div class="container">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div>
+        <h2 style="font-size:16px;font-weight:700">固定资产台账</h2>
+        <p style="font-size:12px;color:var(--text-muted);margin-top:2px">系统自动记录每笔固定资产入账及折旧状态</p>
+      </div>
+      <div style="display:flex;gap:8px">
+        <select id="asset-status-filter" class="field-input" style="width:140px" onchange="loadAssets()">
+          <option value="">全部状态</option>
+          <option value="IN_USE">使用中</option>
+          <option value="FULLY_DEPRECIATED">已全额折旧</option>
+          <option value="DISPOSED">已处置</option>
+        </select>
+        <button class="btn btn-outline" onclick="loadAssets()">刷新</button>
+      </div>
+    </div>
+
+    <!-- 汇总卡片 -->
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px">
+      <div class="card" style="padding:14px 16px">
+        <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px">资产总数</div>
+        <div id="asset-count" style="font-size:22px;font-weight:700;margin-top:4px">--</div>
+      </div>
+      <div class="card" style="padding:14px 16px">
+        <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px">资产原值合计</div>
+        <div id="asset-total-value" style="font-size:22px;font-weight:700;color:var(--primary);margin-top:4px">--</div>
+      </div>
+      <div class="card" style="padding:14px 16px">
+        <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px">账面净值合计</div>
+        <div id="asset-net-value" style="font-size:22px;font-weight:700;color:var(--success);margin-top:4px">--</div>
+      </div>
+      <div class="card" style="padding:14px 16px">
+        <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px">月折旧合计</div>
+        <div id="asset-monthly-dep" style="font-size:22px;font-weight:700;color:var(--warning);margin-top:4px">--</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div id="assets-container">
+        <div class="empty-state"><div class="spinner"></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── 决策卡片 Modal ── -->
+<div class="modal-overlay" id="decisionModal" onclick="closeDecisionModal(event)">
+  <div class="modal" style="max-width:780px;width:95%">
+    <div class="modal-header">
+      <span class="modal-title" id="decisionModalTitle">税务处理方案</span>
+      <button class="modal-close" onclick="document.getElementById('decisionModal').style.display='none'">✕</button>
+    </div>
+    <div class="modal-body" id="decisionModalBody" style="padding:0"></div>
+  </div>
+</div>
+
+<!-- ══ 企业设置页 ══ -->
+<div id="page-settings" class="page">
+  <div class="container" style="max-width:680px">
+    <div class="card">
+      <div class="card-header">
+        <span>🏢</span>
+        <span class="card-title">企业税收画像</span>
+        <span style="margin-left:auto;font-size:12px;color:var(--text-muted)">影响路由分发与税率计算</span>
+      </div>
+      <div class="card-body">
+        <div id="settings-alert" style="display:none;margin-bottom:16px;padding:10px 14px;border-radius:6px;font-size:13px"></div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+          <div style="grid-column:1/-1">
+            <label class="field-label">公司名称</label>
+            <input id="s-company-name" type="text" class="field-input" placeholder="请输入公司全称">
+          </div>
+          <div>
+            <label class="field-label">企业类型</label>
+            <select id="s-company-type" class="field-input">
+              <option value="MICRO">小微企业 / 个体户</option>
+              <option value="STANDARD">一般企业（50人以上）</option>
+            </select>
+          </div>
+          <div>
+            <label class="field-label">行业</label>
+            <select id="s-industry" class="field-input">
+              <option value="通用">通用</option>
+              <option value="制造业">制造业</option>
+              <option value="软件服务业">软件服务业</option>
+              <option value="批发零售业">批发零售业</option>
+              <option value="餐饮住宿业">餐饮住宿业</option>
+              <option value="建筑业">建筑业</option>
+              <option value="交通运输业">交通运输业</option>
+            </select>
+          </div>
+          <div>
+            <label class="field-label">纳税人身份</label>
+            <select id="s-tax-payer" class="field-input">
+              <option value="SMALL_SCALE">小规模纳税人</option>
+              <option value="GENERAL">一般纳税人</option>
+            </select>
+          </div>
+          <div>
+            <label class="field-label">会计准则</label>
+            <select id="s-accounting-std" class="field-input">
+              <option value="SMALL_BIZ">小企业会计准则</option>
+              <option value="GENERAL">企业会计准则</option>
+            </select>
+          </div>
+          <div>
+            <label class="field-label">企业所得税率</label>
+            <select id="s-income-tax" class="field-input">
+              <option value="0.05">5%（小型微利企业优惠）</option>
+              <option value="0.15">15%（高新技术企业）</option>
+              <option value="0.20">20%（小型微利企业名义）</option>
+              <option value="0.25">25%（一般企业）</option>
+            </select>
+          </div>
+          <div>
+            <label class="field-label">增值税率</label>
+            <select id="s-vat" class="field-input">
+              <option value="0.03">3%（小规模纳税人）</option>
+              <option value="0.05">5%（不动产/金融服务）</option>
+              <option value="0.06">6%（现代服务/技术咨询）</option>
+              <option value="0.09">9%（交通运输/建筑）</option>
+              <option value="0.13">13%（货物/制造业）</option>
+            </select>
+          </div>
+          <div>
+            <label class="field-label">老板决策触发阈值（元）</label>
+            <input id="s-threshold" type="number" class="field-input" min="1000" step="1000" placeholder="5000">
+            <div style="font-size:11px;color:var(--text-muted);margin-top:4px">超过此金额的流水将进入老板决策流程</div>
+          </div>
+        </div>
+
+        <div style="margin-top:20px;display:flex;gap:10px">
+          <button class="btn btn-primary" onclick="saveSettings()" id="save-settings-btn">保存设置</button>
+          <button class="btn btn-outline" onclick="loadSettings()">重置</button>
+          <span id="settings-spinner" style="display:none;align-items:center"><span class="spinner"></span></span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <div class="card-header"><span>🧪</span><span class="card-title">路由预览</span></div>
+      <div class="card-body">
+        <div style="display:flex;gap:10px;align-items:flex-end">
+          <div style="flex:1">
+            <label class="field-label">业务类型</label>
+            <input id="preview-type" type="text" class="field-input" placeholder="如：购买激光切割机">
+          </div>
+          <div style="width:140px">
+            <label class="field-label">金额（元）</label>
+            <input id="preview-amount" type="number" class="field-input" placeholder="28000">
+          </div>
+          <button class="btn btn-outline" onclick="routePreview()" style="margin-bottom:1px">预览</button>
+        </div>
+        <div id="preview-result" style="margin-top:12px;display:none;padding:10px 14px;border-radius:6px;font-size:13px"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ── 凭证详情 Modal ── -->
 <div class="modal-overlay" id="voucherModal" onclick="closeModalOnOverlay(event)">
   <div class="modal">
@@ -561,6 +779,9 @@
     if (page === 'dashboard') loadDashboard();
     if (page === 'records')   loadRecords();
     if (page === 'reports')   loadReports();
+    if (page === 'decisions') loadDecisions();
+    if (page === 'assets')    loadAssets();
+    if (page === 'settings')  loadSettings();
   }
 
   // ── 仪表盘 ──
@@ -594,6 +815,14 @@
       document.getElementById('s-vouchers').textContent = data.total_vouchers;
       document.getElementById('s-review').textContent   =
         data.pending_review > 0 ? `⚠️ ${data.pending_review} 条待审核` : '无待审核';
+      // fetch pending decisions count
+      const dRes  = await fetch(`${API}/api/decisions?status=PENDING_DECISION&limit=200`);
+      const dData = dRes.ok ? await dRes.json() : [];
+      const dCount = dData.length;
+      document.getElementById('s-decisions').textContent = dCount;
+      const badge = document.getElementById('nav-decision-badge');
+      if (dCount > 0) { badge.style.display = ''; badge.textContent = dCount; }
+      else            { badge.style.display = 'none'; }
     } catch (err) {
       showToast('仪表盘加载失败：' + err.message, 'error');
     }
@@ -690,7 +919,11 @@
         <td>
           ${r.status === 'PROCESSED' && r.voucher_id
             ? `<button class="link-btn" onclick="event.stopPropagation(); openRecord(${r.record_id})">查看凭证</button>`
-            : r.status === 'PENDING' ? '<span class="spinner" style="width:14px;height:14px"></span>' : '—'}
+            : r.status === 'PENDING'
+              ? '<span class="spinner" style="width:14px;height:14px"></span>'
+              : r.status === 'PENDING_BOSS_DECISION'
+                ? `<button class="link-btn" style="color:var(--decision);border-color:var(--decision)" onclick="event.stopPropagation(); navTo('decisions', document.querySelector('[data-page=decisions]')); setTimeout(()=>openDecisionCard(${r.record_id}),300)">查看方案</button>`
+                : '—'}
         </td>
       </tr>`).join('');
 
@@ -845,9 +1078,10 @@
   // ── Utils ──
   function statusBadge(s) {
     const map = {
-      PROCESSED:     ['badge-processed', '已处理'],
-      PENDING:       ['badge-pending',   '处理中'],
-      MANUAL_REVIEW: ['badge-manual',    '待审核'],
+      PROCESSED:            ['badge-processed', '已处理'],
+      PENDING:              ['badge-pending',   '处理中'],
+      MANUAL_REVIEW:        ['badge-manual',    '待审核'],
+      PENDING_BOSS_DECISION:['badge-decision',  '待老板决策'],
     };
     const [cls, label] = map[s] || ['', s];
     return `<span class="badge ${cls}">${label}</span>`;
@@ -979,6 +1213,308 @@
         </tr>
       </tbody>
     </table>`;
+  }
+
+  // ── 固定资产台账 ──
+  async function loadAssets() {
+    const status    = document.getElementById('asset-status-filter')?.value || '';
+    const container = document.getElementById('assets-container');
+    container.innerHTML = '<div class="empty-state"><div class="spinner"></div></div>';
+    try {
+      const url = `${API}/api/assets${status ? '?status=' + status : ''}`;
+      const res  = await fetch(url);
+      const list = await res.json();
+
+      // Update summary cards
+      const totalValue   = list.reduce((s, a) => s + a.original_value, 0);
+      const netValue     = list.reduce((s, a) => s + a.net_book_value, 0);
+      const monthlyDep   = list.filter(a => a.status === 'IN_USE').reduce((s, a) => s + a.monthly_depreciation, 0);
+      document.getElementById('asset-count').textContent        = list.length;
+      document.getElementById('asset-total-value').textContent  = '¥' + fmt(totalValue);
+      document.getElementById('asset-net-value').textContent    = '¥' + fmt(netValue);
+      document.getElementById('asset-monthly-dep').textContent  = '¥' + fmt(monthlyDep);
+
+      if (!list.length) {
+        container.innerHTML = '<div class="empty-state"><div class="empty-icon">🏭</div><p>暂无固定资产记录<br><span style="font-size:12px;color:var(--text-muted)">通过老板决策台录入固定资产后自动显示</span></p></div>';
+        return;
+      }
+
+      const depLabel = { STRAIGHT_LINE:'直线法', ACCELERATED:'加速折旧', ONE_TIME:'一次性扣除' };
+      const statusLabel = { IN_USE:'使用中', FULLY_DEPRECIATED:'已折完', DISPOSED:'已处置' };
+      const statusColor = { IN_USE:'var(--success)', FULLY_DEPRECIATED:'var(--text-muted)', DISPOSED:'var(--error)' };
+
+      const rows = list.map(a => {
+        const progress = a.useful_life_months > 1
+          ? Math.min(100, Math.round(a.depreciation_months_elapsed / a.useful_life_months * 100))
+          : (a.status === 'FULLY_DEPRECIATED' ? 100 : 0);
+        return `<tr>
+          <td><strong>${escHtml(a.asset_name)}</strong><br><span style="font-size:11px;color:var(--text-muted)">${escHtml(a.asset_category)}</span></td>
+          <td class="amount" style="text-align:right">¥${fmt(a.original_value)}</td>
+          <td style="text-align:right;color:var(--success)">¥${fmt(a.net_book_value)}</td>
+          <td style="text-align:center;font-size:12px">${depLabel[a.depreciation_method] || a.depreciation_method}<br><span style="color:var(--text-muted)">${a.useful_life_months > 1 ? a.useful_life_months/12+'年' : '当期全扣'}</span></td>
+          <td style="text-align:right;color:var(--warning)">¥${fmt(a.monthly_depreciation)}</td>
+          <td style="min-width:100px">
+            <div style="background:var(--border);border-radius:4px;height:6px;margin-bottom:3px">
+              <div style="background:var(--primary);height:6px;border-radius:4px;width:${progress}%"></div>
+            </div>
+            <span style="font-size:11px;color:var(--text-muted)">${progress}%</span>
+          </td>
+          <td><span style="font-size:12px;font-weight:600;color:${statusColor[a.status]}">${statusLabel[a.status] || a.status}</span></td>
+          <td style="font-size:12px;color:var(--text-muted)">${a.purchase_date}<br>次月起: ${a.depreciation_start_month}</td>
+        </tr>`;
+      }).join('');
+
+      container.innerHTML = `
+        <div class="table-wrap">
+          <table>
+            <thead><tr>
+              <th>资产名称</th>
+              <th style="text-align:right">原值</th>
+              <th style="text-align:right">账面净值</th>
+              <th style="text-align:center">折旧方式</th>
+              <th style="text-align:right">月折旧额</th>
+              <th>折旧进度</th>
+              <th>状态</th>
+              <th>日期</th>
+            </tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>`;
+    } catch (err) {
+      container.innerHTML = `<div class="empty-state"><p style="color:var(--error)">加载失败：${err.message}</p></div>`;
+    }
+  }
+
+  // ── 老板决策台 ──
+  async function loadDecisions() {
+    const container = document.getElementById('decisions-container');
+    container.innerHTML = '<div class="empty-state"><div class="spinner"></div></div>';
+    try {
+      const res  = await fetch(`${API}/api/decisions?limit=50`);
+      const list = await res.json();
+      if (!list.length) {
+        container.innerHTML = '<div class="empty-state"><div class="empty-icon">✅</div><p>暂无待决策流水，所有流水已处理完毕</p></div>';
+        return;
+      }
+      const pending  = list.filter(d => d.status === 'PENDING_DECISION');
+      const decided  = list.filter(d => d.status === 'DECIDED');
+      const expired  = list.filter(d => d.status === 'EXPIRED');
+
+      let html = '';
+      if (pending.length) {
+        html += `<div style="font-size:12px;font-weight:700;color:var(--decision);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">待决策 (${pending.length})</div>`;
+        html += pending.map(d => decisionItemHtml(d)).join('');
+      }
+      if (decided.length) {
+        html += `<div style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin:16px 0 8px">已决策 (${decided.length})</div>`;
+        html += decided.map(d => decisionItemHtml(d)).join('');
+      }
+      if (expired.length) {
+        html += `<div style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin:16px 0 8px">已过期 (${expired.length})</div>`;
+        html += expired.map(d => decisionItemHtml(d)).join('');
+      }
+      container.innerHTML = html;
+    } catch (err) {
+      container.innerHTML = `<div class="empty-state"><p style="color:var(--error)">加载失败：${err.message}</p></div>`;
+    }
+  }
+
+  function decisionItemHtml(d) {
+    const isPending = d.status === 'PENDING_DECISION';
+    const statusColor = isPending ? 'var(--decision)' : d.status === 'DECIDED' ? 'var(--success)' : 'var(--text-muted)';
+    const statusLabel = isPending ? '待决策' : d.status === 'DECIDED' ? `已选：${d.chosen_action_code || d.boss_choice}` : '已过期';
+    return `
+    <div class="decision-item" onclick="${isPending ? `openDecisionCard(${d.record_id})` : ''}">
+      <div style="display:flex;align-items:center;justify-content:space-between">
+        <div>
+          <span style="font-size:12px;color:var(--text-muted)">流水 #${d.record_id} · 决策 #${d.decision_id}</span>
+          ${d.recommendation ? `<span style="margin-left:8px;font-size:11px;background:#f0f4ff;color:var(--primary);padding:2px 7px;border-radius:10px">AI推荐：${d.recommendation}</span>` : ''}
+        </div>
+        <span style="font-size:12px;font-weight:600;color:${statusColor}">${statusLabel}</span>
+      </div>
+      ${isPending ? `<div style="margin-top:8px"><button class="btn btn-outline" style="font-size:12px;color:var(--decision);border-color:var(--decision)" onclick="event.stopPropagation();openDecisionCard(${d.record_id})">查看 / 选择方案 →</button></div>` : ''}
+    </div>`;
+  }
+
+  async function openDecisionCard(recordId) {
+    document.getElementById('decisionModalTitle').textContent = `流水 #${recordId} — 税务处理方案`;
+    document.getElementById('decisionModalBody').innerHTML = '<div class="empty-state" style="padding:40px"><div class="spinner"></div><p style="margin-top:12px">AI 正在分析，生成方案中…</p></div>';
+    document.getElementById('decisionModal').style.display = 'flex';
+
+    try {
+      const res  = await fetch(`${API}/api/decisions/${recordId}`);
+      if (!res.ok) { const e = await res.json(); throw new Error(e.detail); }
+      const card = await res.json();
+      renderDecisionCard(card);
+    } catch (err) {
+      document.getElementById('decisionModalBody').innerHTML =
+        `<div style="padding:24px;color:var(--error)">❌ ${err.message}</div>`;
+    }
+  }
+
+  function renderDecisionCard(card) {
+    const snap    = card.financial_snapshot || {};
+    const options = card.options || [];
+    const notRec  = card.not_recommended || [];
+
+    const snapshotHtml = `
+      <div class="decision-snapshot">
+        <div class="snapshot-item">
+          <div class="snapshot-label">今年累计利润</div>
+          <div class="snapshot-value" style="color:${snap.ytd_profit>=0?'#276749':'#c53030'}">${snap.ytd_profit!=null ? (snap.ytd_profit>=0?'':'−')+'¥'+fmt(Math.abs(snap.ytd_profit||0)) : '--'}</div>
+        </div>
+        <div class="snapshot-item">
+          <div class="snapshot-label">当前现金余额</div>
+          <div class="snapshot-value" style="color:#2b4acb">${snap.current_cash!=null ? '¥'+fmt(snap.current_cash) : '--'}</div>
+        </div>
+        <div style="margin-left:auto;font-size:12px;color:var(--text-muted);align-self:center;max-width:240px;line-height:1.5">${card.tax_analysis || ''}</div>
+      </div>`;
+
+    const optionsHtml = options.map(opt => {
+      const isRec    = opt.id === card.recommendation;
+      const isNotRec = notRec.includes(opt.id);
+      return `
+        <div class="option-card ${isRec?'recommended':''} ${isNotRec?'not-recommended':''}">
+          ${isRec ? '<div class="rec-badge">AI 推荐</div>' : ''}
+          <div class="opt-title">${escHtml(opt.label)} · ${escHtml(opt.title)}</div>
+          <div class="opt-text">${escHtml(opt.plain_text)}</div>
+          ${opt.savings_this_year ? `<div class="opt-savings">今年省税 ¥${fmt(opt.savings_this_year)}</div>` : ''}
+          ${opt.savings_total && opt.savings_total !== opt.savings_this_year ? `<div style="font-size:11px;color:var(--text-muted)">合计省税 ¥${fmt(opt.savings_total)}</div>` : ''}
+          <div class="opt-risk">风险：${escHtml(opt.risk || '无')}</div>
+          <button class="opt-btn" onclick="submitDecisionChoice(${card.decision_id}, '${opt.id}', '${escHtml(opt.title)}')">
+            选择此方案
+          </button>
+        </div>`;
+    }).join('');
+
+    const recReason = card.recommendation_reason
+      ? `<div style="padding:10px 20px 14px;font-size:12px;color:var(--text-muted)">💡 ${escHtml(card.recommendation_reason)}</div>`
+      : '';
+    const disclaimer = card.disclaimer
+      ? `<div style="padding:8px 20px;font-size:11px;color:var(--text-muted);border-top:1px solid var(--border)">${escHtml(card.disclaimer)}</div>`
+      : '';
+
+    document.getElementById('decisionModalBody').innerHTML =
+      snapshotHtml +
+      (card.tax_analysis ? '' : '') +
+      `<div class="option-grid">${optionsHtml}</div>` +
+      recReason + disclaimer;
+  }
+
+  async function submitDecisionChoice(decisionId, choiceId, choiceTitle) {
+    if (!confirm(`确认选择「${choiceTitle}」？选择后将立即生成凭证，无法撤销。`)) return;
+    try {
+      const res  = await fetch(`${API}/api/decisions/${decisionId}/choose`, {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ choice_id: choiceId }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        document.getElementById('decisionModal').style.display = 'none';
+        showToast(`✅ ${data.message || '方案已执行'}`, 'success');
+        loadDecisions();
+        loadDashboard();
+      } else {
+        showToast('❌ ' + (data.detail || '执行失败'), 'error');
+      }
+    } catch (err) { showToast('网络错误：' + err.message, 'error'); }
+  }
+
+  function closeDecisionModal(e) {
+    if (e.target === document.getElementById('decisionModal'))
+      document.getElementById('decisionModal').style.display = 'none';
+  }
+
+  // ── 企业设置 ──
+  let _settingsProfileId = null;
+
+  async function loadSettings() {
+    try {
+      const res = await fetch(`${API}/api/enterprise/profile`);
+      if (res.status === 404) { _settingsProfileId = null; return; }
+      const d = await res.json();
+      _settingsProfileId = d.company_id;
+      document.getElementById('s-company-name').value  = d.company_name || '';
+      document.getElementById('s-company-type').value  = d.company_type || 'MICRO';
+      document.getElementById('s-industry').value      = d.industry_code || '通用';
+      document.getElementById('s-tax-payer').value     = d.tax_payer_type || 'SMALL_SCALE';
+      document.getElementById('s-accounting-std').value= d.accounting_standard || 'SMALL_BIZ';
+      document.getElementById('s-income-tax').value    = d.applicable_income_tax_rate.toFixed(2);
+      document.getElementById('s-vat').value            = d.vat_rate.toFixed(2);
+      document.getElementById('s-threshold').value     = d.decision_threshold;
+    } catch (err) { showToast('设置加载失败', 'error'); }
+  }
+
+  async function saveSettings() {
+    const name = document.getElementById('s-company-name').value.trim();
+    if (!name) { showToast('请填写公司名称', 'error'); return; }
+    const btn     = document.getElementById('save-settings-btn');
+    const spinner = document.getElementById('settings-spinner');
+    btn.disabled = true; spinner.style.display = 'flex';
+
+    const body = {
+      company_name: name,
+      company_type: document.getElementById('s-company-type').value,
+      industry_code: document.getElementById('s-industry').value,
+      tax_payer_type: document.getElementById('s-tax-payer').value,
+      accounting_standard: document.getElementById('s-accounting-std').value,
+      applicable_income_tax_rate: parseFloat(document.getElementById('s-income-tax').value),
+      vat_rate: parseFloat(document.getElementById('s-vat').value),
+      decision_threshold: parseFloat(document.getElementById('s-threshold').value),
+    };
+
+    try {
+      let res;
+      if (_settingsProfileId) {
+        res = await fetch(`${API}/api/enterprise/profile/${_settingsProfileId}`, {
+          method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body),
+        });
+      } else {
+        res = await fetch(`${API}/api/enterprise/profile`, {
+          method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(body),
+        });
+      }
+      if (res.ok) {
+        const d = await res.json();
+        _settingsProfileId = d.company_id;
+        showSettingsAlert('✅ 设置已保存', 'success');
+        showToast('企业设置已保存', 'success');
+      } else {
+        const err = await res.json();
+        showSettingsAlert('❌ ' + (err.detail || '保存失败'), 'error');
+      }
+    } catch (err) { showToast('保存失败：' + err.message, 'error'); }
+    finally { btn.disabled = false; spinner.style.display = 'none'; }
+  }
+
+  async function routePreview() {
+    const type   = document.getElementById('preview-type').value.trim();
+    const amount = parseFloat(document.getElementById('preview-amount').value);
+    if (!type || !amount) { showToast('请填写业务类型和金额', 'error'); return; }
+    const res  = await fetch(`${API}/api/enterprise/route-preview`, {
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ expense_type: type, amount }),
+    });
+    const el = document.getElementById('preview-result');
+    el.style.display = 'block';
+    if (res.ok) {
+      const d = await res.json();
+      const isIntercept = d.decision === 'INTERCEPT';
+      el.style.background = isIntercept ? 'var(--decision-bg)' : '#f0fff4';
+      el.style.border     = `1px solid ${isIntercept ? '#fcd34d' : '#9ae6b4'}`;
+      el.style.color      = isIntercept ? 'var(--decision)' : '#276749';
+      el.innerHTML = `<strong>${isIntercept ? '⚡ 拦截 → 老板决策流' : '✅ 自动记账'}</strong><br>${d.reason}${d.threshold ? `<br><span style="opacity:.7">当前阈值：¥${fmt(d.threshold)}</span>` : ''}`;
+    } else { el.style.background='#fff5f5'; el.innerHTML='预览失败，请先保存企业设置'; }
+  }
+
+  function showSettingsAlert(msg, type) {
+    const el = document.getElementById('settings-alert');
+    el.style.display = 'block';
+    el.style.background = type === 'success' ? '#f0fff4' : '#fff5f5';
+    el.style.color      = type === 'success' ? '#276749' : '#c53030';
+    el.style.border     = `1px solid ${type === 'success' ? '#9ae6b4' : '#feb2b2'}`;
+    el.textContent = msg;
+    setTimeout(() => el.style.display = 'none', 3000);
   }
 
   // CSV 导出
