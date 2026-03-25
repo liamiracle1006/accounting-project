@@ -322,9 +322,50 @@
 
     .total-row td { font-weight: 700; background: #f7fafc; }
 
+    /* ── Summary Cards (Dashboard) ── */
+    .period-bar {
+      display: flex; align-items: center; gap: 10px; margin-bottom: 20px;
+    }
+    .period-bar select {
+      padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius);
+      font-size: 13px; background: var(--surface); color: var(--text); cursor: pointer;
+    }
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .summary-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 20px 24px;
+      border-left: 4px solid transparent;
+    }
+    .summary-card.income  { border-left-color: #38a169; }
+    .summary-card.expense { border-left-color: #e53e3e; }
+    .summary-card.profit  { border-left-color: #3b6cf8; }
+    .summary-card.pending { border-left-color: #d69e2e; }
+    .summary-label { font-size: 12px; color: var(--text-muted); margin-bottom: 8px; font-weight: 500; }
+    .summary-amount {
+      font-size: 26px; font-weight: 700; font-family: "SF Mono", monospace;
+      color: var(--text);
+    }
+    .summary-card.income  .summary-amount { color: #276749; }
+    .summary-card.expense .summary-amount { color: #c53030; }
+    .summary-card.profit  .summary-amount { color: #2b4acb; }
+    .summary-sub { font-size: 11px; color: var(--text-muted); margin-top: 4px; }
+
+    /* ── Pages ── */
+    .page { display: none; }
+    .page.active { display: block; }
+
     /* ── Responsive ── */
     @media (max-width: 760px) {
       .grid { grid-template-columns: 1fr; }
+      .summary-grid { grid-template-columns: 1fr 1fr; }
     }
   </style>
 </head>
@@ -332,12 +373,60 @@
 
 <header>
   <div class="logo">AgentLedger <span>V1.0 · 智能业财系统</span></div>
-  <nav>
-    <a href="#" class="active" onclick="showSection('records'); return false;">流水记录</a>
+  <nav id="mainNav">
+    <a href="#" class="active" data-page="dashboard" onclick="navTo('dashboard',this);return false;">仪表盘</a>
+    <a href="#" data-page="records" onclick="navTo('records',this);return false;">流水记录</a>
+    <a href="#" data-page="reports" onclick="navTo('reports',this);return false;">财务报表</a>
     <a href="/docs" target="_blank">API 文档</a>
   </nav>
 </header>
 
+<!-- ══ 仪表盘页 ══ -->
+<div id="page-dashboard" class="page active">
+  <div class="container">
+    <div class="period-bar">
+      <label style="font-size:13px;color:var(--text-muted)">统计期间：</label>
+      <select id="dash-year"></select>
+      <select id="dash-month">
+        <option value="1">1月</option><option value="2">2月</option>
+        <option value="3">3月</option><option value="4">4月</option>
+        <option value="5">5月</option><option value="6">6月</option>
+        <option value="7">7月</option><option value="8">8月</option>
+        <option value="9">9月</option><option value="10">10月</option>
+        <option value="11">11月</option><option value="12">12月</option>
+      </select>
+      <button class="btn btn-outline" onclick="loadDashboard()">刷新</button>
+    </div>
+    <div class="summary-grid">
+      <div class="summary-card income">
+        <div class="summary-label">本期收入</div>
+        <div class="summary-amount" id="s-income">--</div>
+        <div class="summary-sub">收入类科目贷方合计</div>
+      </div>
+      <div class="summary-card expense">
+        <div class="summary-label">本期支出</div>
+        <div class="summary-amount" id="s-expense">--</div>
+        <div class="summary-sub">费用类科目借方合计</div>
+      </div>
+      <div class="summary-card profit">
+        <div class="summary-label">净利润</div>
+        <div class="summary-amount" id="s-profit">--</div>
+        <div class="summary-sub">收入 − 费用</div>
+      </div>
+      <div class="summary-card pending">
+        <div class="summary-label">本期凭证数</div>
+        <div class="summary-amount" id="s-vouchers">--</div>
+        <div class="summary-sub" id="s-review"></div>
+      </div>
+    </div>
+    <p style="font-size:12px;color:var(--text-muted);text-align:center">
+      数据仅含已处理凭证 · 如需详细报表请切换至「财务报表」页
+    </p>
+  </div>
+</div>
+
+<!-- ══ 流水记录页 ══ -->
+<div id="page-records" class="page">
 <div class="container">
   <div class="grid">
 
@@ -399,6 +488,17 @@
 
   </div>
 </div>
+</div><!-- /page-records -->
+
+<!-- ══ 财务报表页（后续补充）══ -->
+<div id="page-reports" class="page">
+  <div class="container">
+    <div class="empty-state" style="padding:80px 0">
+      <div class="empty-icon">📊</div>
+      <p>财务报表加载中，请稍候…</p>
+    </div>
+  </div>
+</div>
 
 <!-- ── 凭证详情 Modal ── -->
 <div class="modal-overlay" id="voucherModal" onclick="closeModalOnOverlay(event)">
@@ -420,9 +520,57 @@
   const API = '';  // same origin
   let currentFilter = '';
 
+  // ── 导航 ──
+  function navTo(page, el) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById('page-' + page).classList.add('active');
+    document.querySelectorAll('#mainNav a[data-page]').forEach(a => a.classList.remove('active'));
+    if (el) el.classList.add('active');
+    if (page === 'dashboard') loadDashboard();
+    if (page === 'records')   loadRecords();
+    if (page === 'reports')   loadReports();
+  }
+
+  // ── 仪表盘 ──
+  function initYearSelect() {
+    const sel = document.getElementById('dash-year');
+    const now = new Date();
+    for (let y = now.getFullYear(); y >= now.getFullYear() - 3; y--) {
+      const o = document.createElement('option');
+      o.value = y; o.textContent = y + '年';
+      sel.appendChild(o);
+    }
+    sel.value = now.getFullYear();
+    document.getElementById('dash-month').value = now.getMonth() + 1;
+  }
+
+  async function loadDashboard() {
+    const year  = document.getElementById('dash-year').value;
+    const month = document.getElementById('dash-month').value;
+    ['s-income','s-expense','s-profit','s-vouchers'].forEach(id => {
+      document.getElementById(id).textContent = '…';
+    });
+    try {
+      const res  = await fetch(`${API}/api/stats/summary?year=${year}&month=${month}`);
+      const data = await res.json();
+      document.getElementById('s-income').textContent   = '¥ ' + fmt(data.total_income);
+      document.getElementById('s-expense').textContent  = '¥ ' + fmt(data.total_expense);
+      const profit = data.net_profit;
+      const profitEl = document.getElementById('s-profit');
+      profitEl.textContent = (profit >= 0 ? '¥ ' : '-¥ ') + fmt(Math.abs(profit));
+      profitEl.style.color = profit >= 0 ? '#2b4acb' : '#c53030';
+      document.getElementById('s-vouchers').textContent = data.total_vouchers;
+      document.getElementById('s-review').textContent   =
+        data.pending_review > 0 ? `⚠️ ${data.pending_review} 条待审核` : '无待审核';
+    } catch (err) {
+      showToast('仪表盘加载失败：' + err.message, 'error');
+    }
+  }
+
   // ── 初始化 ──
   document.addEventListener('DOMContentLoaded', () => {
-    loadRecords();
+    initYearSelect();
+    loadDashboard();
     // 按 Ctrl+Enter 提交
     document.getElementById('rawText').addEventListener('keydown', e => {
       if (e.ctrlKey && e.key === 'Enter') submitRecord();
