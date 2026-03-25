@@ -646,15 +646,18 @@
       return;
     }
 
+    // 对 PENDING 的记录启动轮询
+    records.filter(r => r.status === 'PENDING').forEach(r => startPoll(r.record_id));
+
     const rows = records.map(r => `
       <tr class="clickable" onclick="openRecord(${r.record_id})">
         <td><span class="record-id">#${r.record_id}</span></td>
         <td><div class="text-preview">${escHtml(r.raw_text)}</div></td>
         <td>${statusBadge(r.status)}</td>
         <td>
-          ${r.status === 'PROCESSED'
+          ${r.status === 'PROCESSED' && r.voucher_id
             ? `<button class="link-btn" onclick="event.stopPropagation(); openRecord(${r.record_id})">查看凭证</button>`
-            : '—'}
+            : r.status === 'PENDING' ? '<span class="spinner" style="width:14px;height:14px"></span>' : '—'}
         </td>
       </tr>`).join('');
 
@@ -674,6 +677,24 @@
       </div>`;
   }
 
+  // ── PENDING 自动轮询 ──
+  const _pollTimers = {};
+  function startPoll(recordId) {
+    if (_pollTimers[recordId]) return;
+    _pollTimers[recordId] = setInterval(async () => {
+      try {
+        const res = await fetch(`${API}/api/records/${recordId}`);
+        const rec = await res.json();
+        if (rec.status !== 'PENDING') {
+          clearInterval(_pollTimers[recordId]);
+          delete _pollTimers[recordId];
+          loadRecords();
+          showToast(rec.status === 'PROCESSED' ? '✅ 凭证已生成' : '⚠️ 处理结果需审核', rec.status === 'PROCESSED' ? 'success' : 'error');
+        }
+      } catch (_) {}
+    }, 2000);
+  }
+
   // ── 查看记录 / 凭证 ──
   async function openRecord(recordId) {
     showModal('加载中…', '<div style="text-align:center;padding:32px"><span class="spinner"></span></div>');
@@ -682,16 +703,29 @@
       const recRes = await fetch(`${API}/api/records/${recordId}`);
       const rec = await recRes.json();
 
+      // 用 API 返回的正确 voucher_id（而非 record_id）
       let voucherHtml = '';
-      // 尝试加载凭证（假设 voucher_id = record_id，若后端有关联字段可改）
-      if (rec.status === 'PROCESSED') {
+      if (rec.status === 'PROCESSED' && rec.voucher_id) {
         try {
-          const vRes = await fetch(`${API}/api/vouchers/${recordId}`);
+          const vRes = await fetch(`${API}/api/vouchers/${rec.voucher_id}`);
           if (vRes.ok) {
             const v = await vRes.json();
             voucherHtml = renderVoucher(v);
           }
         } catch (_) {}
+      }
+
+      // extracted_json 格式化展示
+      let jsonHtml = '';
+      if (rec.extracted_json) {
+        try {
+          const parsed = JSON.parse(rec.extracted_json);
+          jsonHtml = `
+            <div class="section-title">LLM 解析结果</div>
+            <pre style="background:#f7fafc;border:1px solid var(--border);border-radius:6px;padding:12px;font-size:12px;overflow-x:auto;white-space:pre-wrap;word-break:break-all">${escHtml(JSON.stringify(parsed, null, 2))}</pre>`;
+        } catch (_) {
+          jsonHtml = `<div class="section-title">LLM 解析结果（原始）</div><pre style="font-size:12px">${escHtml(rec.extracted_json)}</pre>`;
+        }
       }
 
       const errHtml = rec.error_message
@@ -703,6 +737,7 @@
         <div class="info-row"><span class="info-label">状态</span><span class="info-value">${statusBadge(rec.status)}</span></div>
         <div class="info-row"><span class="info-label">原始描述</span><span class="info-value">${escHtml(rec.raw_text)}</span></div>
         ${errHtml}
+        ${jsonHtml}
         ${voucherHtml}
       `;
 
