@@ -1,11 +1,12 @@
 """
-AgentLedger — Financial Report API (Phase 4)
+AgentLedger — Financial Report API (Phase 4, Official Format)
 
 端点：
-  GET  /api/reports/balance-sheet          — 资产负债表
-  GET  /api/reports/income-statement       — 利润表
+  GET  /api/reports/balance-sheet          — 资产负债表（会企01表）
+  GET  /api/reports/income-statement       — 利润表（会企02表）
   GET  /api/reports/periods                — 会计期间列表
   POST /api/reports/periods/{year}/{month}/close — 月末结账
+  POST /api/reports/periods/{year}/{month}/open  — 手动开启期间
 """
 import logging
 from datetime import date
@@ -27,7 +28,7 @@ router = APIRouter(prefix="/api/reports", tags=["reports"])
 FINANCE_ROLES = (UserRole.BOSS, UserRole.ACCOUNTANT)
 
 
-# ── Balance Sheet ──────────────────────────────────────────────────────────────
+# ── Balance Sheet (会企01表) ────────────────────────────────────────────────
 
 @router.get("/balance-sheet")
 def get_balance_sheet(
@@ -36,7 +37,8 @@ def get_balance_sheet(
     db:           Session     = Depends(get_db),
 ) -> Any:
     """
-    返回截至指定日期（默认今天）的资产负债表。
+    返回截至指定日期（默认今天）的官方格式资产负债表（会企01表）。
+    包含期末余额和期初（年初）余额两列。
     as_of 格式：YYYY-MM-DD
     """
     try:
@@ -48,24 +50,29 @@ def get_balance_sheet(
     bs  = svc.get_balance_sheet(as_of_date)
 
     def items(lst):
-        return [{"code": i.code, "name": i.name, "amount": float(i.amount)} for i in lst]
+        return [
+            {
+                "code":     i.code,
+                "name":     i.name,
+                "end_bal":  float(i.end_bal),
+                "beg_bal":  float(i.beg_bal),
+                "is_total": i.is_total,
+            }
+            for i in lst
+        ]
 
     return {
-        "as_of_date":            bs.as_of_date,
-        "current_assets":        items(bs.current_assets),
-        "non_current_assets":    items(bs.non_current_assets),
-        "total_assets":          float(bs.total_assets),
-        "current_liabilities":   items(bs.current_liabilities),
-        "non_current_liabilities": items(bs.non_current_liabilities),
-        "total_liabilities":     float(bs.total_liabilities),
-        "equity_items":          items(bs.equity_items),
-        "total_equity":          float(bs.total_equity),
-        "balanced":              bs.balanced,
-        "diff":                  float(bs.diff),
+        "as_of_date":  bs.as_of_date,
+        "beg_of_year": bs.beg_of_year,
+        "assets":      items(bs.assets),
+        "liabilities": items(bs.liabilities),
+        "equity":      items(bs.equity),
+        "balanced":    bs.balanced,
+        "diff":        float(bs.diff),
     }
 
 
-# ── Income Statement ───────────────────────────────────────────────────────────
+# ── Income Statement (会企02表) ─────────────────────────────────────────────
 
 @router.get("/income-statement")
 def get_income_statement(
@@ -75,7 +82,8 @@ def get_income_statement(
     db:           Session     = Depends(get_db),
 ) -> Any:
     """
-    返回指定区间的利润表。
+    返回指定区间的官方格式利润表（会企02表）。
+    包含本期金额和上年同期金额两列。
     默认：当月 1 日至今天。
     """
     today = date.today()
@@ -89,24 +97,24 @@ def get_income_statement(
     is_ = svc.get_income_statement(df, dt)
 
     return {
-        "date_from":        is_.date_from,
-        "date_to":          is_.date_to,
-        "revenue":          float(is_.revenue),
-        "other_revenue":    float(is_.other_revenue),
-        "total_revenue":    float(is_.total_revenue),
-        "cogs":             float(is_.cogs),
-        "gross_profit":     float(is_.gross_profit),
-        "admin_expense":    float(is_.admin_expense),
-        "finance_expense":  float(is_.finance_expense),
-        "selling_expense":  float(is_.selling_expense),
-        "total_opex":       float(is_.total_opex),
-        "operating_profit": float(is_.operating_profit),
-        "tax_expense":      float(is_.tax_expense),
-        "net_profit":       float(is_.net_profit),
+        "date_from":  is_.date_from,
+        "date_to":    is_.date_to,
+        "prev_from":  is_.prev_from,
+        "prev_to":    is_.prev_to,
+        "items": [
+            {
+                "code":     i.code,
+                "name":     i.name,
+                "cur_amt":  float(i.cur_amt),
+                "prev_amt": float(i.prev_amt),
+                "is_total": i.is_total,
+            }
+            for i in is_.items
+        ],
     }
 
 
-# ── Accounting Periods ─────────────────────────────────────────────────────────
+# ── Accounting Periods ─────────────────────────────────────────────────────
 
 @router.get("/periods")
 def list_periods(
