@@ -402,6 +402,36 @@
 </head>
 <body>
 
+<!-- ══ 登录遮罩 ══ -->
+<div id="login-overlay" style="display:none;position:fixed;inset:0;background:rgba(15,23,42,0.85);z-index:9999;display:flex;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:12px;padding:40px 36px;width:360px;box-shadow:0 24px 48px rgba(0,0,0,0.3)">
+    <div style="text-align:center;margin-bottom:28px">
+      <div style="font-size:28px;font-weight:800;color:var(--primary);letter-spacing:-1px">AgentLedger</div>
+      <div style="font-size:13px;color:var(--text-muted);margin-top:4px">智能业财系统 V2.0</div>
+    </div>
+    <div style="margin-bottom:14px">
+      <label style="font-size:12px;font-weight:600;color:var(--text);display:block;margin-bottom:4px">用户名</label>
+      <input id="login-username" type="text" placeholder="输入用户名" autocomplete="username"
+        style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:6px;font-size:14px;outline:none"
+        onkeydown="if(event.key==='Enter')document.getElementById('login-password').focus()">
+    </div>
+    <div style="margin-bottom:20px">
+      <label style="font-size:12px;font-weight:600;color:var(--text);display:block;margin-bottom:4px">密码</label>
+      <input id="login-password" type="password" placeholder="输入密码" autocomplete="current-password"
+        style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:6px;font-size:14px;outline:none"
+        onkeydown="if(event.key==='Enter')doLogin()">
+    </div>
+    <div id="login-error" style="display:none;color:#e53e3e;font-size:12px;margin-bottom:12px;padding:8px 10px;background:#fff5f5;border-radius:6px"></div>
+    <button onclick="doLogin()" id="login-btn"
+      style="width:100%;padding:11px;background:var(--primary);color:#fff;border:none;border-radius:6px;font-size:15px;font-weight:600;cursor:pointer">
+      登录
+    </button>
+    <div style="margin-top:16px;font-size:11px;color:var(--text-muted);text-align:center">
+      默认账号：boss / accountant / manager &nbsp;·&nbsp; 密码：123456
+    </div>
+  </div>
+</div>
+
 <header>
   <div class="logo">AgentLedger <span>V2.0 · 智能业财系统</span></div>
   <nav id="mainNav">
@@ -414,6 +444,10 @@
     <a href="#" data-page="settings" onclick="navTo('settings',this);return false;">企业设置</a>
     <a href="/docs" target="_blank">API 文档</a>
   </nav>
+  <div style="display:flex;align-items:center;gap:10px;font-size:12px">
+    <span id="header-user" style="color:var(--text-muted)"></span>
+    <button onclick="doLogout()" style="font-size:11px;padding:4px 10px;border:1px solid var(--border);border-radius:4px;background:#fff;cursor:pointer;color:var(--text-muted)">退出</button>
+  </div>
 </header>
 
 <!-- ══ 仪表盘页 ══ -->
@@ -826,6 +860,83 @@
   const API = '';  // same origin
   let currentFilter = '';
 
+  // ── Auth state ────────────────────────────────────────────────────────────
+  let _authToken = localStorage.getItem('al_token') || null;
+  let _authUser  = JSON.parse(localStorage.getItem('al_user') || 'null');
+
+  function authHeaders() {
+    return _authToken ? { 'Authorization': 'Bearer ' + _authToken } : {};
+  }
+
+  // Wrap fetch to always include auth headers
+  const _origFetch = window.fetch.bind(window);
+  window.fetch = function(url, opts = {}) {
+    opts.headers = Object.assign({}, authHeaders(), opts.headers || {});
+    return _origFetch(url, opts).then(res => {
+      if (res.status === 401) { doLogout(true); }
+      return res;
+    });
+  };
+
+  async function doLogin() {
+    const username = document.getElementById('login-username').value.trim();
+    const password = document.getElementById('login-password').value;
+    const errEl    = document.getElementById('login-error');
+    const btn      = document.getElementById('login-btn');
+    if (!username || !password) { showLoginError('请填写用户名和密码'); return; }
+    btn.disabled = true; btn.textContent = '登录中…';
+    try {
+      const form = new URLSearchParams({ username, password });
+      const res  = await _origFetch(`${API}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: form,
+      });
+      const d = await res.json();
+      if (!res.ok) { showLoginError(d.detail || '登录失败'); return; }
+      _authToken = d.access_token;
+      _authUser  = d.user;
+      localStorage.setItem('al_token', _authToken);
+      localStorage.setItem('al_user',  JSON.stringify(_authUser));
+      applyAuthUI();
+      document.getElementById('login-overlay').style.display = 'none';
+      loadDashboard();
+    } catch (e) { showLoginError('网络错误：' + e.message); }
+    finally { btn.disabled = false; btn.textContent = '登录'; }
+  }
+
+  function doLogout(expired = false) {
+    _authToken = null; _authUser = null;
+    localStorage.removeItem('al_token');
+    localStorage.removeItem('al_user');
+    if (expired) showLoginError('登录已过期，请重新登录');
+    document.getElementById('login-overlay').style.display = 'flex';
+  }
+
+  function showLoginError(msg) {
+    const el = document.getElementById('login-error');
+    el.textContent = msg; el.style.display = 'block';
+  }
+
+  function applyAuthUI() {
+    if (!_authUser) return;
+    const roleLabel = { BOSS: '老板', ACCOUNTANT: '财务', DEPT_MANAGER: '主管' };
+    document.getElementById('header-user').textContent =
+      `${_authUser.display_name}（${roleLabel[_authUser.role] || _authUser.role}）`;
+
+    // 角色化导航：普通主管只看费用申请页；财务看工作台
+    const nav = document.getElementById('mainNav');
+    const role = _authUser.role;
+    nav.querySelectorAll('[data-page]').forEach(a => {
+      const page = a.dataset.page;
+      if (role === 'DEPT_MANAGER') {
+        a.style.display = ['expenses'].includes(page) ? '' : 'none';
+      } else {
+        a.style.display = '';
+      }
+    });
+  }
+
   // ── 导航 ──
   function navTo(page, el) {
     document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
@@ -890,7 +1001,13 @@
     initYearSelect();
     initPlanYearSelect();
     initReportDates();
-    loadDashboard();
+    // 检查是否已登录
+    if (_authToken && _authUser) {
+      applyAuthUI();
+      loadDashboard();
+    } else {
+      document.getElementById('login-overlay').style.display = 'flex';
+    }
     // 按 Ctrl+Enter 提交
     document.getElementById('rawText').addEventListener('keydown', e => {
       if (e.ctrlKey && e.key === 'Enter') submitRecord();
