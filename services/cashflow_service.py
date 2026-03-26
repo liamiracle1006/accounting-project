@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from models.voucher_line import VoucherLine
 from models.voucher_header import VoucherHeader, VoucherReviewStatus
+from models.asset_register import AssetRegister, AssetStatus
 
 logger = logging.getLogger(__name__)
 
@@ -89,6 +90,48 @@ def _asset_bal(b: dict, *codes: str) -> Decimal:
 
 def _liab_bal(b: dict, *codes: str) -> Decimal:
     return sum((max(-b.get(c, Decimal("0")), Decimal("0")) for c in codes), Decimal("0"))
+
+
+def _actual_depreciation(db: Session, date_from: date, date_to: date) -> Decimal:
+    """
+    从 asset_register 计算区间内实际计提折旧额。
+
+    策略：对每项资产，统计区间内实际折旧月数（折旧开始月到折旧结束月与区间的交集），
+    乘以月折旧额。已处置（DISPOSED）的资产仍包含在内（折旧在处置前已发生）。
+    ONE_TIME（一次性扣除）资产：若购入日期在区间内则计入全额。
+    """
+    assets = db.query(AssetRegister).all()
+    total = Decimal("0")
+    from_ym = (date_from.year, date_from.month)
+    to_ym   = (date_to.year, date_to.month)
+
+    for a in assets:
+        if not a.depreciation_start_month:
+            continue
+        start_y, start_m = map(int, a.depreciation_start_month.split("-"))
+        start_ym = (start_y, start_m)
+
+        monthly = Decimal(str(a.monthly_depreciation))
+        if monthly <= 0:
+            continue
+
+        # 折旧结束月（开始月 + 总月数 - 1）
+        total_months = int(a.useful_life_months)
+        end_m_offset = start_m + total_months - 2   # 0-based offset
+        end_y  = start_y + end_m_offset // 12
+        end_m  = end_m_offset % 12 + 1
+        end_ym = (end_y, end_m)
+
+        # 区间交集
+        eff_start = max(start_ym, from_ym)
+        eff_end   = min(end_ym,   to_ym)
+        if eff_start > eff_end:
+            continue
+
+        months = (eff_end[0] - eff_start[0]) * 12 + (eff_end[1] - eff_start[1]) + 1
+        total += monthly * months
+
+    return total
 
 
 class CashFlowService:
@@ -168,10 +211,9 @@ class CashFlowService:
             """负债增加为现金流入（正），减少为流出（负）"""
             return (_liab_bal(b_end, *codes) - _liab_bal(b_beg, *codes))
 
-        # 固定资产折旧、无形资产摊销（费用科目中的非现金部分简化为管理费用20%估算）
-        # 实际应从资产折旧模块取数；此处用折旧凭证行直接取
-        depr_c = S("6602","DEBIT", date_from, date_to) * Decimal("0.3")  # 粗估折旧占管理费用30%
-        depr_p = S("6602","DEBIT", prev_from, prev_to) * Decimal("0.3")
+        # 固定资产折旧及无形资产摊销（从 asset_register 取实际计提数）
+        depr_c = _actual_depreciation(self._db, date_from, date_to)
+        depr_p = _actual_depreciation(self._db, prev_from, prev_to)
         row("DEPR", "加：资产折旧及摊销", depr_c, depr_p)
 
         # 应收账款减少（增加）
