@@ -767,7 +767,13 @@
           </div>
           <div>
             <label class="field-label">老板决策触发阈值（元）</label>
-            <input id="s-threshold" type="number" class="field-input" min="1000" step="1000" placeholder="5000">
+            <div style="display:flex;gap:8px;align-items:center">
+              <input id="s-threshold" type="number" class="field-input" min="1000" step="500" placeholder="5000" style="flex:1">
+              <button class="btn btn-outline" style="white-space:nowrap;font-size:12px" onclick="applyRecommendedThreshold()">应用推荐值</button>
+            </div>
+            <div id="threshold-rec-box" style="margin-top:6px;padding:8px 10px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px;font-size:12px;display:none">
+              <span id="threshold-rec-text"></span>
+            </div>
             <div style="font-size:11px;color:var(--text-muted);margin-top:4px">超过此金额的流水将进入老板决策流程</div>
           </div>
         </div>
@@ -1519,6 +1525,30 @@
       document.getElementById('s-vat').value            = d.vat_rate.toFixed(2);
       document.getElementById('s-threshold').value     = d.decision_threshold;
     } catch (err) { showToast('设置加载失败', 'error'); }
+    loadThresholdRecommendation();
+  }
+
+  let _recommendedThreshold = null;
+
+  async function loadThresholdRecommendation() {
+    try {
+      const res = await fetch(`${API}/api/enterprise/threshold-recommendation`);
+      if (!res.ok) return;
+      const d = await res.json();
+      _recommendedThreshold = d.recommended_threshold;
+      const box  = document.getElementById('threshold-rec-box');
+      const text = document.getElementById('threshold-rec-text');
+      box.style.display = 'block';
+      text.innerHTML =
+        `💡 系统推荐：<strong>¥${d.recommended_threshold.toLocaleString()}</strong>` +
+        `&nbsp;&nbsp;<span style="color:var(--text-muted)">${d.rule_applied}</span>`;
+    } catch (_) {}
+  }
+
+  function applyRecommendedThreshold() {
+    if (_recommendedThreshold == null) { showToast('推荐值加载中，请稍候', 'error'); return; }
+    document.getElementById('s-threshold').value = _recommendedThreshold;
+    showToast(`已应用推荐阈值 ¥${_recommendedThreshold.toLocaleString()}`, 'success');
   }
 
   async function saveSettings() {

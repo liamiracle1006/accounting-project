@@ -22,11 +22,17 @@ from models.enterprise_profile import (
     TaxPayerType,
     AccountingStandard,
 )
+from datetime import date, timedelta
+from decimal import Decimal, ROUND_HALF_UP
+
 from services.transaction_router import TransactionRouter
 from services.tax_annual_plan_service import TaxAnnualPlanService, TaxAnnualPlanServiceError
 from models.tax_annual_plan import TaxAnnualPlan
+from models.voucher_header import VoucherHeader
+from models.voucher_line import VoucherLine
 from ai.json_parser import ExtractedRecord
 from ai.llm_client import LLMClientError
+from sqlalchemy import func as sa_func
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/enterprise", tags=["enterprise"])
@@ -322,3 +328,89 @@ def generate_annual_plan(year: int, db: Session = Depends(get_db)) -> Any:
         raise HTTPException(status_code=503, detail=f"AI 服务暂时不可用: {exc}")
 
     return _plan_to_dict(plan)
+
+
+# ── Threshold recommendation endpoint ─────────────────────────────────────────
+
+@router.get("/threshold-recommendation")
+def get_threshold_recommendation(db: Session = Depends(get_db)) -> Any:
+    """
+    基于当前财务数据推荐决策阈值。
+
+    公式：
+      base     = 近3个月月均收入 × 3%
+      clamped  = max(2000, min(100000, base))
+      final    = min(clamped, 现金余额 × 20%)  # 仅当现金 < clamped × 3 时触发
+    """
+    today     = date.today()
+    three_ago = date(
+        today.year if today.month > 3 else today.year - 1,
+        (today.month - 3) % 12 or 12,
+        1,
+    )
+
+    # 近3个月月均收入（科目 6001%，贷方）
+    revenue_row = (
+        db.query(sa_func.sum(VoucherLine.amount))
+        .join(VoucherHeader, VoucherLine.voucher_id == VoucherHeader.voucher_id)
+        .filter(
+            VoucherLine.subject_code.like("6001%"),
+            VoucherLine.direction == "CREDIT",
+            VoucherHeader.voucher_date >= three_ago,
+        )
+        .scalar()
+    )
+    total_3m_revenue    = Decimal(str(revenue_row or 0))
+    avg_monthly_revenue = (total_3m_revenue / 3).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+
+    # 银行存款余额（科目 1002，借方 - 贷方）
+    cash_debit = db.query(sa_func.sum(VoucherLine.amount)).filter(
+        VoucherLine.subject_code == "1002", VoucherLine.direction == "DEBIT"
+    ).scalar() or 0
+    cash_credit = db.query(sa_func.sum(VoucherLine.amount)).filter(
+        VoucherLine.subject_code == "1002", VoucherLine.direction == "CREDIT"
+    ).scalar() or 0
+    cash_balance = max(Decimal("0"), Decimal(str(cash_debit)) - Decimal(str(cash_credit)))
+
+    # 公式
+    FLOOR   = Decimal("2000")
+    CEILING = Decimal("100000")
+    base    = (avg_monthly_revenue * Decimal("0.03")).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+    clamped = max(FLOOR, min(CEILING, base))
+
+    cash_safety_triggered = False
+    cash_limit            = Decimal("0")
+    final                 = clamped
+
+    if cash_balance > 0 and cash_balance < clamped * 3:
+        cash_limit            = (cash_balance * Decimal("0.20")).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+        final                 = min(clamped, cash_limit)
+        cash_safety_triggered = True
+
+    final = max(FLOOR, final)
+
+    # 说明文字
+    if avg_monthly_revenue == 0:
+        rule = "暂无收入数据，使用最低保护值 ¥2,000"
+    elif cash_safety_triggered:
+        rule = f"现金偏低（¥{int(cash_balance):,}），安全兜底：现金 × 20%"
+    elif base < FLOOR:
+        rule = f"月均收入 × 3% = ¥{int(base):,}，低于下限，取 ¥2,000"
+    elif base > CEILING:
+        rule = f"月均收入 × 3% = ¥{int(base):,}，超过上限，取 ¥100,000"
+    else:
+        rule = f"月均收入 ¥{int(avg_monthly_revenue):,} × 3% = ¥{int(base):,}"
+
+    return {
+        "recommended_threshold": int(final),
+        "formula_detail": {
+            "avg_monthly_revenue_3m": int(avg_monthly_revenue),
+            "cash_balance":           int(cash_balance),
+            "base_3pct":              int(base),
+            "floor":                  int(FLOOR),
+            "ceiling":                int(CEILING),
+            "cash_safety_triggered":  cash_safety_triggered,
+            "cash_limit_20pct":       int(cash_limit) if cash_safety_triggered else None,
+        },
+        "rule_applied": rule,
+    }
