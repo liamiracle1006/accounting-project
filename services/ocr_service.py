@@ -28,6 +28,8 @@ from datetime import date
 from decimal import Decimal
 from typing import Any
 
+from config.settings import VISION_API_KEY, VISION_API_BASE, VISION_MODEL
+
 logger = logging.getLogger(__name__)
 
 
@@ -122,22 +124,41 @@ def _call_vision_llm(image_bytes: bytes, mime_type: str) -> str:
     return resp.choices[0].message.content
     ------------------------------------------------
     """
-    # TODO: 替换为上方真实 API 调用
-    logger.warning("OCR vision LLM not configured — returning empty result")
-    return json.dumps({
-        "invoice_code":    None,
-        "invoice_number":  "",
-        "invoice_date":    str(date.today()),
-        "seller_name":     None,
-        "seller_tax_id":   None,
-        "buyer_name":      None,
-        "buyer_tax_id":    None,
-        "subtotal_amount": 0.0,
-        "tax_rate":        0.0,
-        "tax_amount":      0.0,
-        "total_amount":    0.0,
-        "items_summary":   None,
-    })
+    if not VISION_API_KEY:
+        logger.warning("VISION_API_KEY not set — OCR returning empty result. "
+                       "Set VISION_API_KEY in .env to enable.")
+        return json.dumps({
+            "invoice_code": None, "invoice_number": "",
+            "invoice_date": str(date.today()),
+            "seller_name": None, "seller_tax_id": None,
+            "buyer_name": None,  "buyer_tax_id": None,
+            "subtotal_amount": 0.0, "tax_rate": 0.0,
+            "tax_amount": 0.0, "total_amount": 0.0,
+            "items_summary": None,
+        })
+
+    import openai
+    b64    = base64.b64encode(image_bytes).decode()
+    client = openai.OpenAI(api_key=VISION_API_KEY, base_url=VISION_API_BASE)
+    resp   = client.chat.completions.create(
+        model=VISION_MODEL,
+        messages=[{
+            "role": "user",
+            "content": [
+                {"type": "image_url",
+                 "image_url": {"url": f"data:{mime_type};base64,{b64}"}},
+                {"type": "text",
+                 "text": (
+                     "请识别这张增值税发票，提取所有字段，"
+                     "以 JSON 格式返回，字段名使用英文，"
+                     "金额为数字类型，日期格式为 YYYY-MM-DD，税率为小数（如0.13）。"
+                     "只返回 JSON，不要任何说明文字。"
+                 )},
+            ],
+        }],
+        max_tokens=512,
+    )
+    return resp.choices[0].message.content
 
 
 # ---------------------------------------------------------------------------

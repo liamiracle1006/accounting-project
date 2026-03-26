@@ -20,12 +20,21 @@ DATABASE_URL = (
     "?charset=utf8mb4"
 )
 
-# ── LLM API ───────────────────────────────────────────────────────────────────
+# ── LLM API (文本，OpenAI-compatible) ─────────────────────────────────────────
 LLM_API_KEY     = os.getenv("LLM_API_KEY",     "")
 LLM_BASE_URL    = os.getenv("LLM_BASE_URL",    "https://api.openai.com/v1")
 LLM_MODEL       = os.getenv("LLM_MODEL",       "gpt-4o-mini")
 LLM_TIMEOUT     = int(os.getenv("LLM_TIMEOUT", "30"))
 LLM_MAX_TOKENS  = int(os.getenv("LLM_MAX_TOKENS", "1024"))
+
+# ── Vision LLM API（发票 OCR，可与文本 LLM 相同或单独配置）──────────────────────
+# 若不填写则 OCR 功能返回空结果，其余功能不受影响。
+# 推荐：通义千问 Qwen-VL-Max（阿里云 DashScope）
+#   VISION_API_BASE = https://dashscope.aliyuncs.com/compatible-mode/v1
+#   VISION_MODEL    = qwen-vl-max
+VISION_API_KEY  = os.getenv("VISION_API_KEY",  os.getenv("LLM_API_KEY", ""))
+VISION_API_BASE = os.getenv("VISION_API_BASE", "https://dashscope.aliyuncs.com/compatible-mode/v1")
+VISION_MODEL    = os.getenv("VISION_MODEL",    "qwen-vl-max")
 
 # ── Application ───────────────────────────────────────────────────────────────
 APP_HOST  = os.getenv("APP_HOST", "0.0.0.0")
