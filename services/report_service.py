@@ -18,7 +18,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from models.voucher_line import VoucherLine
-from models.voucher_header import VoucherHeader
+from models.voucher_header import VoucherHeader, VoucherReviewStatus
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +79,10 @@ def _build_balances(db: Session, as_of: date) -> dict[str, Decimal]:
             func.sum(VoucherLine.amount).label("total"),
         )
         .join(VoucherHeader, VoucherLine.voucher_id == VoucherHeader.voucher_id)
-        .filter(VoucherHeader.voucher_date <= as_of)
+        .filter(
+            VoucherHeader.voucher_date <= as_of,
+            VoucherHeader.review_status == VoucherReviewStatus.POSTED,
+        )
         .group_by(VoucherLine.subject_code, VoucherLine.direction)
         .all()
     )
@@ -102,6 +105,7 @@ def _sum_period(db: Session, code_prefix: str, direction: str,
             VoucherLine.direction == direction,
             VoucherHeader.voucher_date >= date_from,
             VoucherHeader.voucher_date <= date_to,
+            VoucherHeader.review_status == VoucherReviewStatus.POSTED,
         )
         .scalar()
     )

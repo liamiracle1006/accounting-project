@@ -203,6 +203,7 @@ class PeriodClosingService:
                 VoucherLine.direction == direction,
                 VoucherHeader.voucher_date >= date_from,
                 VoucherHeader.voucher_date <= date_to,
+                VoucherHeader.review_status == VoucherReviewStatus.POSTED,
             )
             .scalar()
         )
