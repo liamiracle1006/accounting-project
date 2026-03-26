@@ -193,3 +193,65 @@ def reject_voucher(
     db.commit()
     logger.info("Voucher rejected: id=%s by=%s note=%s", voucher_id, current_user.username, body.note)
     return _voucher_to_dict(v)
+
+
+@router.post("/vouchers/{voucher_id}/reverse", status_code=201)
+def reverse_voucher(
+    voucher_id:   int,
+    body:         ReviewNote,
+    request:      Request,
+    current_user: UserAccount = Depends(require_role(*FINANCE_ROLES)),
+    db:           Session     = Depends(get_db),
+) -> Any:
+    """
+    红字冲销：对已过账凭证生成一张方向全部反转的冲销凭证（POSTED 状态）。
+    原凭证不可物理修改，这是标准财务"留痕"原则。
+    """
+    from models.voucher_line import VoucherLine as VL
+
+    orig = db.get(VoucherHeader, voucher_id)
+    if not orig:
+        raise HTTPException(status_code=404, detail="凭证不存在")
+    if orig.review_status != VoucherReviewStatus.POSTED:
+        raise HTTPException(status_code=409,
+                            detail=f"只有已过账（POSTED）的凭证才能冲销，当前状态：{orig.review_status}")
+
+    # 生成冲销凭证头（借贷全部反转）
+    reverse_memo = f"【红字冲销】原凭证#{voucher_id}" + (f" — {body.note}" if body.note else "")
+    rev_voucher = VoucherHeader(
+        record_id     = orig.record_id,
+        voucher_date  = orig.voucher_date,
+        total_amount  = orig.total_amount,
+        memo          = reverse_memo,
+        review_status = VoucherReviewStatus.POSTED,
+        reviewer_id   = current_user.user_id,
+        review_note   = reverse_memo,
+        reviewed_at   = datetime.now(timezone.utc),
+    )
+    db.add(rev_voucher)
+    db.flush()  # 获取 rev_voucher.voucher_id
+
+    # 逐行反转借贷方向
+    for line in orig.lines:
+        rev_line = VL(
+            voucher_id   = rev_voucher.voucher_id,
+            subject_code = line.subject_code,
+            direction    = "CREDIT" if line.direction == "DEBIT" else "DEBIT",
+            amount       = line.amount,
+            memo         = f"冲销#{voucher_id}",
+        )
+        db.add(rev_line)
+
+    audit(db, current_user, "voucher_header", voucher_id, AuditAction.CREATE,
+          before=None,
+          after={"reversed_by_voucher_id": rev_voucher.voucher_id},
+          desc=f"红字冲销原凭证#{voucher_id}，生成冲销凭证#{rev_voucher.voucher_id}",
+          ip=get_ip(request))
+    db.commit()
+    logger.info("Voucher reversed: orig=%s new=%s by=%s", voucher_id, rev_voucher.voucher_id,
+                current_user.username)
+    return {
+        "original_voucher_id": voucher_id,
+        "reversal_voucher_id": rev_voucher.voucher_id,
+        "memo": reverse_memo,
+    }
