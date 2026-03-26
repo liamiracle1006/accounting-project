@@ -55,7 +55,18 @@ INSERT INTO auxiliary_entity (entity_type, entity_name) VALUES
 ('供应商', '测试供应商B');
 
 -- ------------------------------------------------------------
+-- 默认用户账号（Phase 3）
+-- 密码均为 "123456"（bcrypt hash，生产环境请立即修改）
+-- ------------------------------------------------------------
+INSERT INTO user_account (username, password_hash, display_name, role) VALUES
+('boss',      '$2b$12$cSvJO7Ln37SMTY0p2x3LpOx7fcgczGq61tnlGwXdLv7K73CtBPk4O', '老板',     'BOSS'),
+('accountant','$2b$12$cSvJO7Ln37SMTY0p2x3LpOx7fcgczGq61tnlGwXdLv7K73CtBPk4O', '财务小王',  'ACCOUNTANT'),
+('manager',   '$2b$12$cSvJO7Ln37SMTY0p2x3LpOx7fcgczGq61tnlGwXdLv7K73CtBPk4O', '部门主管',  'DEPT_MANAGER')
+ON DUPLICATE KEY UPDATE display_name = VALUES(display_name);
+
+-- ------------------------------------------------------------
 -- 验证查询（可选执行）
 -- ------------------------------------------------------------
 -- SELECT * FROM account_subject;
 -- SELECT * FROM auxiliary_entity;
+-- SELECT user_id, username, role FROM user_account;

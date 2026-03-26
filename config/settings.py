@@ -31,3 +31,8 @@ LLM_MAX_TOKENS  = int(os.getenv("LLM_MAX_TOKENS", "1024"))
 APP_HOST  = os.getenv("APP_HOST", "0.0.0.0")
 APP_PORT  = int(os.getenv("APP_PORT", "8000"))
 APP_DEBUG = os.getenv("APP_DEBUG", "false").lower() == "true"
+
+# ── Auth / JWT ────────────────────────────────────────────────────────────────
+JWT_SECRET_KEY   = os.getenv("JWT_SECRET_KEY", "CHANGE_ME_IN_PRODUCTION_32chars!!")
+JWT_ALGORITHM    = "HS256"
+JWT_EXPIRE_HOURS = int(os.getenv("JWT_EXPIRE_HOURS", "12"))

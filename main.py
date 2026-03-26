@@ -13,6 +13,7 @@ from config.settings import APP_DEBUG
 from api.routes import router
 from api.enterprise_routes import router as enterprise_router
 from api.decision_routes import router as decision_router
+from api.auth_routes import router as auth_router
 
 logging.basicConfig(
     level=logging.DEBUG if APP_DEBUG else logging.INFO,
@@ -37,6 +38,7 @@ app.add_middleware(
 app.include_router(router)
 app.include_router(enterprise_router)
 app.include_router(decision_router)
+app.include_router(auth_router)
 
 _STATIC = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=_STATIC), name="static")

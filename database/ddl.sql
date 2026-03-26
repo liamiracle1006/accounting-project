@@ -160,3 +160,22 @@ CREATE TABLE IF NOT EXISTS asset_register (
     CONSTRAINT fk_ar_decision FOREIGN KEY (decision_id)
         REFERENCES boss_decision_log (decision_id)
 );
+
+-- ------------------------------------------------------------
+-- 9. User Account — multi-role login (Phase 3)
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS user_account (
+    user_id       BIGINT       NOT NULL AUTO_INCREMENT,
+    username      VARCHAR(50)  NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,               -- bcrypt hash
+    display_name  VARCHAR(100) NOT NULL,
+    role          VARCHAR(20)  NOT NULL DEFAULT 'ACCOUNTANT',
+                                                       -- BOSS / ACCOUNTANT / DEPT_MANAGER
+    department_id BIGINT       NULL,                   -- FK → department (added in task 3)
+    is_active     TINYINT(1)   NOT NULL DEFAULT 1,
+    last_login_at DATETIME     NULL,
+    created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
+                               ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id)
+);
