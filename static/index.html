@@ -444,6 +444,8 @@
     <a href="#" data-page="workbench" onclick="navTo('workbench',this);return false;">财务工作台 <span id="nav-workbench-badge" style="display:none;background:#dc2626;color:#fff;border-radius:10px;padding:1px 6px;font-size:11px;margin-left:2px">0</span></a>
     <a href="#" data-page="expenses" onclick="navTo('expenses',this);return false;">费用申请</a>
     <a href="#" data-page="reports"  onclick="navTo('reports',this);return false;">财务报表</a>
+    <a href="#" data-page="invoices" onclick="navTo('invoices',this);return false;" class="finance-only">发票台账</a>
+    <a href="#" data-page="auditlog" onclick="navTo('auditlog',this);return false;" class="finance-only">审计日志</a>
     <a href="#" data-page="settings" onclick="navTo('settings',this);return false;">企业设置</a>
     <a href="/docs" target="_blank">API 文档</a>
   </nav>
@@ -923,6 +925,163 @@
   </div>
 </div>
 
+<!-- ══ 发票台账页 ══ -->
+<div id="page-invoices" class="page">
+  <div class="container">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div>
+        <h2 style="font-size:16px;font-weight:700">发票台账</h2>
+        <p style="font-size:12px;color:var(--text-muted);margin-top:2px">进项/销项发票登记与管理（以票控税）</p>
+      </div>
+      <div style="display:flex;gap:8px">
+        <select id="inv-type-filter" class="field-input" style="width:110px" onchange="loadInvoices()">
+          <option value="">全部类型</option>
+          <option value="INPUT">进项</option>
+          <option value="OUTPUT">销项</option>
+        </select>
+        <select id="inv-status-filter" class="field-input" style="width:110px" onchange="loadInvoices()">
+          <option value="">全部状态</option>
+          <option value="UNVERIFIED">待验真</option>
+          <option value="VERIFIED">已验真</option>
+        </select>
+        <button class="btn btn-outline" onclick="loadInvoices()">刷新</button>
+        <button class="btn btn-primary" onclick="showInvModal()">+ 录入发票</button>
+      </div>
+    </div>
+
+    <!-- 统计条 -->
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px">
+      <div class="card" style="padding:14px 16px">
+        <div style="font-size:11px;color:var(--text-muted)">进项票合计（含税）</div>
+        <div id="inv-input-total" style="font-size:20px;font-weight:700;color:var(--success);margin-top:4px">--</div>
+      </div>
+      <div class="card" style="padding:14px 16px">
+        <div style="font-size:11px;color:var(--text-muted)">销项票合计（含税）</div>
+        <div id="inv-output-total" style="font-size:20px;font-weight:700;color:var(--primary);margin-top:4px">--</div>
+      </div>
+      <div class="card" style="padding:14px 16px">
+        <div style="font-size:11px;color:var(--text-muted)">待验真发票数</div>
+        <div id="inv-unverified-count" style="font-size:20px;font-weight:700;color:var(--warning);margin-top:4px">--</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="table-wrap" id="inv-table-body">
+        <div class="empty-state"><div class="spinner"></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 录入发票弹窗 -->
+<div id="inv-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;overflow-y:auto">
+  <div style="background:#fff;border-radius:10px;max-width:560px;margin:40px auto;padding:24px;box-shadow:0 8px 32px rgba(0,0,0,.18)">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h3 style="font-size:15px;font-weight:700">录入发票</h3>
+      <button onclick="closeInvModal()" style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted)">×</button>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div>
+        <label class="field-label">发票类型 *</label>
+        <select id="inv-type" class="field-input">
+          <option value="INPUT">进项（采购）</option>
+          <option value="OUTPUT">销项（销售）</option>
+        </select>
+      </div>
+      <div>
+        <label class="field-label">开票日期 *</label>
+        <input type="date" id="inv-date" class="field-input">
+      </div>
+      <div>
+        <label class="field-label">发票代码</label>
+        <input type="text" id="inv-code" class="field-input" placeholder="12位发票代码">
+      </div>
+      <div>
+        <label class="field-label">发票号码 *</label>
+        <input type="text" id="inv-number" class="field-input" placeholder="8位发票号码">
+      </div>
+      <div>
+        <label class="field-label">销售方名称</label>
+        <input type="text" id="inv-seller" class="field-input" placeholder="公司全称">
+      </div>
+      <div>
+        <label class="field-label">销售方税号</label>
+        <input type="text" id="inv-seller-tax" class="field-input" placeholder="18位统一信用代码">
+      </div>
+      <div>
+        <label class="field-label">不含税金额 *</label>
+        <input type="number" id="inv-subtotal" class="field-input" placeholder="0.00" step="0.01" min="0">
+      </div>
+      <div>
+        <label class="field-label">税率</label>
+        <select id="inv-taxrate" class="field-input" onchange="calcInvTax()">
+          <option value="0">0%（免税）</option>
+          <option value="0.01">1%</option>
+          <option value="0.03">3%</option>
+          <option value="0.06">6%</option>
+          <option value="0.09">9%</option>
+          <option value="0.13" selected>13%</option>
+        </select>
+      </div>
+      <div>
+        <label class="field-label">税额</label>
+        <input type="number" id="inv-tax" class="field-input" placeholder="自动计算" step="0.01" min="0">
+      </div>
+      <div>
+        <label class="field-label">价税合计 *</label>
+        <input type="number" id="inv-total" class="field-input" placeholder="自动计算" step="0.01" min="0">
+      </div>
+    </div>
+    <div style="margin-top:12px">
+      <label class="field-label">货物/服务描述</label>
+      <input type="text" id="inv-summary" class="field-input" placeholder="如：电脑设备×2台、咨询服务费">
+    </div>
+    <div style="margin-top:16px;display:flex;justify-content:flex-end;gap:10px">
+      <button class="btn btn-outline" onclick="closeInvModal()">取消</button>
+      <button class="btn btn-primary" onclick="submitInvoice()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ 审计日志页 ══ -->
+<div id="page-auditlog" class="page">
+  <div class="container">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div>
+        <h2 style="font-size:16px;font-weight:700">审计日志</h2>
+        <p style="font-size:12px;color:var(--text-muted);margin-top:2px">所有财务操作的不可篡改追踪记录</p>
+      </div>
+      <div style="display:flex;gap:8px">
+        <select id="audit-table-filter" class="field-input" style="width:140px" onchange="loadAuditLogs()">
+          <option value="">全部表</option>
+          <option value="voucher_header">凭证</option>
+          <option value="expense_request">费用申请</option>
+          <option value="invoice">发票</option>
+        </select>
+        <select id="audit-action-filter" class="field-input" style="width:130px" onchange="loadAuditLogs()">
+          <option value="">全部操作</option>
+          <option value="CREATE">创建</option>
+          <option value="UPDATE">修改</option>
+          <option value="STATUS_CHANGE">状态变更</option>
+        </select>
+        <button class="btn btn-outline" onclick="loadAuditLogs()">刷新</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="table-wrap" id="audit-table-body">
+        <div class="empty-state"><div class="spinner"></div></div>
+      </div>
+      <div id="audit-pagination" style="padding:12px 16px;display:flex;justify-content:space-between;align-items:center;font-size:13px;border-top:1px solid var(--border)">
+        <span id="audit-count-label" style="color:var(--text-muted)"></span>
+        <div style="display:flex;gap:8px">
+          <button id="audit-prev-btn" class="btn btn-outline" onclick="auditPage(-1)" disabled>上一页</button>
+          <button id="audit-next-btn" class="btn btn-outline" onclick="auditPage(1)">下一页</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ══ 企业设置页 ══ -->
 <div id="page-settings" class="page">
   <div class="container" style="max-width:680px">
@@ -1165,9 +1324,10 @@
     document.getElementById('header-user').textContent =
       `${_authUser.display_name}（${roleLabel[_authUser.role] || _authUser.role}）`;
 
-    // 角色化导航：普通主管只看费用申请页；财务看工作台
+    // 角色化导航
     const nav = document.getElementById('mainNav');
     const role = _authUser.role;
+    const isFinance = role === 'BOSS' || role === 'ACCOUNTANT';
     nav.querySelectorAll('[data-page]').forEach(a => {
       const page = a.dataset.page;
       if (role === 'DEPT_MANAGER') {
@@ -1175,6 +1335,10 @@
       } else {
         a.style.display = '';
       }
+    });
+    // finance-only 导航项（发票台账、审计日志）
+    document.querySelectorAll('.finance-only').forEach(el => {
+      el.style.display = isFinance ? '' : 'none';
     });
 
     // BOSS 专属卡片显示
@@ -1199,6 +1363,8 @@
     if (page === 'closing')   loadPeriods();
     if (page === 'expenses')  loadExpenses();
     if (page === 'settings')  loadSettings();
+    if (page === 'invoices')  loadInvoices();
+    if (page === 'auditlog')  loadAuditLogs();
   }
 
   // ── 仪表盘 ──
@@ -2707,6 +2873,212 @@
     a.href = URL.createObjectURL(blob);
     a.download = filename;
     a.click();
+  }
+
+  // ── 发票台账 ──────────────────────────────────────────────────────────
+  async function loadInvoices() {
+    const type   = document.getElementById('inv-type-filter').value;
+    const status = document.getElementById('inv-status-filter').value;
+    const body   = document.getElementById('inv-table-body');
+    body.innerHTML = '<div class="empty-state"><div class="spinner"></div></div>';
+
+    let url = `${API}/api/invoices`;
+    const params = [];
+    if (type)   params.push(`invoice_type=${type}`);
+    if (status) params.push(`status=${status}`);
+    if (params.length) url += '?' + params.join('&');
+
+    try {
+      const res  = await fetch(url);
+      const data = res.ok ? await res.json() : [];
+
+      // 统计
+      const inputTotal  = data.filter(i => i.invoice_type === 'INPUT').reduce((s,i) => s + i.total_amount, 0);
+      const outputTotal = data.filter(i => i.invoice_type === 'OUTPUT').reduce((s,i) => s + i.total_amount, 0);
+      const unverified  = data.filter(i => i.status === 'UNVERIFIED').length;
+      document.getElementById('inv-input-total').textContent       = `¥${fmt(inputTotal)}`;
+      document.getElementById('inv-output-total').textContent      = `¥${fmt(outputTotal)}`;
+      document.getElementById('inv-unverified-count').textContent  = unverified;
+
+      if (!data.length) {
+        body.innerHTML = '<div class="empty-state"><p>暂无发票记录</p></div>';
+        return;
+      }
+
+      const statusBadge = s => {
+        const map = { UNVERIFIED: ['#f59e0b','待验真'], VERIFIED: ['#16a34a','已验真'], INVALID: ['#dc2626','已作废'] };
+        const [color, label] = map[s] || ['#6b7280', s];
+        return `<span style="font-size:11px;padding:2px 8px;border-radius:10px;background:${color}18;color:${color};font-weight:600">${label}</span>`;
+      };
+      const typeBadge = t => t === 'INPUT'
+        ? `<span style="font-size:11px;padding:2px 8px;border-radius:10px;background:#eff6ff;color:#2563eb;font-weight:600">进项</span>`
+        : `<span style="font-size:11px;padding:2px 8px;border-radius:10px;background:#f0fdf4;color:#16a34a;font-weight:600">销项</span>`;
+
+      body.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr style="background:var(--bg)">
+          <th style="padding:8px 12px;text-align:left">类型</th>
+          <th style="padding:8px 12px;text-align:left">发票号码</th>
+          <th style="padding:8px 12px;text-align:left">开票日期</th>
+          <th style="padding:8px 12px;text-align:left">对方名称</th>
+          <th style="padding:8px 12px;text-align:right">价税合计</th>
+          <th style="padding:8px 12px;text-align:right">税额</th>
+          <th style="padding:8px 12px;text-align:left">状态</th>
+          <th style="padding:8px 12px;text-align:left">关联凭证</th>
+          <th style="padding:8px 12px"></th>
+        </tr></thead>
+        <tbody>
+          ${data.map(i => `<tr style="border-top:1px solid var(--border)">
+            <td style="padding:8px 12px">${typeBadge(i.invoice_type)}</td>
+            <td style="padding:8px 12px;font-family:monospace">${i.invoice_number}</td>
+            <td style="padding:8px 12px">${i.invoice_date}</td>
+            <td style="padding:8px 12px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${i.invoice_type === 'INPUT' ? (i.seller_name||'—') : (i.buyer_name||'—')}</td>
+            <td style="padding:8px 12px;text-align:right;font-weight:600">¥${fmt(i.total_amount)}</td>
+            <td style="padding:8px 12px;text-align:right;color:var(--text-muted)">¥${fmt(i.tax_amount)}</td>
+            <td style="padding:8px 12px">${statusBadge(i.status)}</td>
+            <td style="padding:8px 12px;color:var(--text-muted)">${i.voucher_id ? `#${i.voucher_id}` : '—'}</td>
+            <td style="padding:8px 12px;white-space:nowrap">
+              ${i.status === 'UNVERIFIED' ? `<button class="link-btn" onclick="verifyInvoice(${i.invoice_id})">验真</button>` : ''}
+            </td>
+          </tr>`).join('')}
+        </tbody>
+      </table>`;
+    } catch (e) {
+      body.innerHTML = `<p style="color:var(--error);padding:16px">加载失败：${e.message}</p>`;
+    }
+  }
+
+  function showInvModal() {
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('inv-date').value = today;
+    document.getElementById('inv-code').value = '';
+    document.getElementById('inv-number').value = '';
+    document.getElementById('inv-seller').value = '';
+    document.getElementById('inv-seller-tax').value = '';
+    document.getElementById('inv-subtotal').value = '';
+    document.getElementById('inv-tax').value = '';
+    document.getElementById('inv-total').value = '';
+    document.getElementById('inv-summary').value = '';
+    document.getElementById('inv-modal').style.display = '';
+  }
+  function closeInvModal() { document.getElementById('inv-modal').style.display = 'none'; }
+
+  function calcInvTax() {
+    const sub  = parseFloat(document.getElementById('inv-subtotal').value) || 0;
+    const rate = parseFloat(document.getElementById('inv-taxrate').value) || 0;
+    const tax  = Math.round(sub * rate * 100) / 100;
+    document.getElementById('inv-tax').value   = tax.toFixed(2);
+    document.getElementById('inv-total').value = (sub + tax).toFixed(2);
+  }
+  // auto-calc when subtotal changes
+  document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('inv-subtotal')?.addEventListener('input', calcInvTax);
+  });
+
+  async function submitInvoice() {
+    const payload = {
+      invoice_type:    document.getElementById('inv-type').value,
+      invoice_code:    document.getElementById('inv-code').value || null,
+      invoice_number:  document.getElementById('inv-number').value,
+      invoice_date:    document.getElementById('inv-date').value,
+      seller_name:     document.getElementById('inv-seller').value || null,
+      seller_tax_id:   document.getElementById('inv-seller-tax').value || null,
+      subtotal_amount: parseFloat(document.getElementById('inv-subtotal').value),
+      tax_rate:        parseFloat(document.getElementById('inv-taxrate').value),
+      tax_amount:      parseFloat(document.getElementById('inv-tax').value) || 0,
+      total_amount:    parseFloat(document.getElementById('inv-total').value),
+      items_summary:   document.getElementById('inv-summary').value || null,
+    };
+    if (!payload.invoice_number || !payload.invoice_date || !payload.total_amount) {
+      showToast('请填写发票号码、开票日期和价税合计', 'error'); return;
+    }
+    try {
+      const res = await fetch(`${API}/api/invoices`, {
+        method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload),
+      });
+      const d = await res.json();
+      if (!res.ok) { showToast(d.detail || '保存失败', 'error'); return; }
+      showToast('发票录入成功');
+      closeInvModal();
+      loadInvoices();
+    } catch (e) { showToast('网络错误：' + e.message, 'error'); }
+  }
+
+  async function verifyInvoice(id) {
+    const res = await fetch(`${API}/api/invoices/${id}/verify`, { method: 'PUT' });
+    if (res.ok) { showToast('已标记为验真'); loadInvoices(); }
+    else { const d = await res.json(); showToast(d.detail || '操作失败', 'error'); }
+  }
+
+  // ── 审计日志 ──────────────────────────────────────────────────────────
+  let _auditOffset = 0;
+  const _auditLimit = 50;
+  let _auditTotal  = 0;
+
+  async function loadAuditLogs(reset = true) {
+    if (reset) _auditOffset = 0;
+    const table  = document.getElementById('audit-table-filter').value;
+    const action = document.getElementById('audit-action-filter').value;
+    const body   = document.getElementById('audit-table-body');
+    body.innerHTML = '<div class="empty-state"><div class="spinner"></div></div>';
+
+    const params = [`limit=${_auditLimit}`, `offset=${_auditOffset}`];
+    if (table)  params.push(`table_name=${table}`);
+    if (action) params.push(`action=${action}`);
+
+    try {
+      const res  = await fetch(`${API}/api/audit-logs?${params.join('&')}`);
+      const data = res.ok ? await res.json() : { total: 0, items: [] };
+      _auditTotal = data.total || 0;
+
+      document.getElementById('audit-count-label').textContent =
+        `共 ${_auditTotal} 条记录，当前第 ${_auditOffset + 1}–${Math.min(_auditOffset + _auditLimit, _auditTotal)} 条`;
+      document.getElementById('audit-prev-btn').disabled = _auditOffset === 0;
+      document.getElementById('audit-next-btn').disabled = _auditOffset + _auditLimit >= _auditTotal;
+
+      if (!data.items.length) {
+        body.innerHTML = '<div class="empty-state"><p>暂无审计记录</p></div>';
+        return;
+      }
+
+      const actionBadge = a => {
+        const map = { CREATE:['#16a34a','创建'], UPDATE:['#2563eb','修改'], STATUS_CHANGE:['#f59e0b','状态变更'], DELETE:['#dc2626','删除'] };
+        const [color, label] = map[a] || ['#6b7280', a];
+        return `<span style="font-size:11px;padding:2px 8px;border-radius:10px;background:${color}18;color:${color};font-weight:600">${label}</span>`;
+      };
+      const tableLabel = t => ({
+        voucher_header: '凭证', expense_request: '费用申请', invoice: '发票'
+      })[t] || t;
+
+      body.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr style="background:var(--bg)">
+          <th style="padding:8px 12px;text-align:left">时间</th>
+          <th style="padding:8px 12px;text-align:left">操作人</th>
+          <th style="padding:8px 12px;text-align:left">操作</th>
+          <th style="padding:8px 12px;text-align:left">对象</th>
+          <th style="padding:8px 12px;text-align:left">记录#</th>
+          <th style="padding:8px 12px;text-align:left">摘要</th>
+          <th style="padding:8px 12px;text-align:left">IP</th>
+        </tr></thead>
+        <tbody>
+          ${data.items.map(l => `<tr style="border-top:1px solid var(--border)">
+            <td style="padding:8px 12px;color:var(--text-muted);white-space:nowrap;font-size:12px">${l.created_at?.slice(0,19)||''}</td>
+            <td style="padding:8px 12px;font-weight:500">${l.username||'系统'}</td>
+            <td style="padding:8px 12px">${actionBadge(l.action)}</td>
+            <td style="padding:8px 12px">${tableLabel(l.table_name)}</td>
+            <td style="padding:8px 12px;font-family:monospace">#${l.record_id}</td>
+            <td style="padding:8px 12px;color:var(--text-muted);max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${l.description||''}">${l.description||'—'}</td>
+            <td style="padding:8px 12px;font-size:11px;color:var(--text-muted)">${l.ip_address||'—'}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>`;
+    } catch (e) {
+      body.innerHTML = `<p style="color:var(--error);padding:16px">加载失败：${e.message}</p>`;
+    }
+  }
+
+  function auditPage(dir) {
+    _auditOffset = Math.max(0, _auditOffset + dir * _auditLimit);
+    loadAuditLogs(false);
   }
 
 </script>
