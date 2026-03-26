@@ -440,6 +440,7 @@
     <a href="#" data-page="decisions" onclick="navTo('decisions',this);return false;">老板决策台 <span id="nav-decision-badge" style="display:none;background:var(--decision);color:#fff;border-radius:10px;padding:1px 6px;font-size:11px;margin-left:2px">0</span></a>
     <a href="#" data-page="assets"   onclick="navTo('assets',this);return false;">固定资产</a>
     <a href="#" data-page="taxplan"  onclick="navTo('taxplan',this);return false;">年度规划</a>
+    <a href="#" data-page="closing"  onclick="navTo('closing',this);return false;">月末结账</a>
     <a href="#" data-page="workbench" onclick="navTo('workbench',this);return false;">财务工作台 <span id="nav-workbench-badge" style="display:none;background:#dc2626;color:#fff;border-radius:10px;padding:1px 6px;font-size:11px;margin-left:2px">0</span></a>
     <a href="#" data-page="expenses" onclick="navTo('expenses',this);return false;">费用申请</a>
     <a href="#" data-page="reports"  onclick="navTo('reports',this);return false;">财务报表</a>
@@ -663,6 +664,52 @@
 </div>
 
 <!-- ══ 财务报表页 ══ -->
+<!-- ══ 月末结账页 ══ -->
+<div id="page-closing" class="page">
+  <div class="container" style="max-width:760px">
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-header">
+        <span>🔒</span>
+        <span class="card-title">月末结账</span>
+        <span style="margin-left:auto;font-size:12px;color:var(--text-muted)">结账后期间锁定，损益自动结转至本年利润</span>
+        <button class="btn btn-outline" onclick="loadPeriods()" style="margin-left:12px">刷新</button>
+      </div>
+    </div>
+
+    <!-- 快速结账面板 -->
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-header"><span>⚡</span><span class="card-title">执行结账</span></div>
+      <div class="card-body">
+        <div style="display:flex;gap:10px;align-items:flex-end">
+          <div>
+            <label class="field-label">年份</label>
+            <input id="close-year" type="number" class="field-input" style="width:90px" min="2020" max="2035">
+          </div>
+          <div>
+            <label class="field-label">月份</label>
+            <select id="close-month" class="field-input" style="width:80px">
+              <option value="1">1月</option><option value="2">2月</option><option value="3">3月</option>
+              <option value="4">4月</option><option value="5">5月</option><option value="6">6月</option>
+              <option value="7">7月</option><option value="8">8月</option><option value="9">9月</option>
+              <option value="10">10月</option><option value="11">11月</option><option value="12">12月</option>
+            </select>
+          </div>
+          <button class="btn btn-primary" id="btn-close-period" onclick="closePeriod()">执行月末结账</button>
+        </div>
+        <div id="close-result" style="display:none;margin-top:12px;padding:12px 14px;border-radius:6px;font-size:13px"></div>
+      </div>
+    </div>
+
+    <!-- 期间列表 -->
+    <div class="card">
+      <div class="card-header"><span>📅</span><span class="card-title">会计期间记录</span></div>
+      <div id="period-list" class="card-body">
+        <div class="empty-state"><div class="spinner"></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div id="page-reports" class="page">
   <div class="container">
     <!-- 日期筛选栏 -->
@@ -1125,6 +1172,7 @@
     if (page === 'assets')    loadAssets();
     if (page === 'taxplan')   loadAnnualPlan();
     if (page === 'workbench') loadWorkbench();
+    if (page === 'closing')   loadPeriods();
     if (page === 'expenses')  loadExpenses();
     if (page === 'settings')  loadSettings();
   }
@@ -1178,6 +1226,7 @@
     initYearSelect();
     initPlanYearSelect();
     initReportDates();
+    initClosingDefaults();
     // 检查是否已登录
     if (_authToken && _authUser) {
       applyAuthUI();
@@ -1904,6 +1953,75 @@
   function closeDecisionModal(e) {
     if (e.target === document.getElementById('decisionModal'))
       document.getElementById('decisionModal').style.display = 'none';
+  }
+
+  // ── 月末结账 ──
+  function initClosingDefaults() {
+    const now = new Date();
+    document.getElementById('close-year').value  = now.getFullYear();
+    document.getElementById('close-month').value = now.getMonth() + 1;
+  }
+
+  async function loadPeriods() {
+    const listEl = document.getElementById('period-list');
+    if (!listEl) return;
+    try {
+      const res  = await fetch(`${API}/api/reports/periods`);
+      const data = await res.json();
+      if (!res.ok) { listEl.innerHTML = `<p style="color:var(--error)">${data.detail||'加载失败'}</p>`; return; }
+      if (!data.length) {
+        listEl.innerHTML = '<p style="color:var(--text-muted);font-size:13px">暂无期间记录，执行第一次结账后自动创建。</p>';
+        return;
+      }
+      listEl.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr style="background:var(--bg)">
+          <th style="padding:9px 12px;text-align:left">期间</th>
+          <th style="padding:9px 12px;text-align:center">状态</th>
+          <th style="padding:9px 12px;text-align:left">结账时间</th>
+          <th style="padding:9px 12px;text-align:left">结账凭证</th>
+        </tr></thead><tbody>
+        ${data.map(p => {
+          const isOpen   = p.status === 'OPEN';
+          const statusHtml = isOpen
+            ? '<span style="font-size:11px;font-weight:600;color:#16a34a;background:#f0fff4;padding:2px 8px;border-radius:4px">开放</span>'
+            : '<span style="font-size:11px;font-weight:600;color:#6b7280;background:#f3f4f6;padding:2px 8px;border-radius:4px">已结账</span>';
+          return `<tr style="border-top:1px solid var(--border)">
+            <td style="padding:9px 12px;font-weight:600">${p.label}</td>
+            <td style="padding:9px 12px;text-align:center">${statusHtml}</td>
+            <td style="padding:9px 12px;color:var(--text-muted);font-size:12px">${p.closed_at ? p.closed_at.slice(0,16) : '—'}</td>
+            <td style="padding:9px 12px;color:var(--text-muted);font-size:12px">${p.closing_voucher_id ? `#${p.closing_voucher_id}` : '—'}</td>
+          </tr>`;
+        }).join('')}
+        </tbody></table>`;
+    } catch (e) { listEl.innerHTML = `<p style="color:var(--error);font-size:13px">加载失败：${e.message}</p>`; }
+  }
+
+  async function closePeriod() {
+    const year  = parseInt(document.getElementById('close-year').value);
+    const month = parseInt(document.getElementById('close-month').value);
+    const btn   = document.getElementById('btn-close-period');
+    const res2  = document.getElementById('close-result');
+    if (!year || !month) { showToast('请填写年份和月份', 'error'); return; }
+    if (!confirm(`确定对 ${year}-${String(month).padStart(2,'0')} 执行月末结账？\n结账后该期间将锁定，损益结转至本年利润科目。`)) return;
+
+    btn.disabled = true; btn.textContent = '结账中…';
+    res2.style.display = 'none';
+    try {
+      const res = await fetch(`${API}/api/reports/periods/${year}/${month}/close`, { method: 'POST' });
+      const d   = await res.json();
+      res2.style.display = 'block';
+      if (!res.ok) {
+        res2.style.cssText = 'display:block;padding:12px 14px;border-radius:6px;font-size:13px;background:#fff5f5;color:#c53030;border:1px solid #feb2b2';
+        res2.textContent = '❌ ' + (d.detail || '结账失败');
+      } else {
+        res2.style.cssText = 'display:block;padding:12px 14px;border-radius:6px;font-size:13px;background:#f0fff4;color:#276749;border:1px solid #9ae6b4';
+        res2.innerHTML = `✅ ${d.message}<br><span style="font-size:12px;opacity:.8">结账凭证：#${d.voucher_id} &nbsp;·&nbsp; 净利润：¥${fmt(d.net_profit)}</span>`;
+        loadPeriods();
+      }
+    } catch (e) {
+      res2.style.cssText = 'display:block;padding:12px 14px;border-radius:6px;font-size:13px;background:#fff5f5;color:#c53030;border:1px solid #feb2b2';
+      res2.textContent = '❌ 请求失败：' + e.message;
+    } finally { btn.disabled = false; btn.textContent = '执行月末结账'; }
   }
 
   // ── 财务工作台 ──
