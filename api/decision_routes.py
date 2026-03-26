@@ -4,11 +4,14 @@ AgentLedger — Boss Decision Card API
 端点：
   GET  /api/decisions/{record_id}              获取（或生成）决策卡片
   POST /api/decisions/{decision_id}/choose     提交老板选择
+  GET  /api/decisions                          决策记录列表
   GET  /api/assets                             固定资产台账列表
   GET  /api/assets/{asset_id}                  单条资产详情
+  POST /api/assets/depreciation/run            手动触发月度折旧批处理
 """
 import json
 import logging
+from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -19,6 +22,7 @@ from database.connection import get_db
 from models.boss_decision_log import BossDecisionLog, DecisionStatus
 from models.asset_register import AssetRegister
 from services.decision_service import DecisionService, DecisionServiceError
+from services.monthly_depreciation import MonthlyDepreciationService
 from ai.llm_client import LLMClientError
 
 logger = logging.getLogger(__name__)
@@ -189,3 +193,38 @@ def get_asset(asset_id: int, db: Session = Depends(get_db)) -> Any:
     if not asset:
         raise HTTPException(status_code=404, detail=f"资产 {asset_id} 不存在")
     return _asset_to_dict(asset)
+
+
+class DepreciationRunRequest(BaseModel):
+    year:  int | None = Field(default=None, description="年份，默认当年")
+    month: int | None = Field(default=None, ge=1, le=12, description="月份 1-12，默认当月")
+
+
+@router.post("/assets/depreciation/run")
+def run_depreciation(
+    body: DepreciationRunRequest = DepreciationRunRequest(),
+    db:   Session                = Depends(get_db),
+) -> Any:
+    """
+    手动触发指定期间的月度折旧批处理。
+    - 未传 year/month 时默认当年当月。
+    - 幂等：同一资产同一期间重复调用安全，已计提的自动跳过。
+    - 每笔资产独立事务，单笔失败不影响其他资产。
+    """
+    now   = datetime.now()
+    year  = body.year  or now.year
+    month = body.month or now.month
+
+    svc    = MonthlyDepreciationService(db)
+    result = svc.run(year, month)
+
+    return {
+        "period":            result.period,
+        "processed":         result.processed,
+        "skipped":           result.skipped,
+        "fully_depreciated": result.fully_depreciated,
+        "total_amount":      float(result.total_amount),
+        "voucher_ids":       result.voucher_ids,
+        "errors":            result.errors,
+        "success":           len(result.errors) == 0,
+    }

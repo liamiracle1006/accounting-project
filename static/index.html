@@ -604,6 +604,7 @@
           <option value="DISPOSED">已处置</option>
         </select>
         <button class="btn btn-outline" onclick="loadAssets()">刷新</button>
+        <button class="btn btn-primary" style="background:var(--warning);border-color:var(--warning)" onclick="runDepreciation()">▶ 计提本月折旧</button>
       </div>
     </div>
 
@@ -1283,6 +1284,30 @@
     } catch (err) {
       container.innerHTML = `<div class="empty-state"><p style="color:var(--error)">加载失败：${err.message}</p></div>`;
     }
+  }
+
+  async function runDepreciation() {
+    const now   = new Date();
+    const year  = now.getFullYear();
+    const month = now.getMonth() + 1;
+    if (!confirm(`确认计提 ${year}年${month}月 的折旧？该操作幂等，重复执行安全。`)) return;
+    try {
+      const res  = await fetch(`${API}/api/assets/depreciation/run`, {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ year, month }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        const msg = data.processed > 0
+          ? `✅ 计提完成：${data.processed} 笔资产，共 ¥${fmt(data.total_amount)}${data.fully_depreciated ? `，${data.fully_depreciated} 笔已全额折旧` : ''}`
+          : `ℹ️ 本月无需计提（已计提或无在用资产）`;
+        showToast(msg, data.processed > 0 ? 'success' : 'info');
+        if (data.errors.length) showToast('⚠️ 部分资产失败：' + data.errors[0], 'error');
+        loadAssets();
+      } else {
+        showToast('❌ ' + (data.detail || '计提失败'), 'error');
+      }
+    } catch (err) { showToast('网络错误：' + err.message, 'error'); }
   }
 
   // ── 老板决策台 ──
