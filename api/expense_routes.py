@@ -12,7 +12,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
@@ -20,6 +20,7 @@ from database.connection import get_db
 from models.expense_request import ExpenseRequest, ExpenseStatus
 from models.user_account import UserAccount, UserRole
 from services.auth_service import get_current_user, require_role
+from services.audit_service import audit, get_ip, AuditAction
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/expenses", tags=["expenses"])
@@ -120,6 +121,7 @@ def get_expense(
 def approve_expense(
     request_id:   int,
     body:         ReviewRequest,
+    request:      Request,
     current_user: UserAccount = Depends(require_role(*APPROVER_ROLES)),
     db:           Session     = Depends(get_db),
 ) -> Any:
@@ -129,10 +131,16 @@ def approve_expense(
     if req.status != ExpenseStatus.PENDING:
         raise HTTPException(status_code=409, detail=f"申请当前状态为 {req.status}，无法审批")
 
+    prev_status     = req.status
     req.status      = ExpenseStatus.APPROVED
     req.reviewer_id = current_user.user_id
     req.review_note = body.note
     req.reviewed_at = datetime.now(timezone.utc)
+    audit(db, current_user, "expense_request", request_id, AuditAction.STATUS_CHANGE,
+          before={"status": prev_status},
+          after={"status": req.status, "review_note": body.note},
+          desc=f"费用申请审批通过（¥{float(req.amount):.2f} {req.title}）",
+          ip=get_ip(request))
     db.commit()
     logger.info("Expense approved: id=%s by=%s", request_id, current_user.username)
     return _req_to_dict(req)
@@ -142,6 +150,7 @@ def approve_expense(
 def reject_expense(
     request_id:   int,
     body:         ReviewRequest,
+    request:      Request,
     current_user: UserAccount = Depends(require_role(*APPROVER_ROLES)),
     db:           Session     = Depends(get_db),
 ) -> Any:
@@ -151,10 +160,16 @@ def reject_expense(
     if req.status != ExpenseStatus.PENDING:
         raise HTTPException(status_code=409, detail=f"申请当前状态为 {req.status}，无法操作")
 
+    prev_status     = req.status
     req.status      = ExpenseStatus.REJECTED
     req.reviewer_id = current_user.user_id
     req.review_note = body.note
     req.reviewed_at = datetime.now(timezone.utc)
+    audit(db, current_user, "expense_request", request_id, AuditAction.STATUS_CHANGE,
+          before={"status": prev_status},
+          after={"status": req.status, "review_note": body.note},
+          desc=f"费用申请驳回（¥{float(req.amount):.2f} {req.title}）",
+          ip=get_ip(request))
     db.commit()
     logger.info("Expense rejected: id=%s by=%s note=%s", request_id, current_user.username, body.note)
     return _req_to_dict(req)

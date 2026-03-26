@@ -15,7 +15,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -25,6 +25,7 @@ from models.voucher_header import VoucherHeader, VoucherReviewStatus
 from models.voucher_line import VoucherLine
 from models.user_account import UserAccount, UserRole
 from services.auth_service import get_current_user, require_role
+from services.audit_service import audit, get_ip, AuditAction
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/workbench", tags=["workbench"])
@@ -98,6 +99,7 @@ def get_voucher_detail(
 @router.post("/vouchers/{voucher_id}/submit")
 def submit_for_review(
     voucher_id:   int,
+    request:      Request,
     current_user: UserAccount = Depends(get_current_user),
     db:           Session     = Depends(get_db),
 ) -> Any:
@@ -108,7 +110,12 @@ def submit_for_review(
     if v.review_status != VoucherReviewStatus.DRAFT:
         raise HTTPException(status_code=409, detail=f"凭证状态为 {v.review_status}，不可再次提交")
 
+    prev_status     = v.review_status
     v.review_status = VoucherReviewStatus.PENDING_REVIEW
+    audit(db, current_user, "voucher_header", voucher_id, AuditAction.STATUS_CHANGE,
+          before={"review_status": prev_status},
+          after={"review_status": v.review_status},
+          desc=f"凭证提交审核", ip=get_ip(request))
     db.commit()
     logger.info("Voucher submitted for review: id=%s by=%s", voucher_id, current_user.username)
     return _voucher_to_dict(v)
@@ -118,6 +125,7 @@ def submit_for_review(
 def post_voucher(
     voucher_id:   int,
     body:         ReviewNote,
+    request:      Request,
     current_user: UserAccount = Depends(require_role(*FINANCE_ROLES)),
     db:           Session     = Depends(get_db),
 ) -> Any:
@@ -144,10 +152,15 @@ def post_voucher(
             detail=f"凭证借贷不平衡：借方 ¥{debit:.2f}，贷方 ¥{credit:.2f}，差额 ¥{abs(debit-credit):.2f}",
         )
 
+    prev_status     = v.review_status
     v.review_status = VoucherReviewStatus.POSTED
     v.reviewer_id   = current_user.user_id
     v.review_note   = body.note
     v.reviewed_at   = datetime.now(timezone.utc)
+    audit(db, current_user, "voucher_header", voucher_id, AuditAction.STATUS_CHANGE,
+          before={"review_status": prev_status},
+          after={"review_status": v.review_status, "review_note": body.note},
+          desc="凭证审核通过入账", ip=get_ip(request))
     db.commit()
     logger.info("Voucher posted: id=%s by=%s", voucher_id, current_user.username)
     return _voucher_to_dict(v)
@@ -157,6 +170,7 @@ def post_voucher(
 def reject_voucher(
     voucher_id:   int,
     body:         ReviewNote,
+    request:      Request,
     current_user: UserAccount = Depends(require_role(*FINANCE_ROLES)),
     db:           Session     = Depends(get_db),
 ) -> Any:
@@ -167,10 +181,15 @@ def reject_voucher(
     if v.review_status != VoucherReviewStatus.PENDING_REVIEW:
         raise HTTPException(status_code=409, detail=f"凭证状态为 {v.review_status}，无法驳回")
 
+    prev_status     = v.review_status
     v.review_status = VoucherReviewStatus.REJECTED
     v.reviewer_id   = current_user.user_id
     v.review_note   = body.note
     v.reviewed_at   = datetime.now(timezone.utc)
+    audit(db, current_user, "voucher_header", voucher_id, AuditAction.STATUS_CHANGE,
+          before={"review_status": prev_status},
+          after={"review_status": v.review_status, "review_note": body.note},
+          desc="凭证审核驳回", ip=get_ip(request))
     db.commit()
     logger.info("Voucher rejected: id=%s by=%s note=%s", voucher_id, current_user.username, body.note)
     return _voucher_to_dict(v)
