@@ -12,10 +12,12 @@ AgentLedger — Accountant Workbench API (Phase 3)
 """
 import logging
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from database.connection import get_db
@@ -125,6 +127,22 @@ def post_voucher(
         raise HTTPException(status_code=404, detail="凭证不存在")
     if v.review_status not in (VoucherReviewStatus.PENDING_REVIEW, VoucherReviewStatus.DRAFT):
         raise HTTPException(status_code=409, detail=f"凭证状态为 {v.review_status}，无法审核")
+
+    # 借贷平衡校验：Σ借方 必须等于 Σ贷方
+    sums = (
+        db.query(VoucherLine.direction, func.sum(VoucherLine.amount))
+        .filter(VoucherLine.voucher_id == voucher_id)
+        .group_by(VoucherLine.direction)
+        .all()
+    )
+    totals = {direction: Decimal(str(total)) for direction, total in sums}
+    debit  = totals.get("DEBIT",  Decimal("0"))
+    credit = totals.get("CREDIT", Decimal("0"))
+    if abs(debit - credit) >= Decimal("0.01"):
+        raise HTTPException(
+            status_code=422,
+            detail=f"凭证借贷不平衡：借方 ¥{debit:.2f}，贷方 ¥{credit:.2f}，差额 ¥{abs(debit-credit):.2f}",
+        )
 
     v.review_status = VoucherReviewStatus.POSTED
     v.reviewer_id   = current_user.user_id
