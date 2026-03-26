@@ -239,3 +239,59 @@ CREATE TABLE IF NOT EXISTS accounting_period (
     PRIMARY KEY (period_id),
     UNIQUE KEY uq_period_ym (year, month)
 );
+
+-- ------------------------------------------------------------
+-- 13. Audit Log — immutable operation trail (Phase 5)
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS audit_log (
+    log_id        BIGINT       NOT NULL AUTO_INCREMENT,
+    table_name    VARCHAR(50)  NOT NULL,               -- 操作的表名
+    record_id     VARCHAR(50)  NOT NULL,               -- 被操作记录的主键（字符串化）
+    action        VARCHAR(20)  NOT NULL,               -- CREATE / UPDATE / DELETE / STATUS_CHANGE
+    user_id       BIGINT       NULL,                   -- 操作人 FK → user_account（NULL=系统）
+    username      VARCHAR(50)  NULL,                   -- 冗余存储，防止用户删除后丢失
+    before_value  JSON         NULL,                   -- 变更前快照
+    after_value   JSON         NULL,                   -- 变更后快照
+    description   VARCHAR(500) NULL,                   -- 人可读的摘要
+    ip_address    VARCHAR(45)  NULL,                   -- IPv4/IPv6
+    created_at    DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (log_id),
+    INDEX idx_audit_table_record (table_name, record_id),
+    INDEX idx_audit_user (user_id),
+    INDEX idx_audit_created (created_at)
+);
+
+-- ------------------------------------------------------------
+-- 14. Invoice — 发票台账 (Phase 5)
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS invoice (
+    invoice_id        BIGINT        NOT NULL AUTO_INCREMENT,
+    invoice_type      VARCHAR(20)   NOT NULL,          -- INPUT=进项 / OUTPUT=销项
+    invoice_code      VARCHAR(20)   NULL,              -- 发票代码
+    invoice_number    VARCHAR(20)   NOT NULL,          -- 发票号码
+    invoice_date      DATE          NOT NULL,          -- 开票日期
+    seller_name       VARCHAR(200)  NULL,              -- 销售方名称
+    seller_tax_id     VARCHAR(20)   NULL,              -- 销售方税号
+    buyer_name        VARCHAR(200)  NULL,              -- 购买方名称
+    buyer_tax_id      VARCHAR(20)   NULL,              -- 购买方税号
+    subtotal_amount   DECIMAL(18,2) NOT NULL,          -- 不含税金额
+    tax_rate          DECIMAL(5,4)  NOT NULL DEFAULT 0.0, -- 税率（如0.13=13%）
+    tax_amount        DECIMAL(18,2) NOT NULL,          -- 税额
+    total_amount      DECIMAL(18,2) NOT NULL,          -- 价税合计
+    items_summary     VARCHAR(500)  NULL,              -- 货物或服务描述摘要
+    voucher_id        BIGINT        NULL,              -- FK → voucher_header（关联凭证）
+    status            VARCHAR(20)   NOT NULL DEFAULT 'UNVERIFIED',
+                                                       -- UNVERIFIED=待验真 / VERIFIED=已验真 / INVALID=作废
+    source            VARCHAR(20)   NOT NULL DEFAULT 'MANUAL',
+                                                       -- MANUAL=手工录入 / OCR=扫描识别
+    image_path        VARCHAR(500)  NULL,              -- 发票图片存储路径
+    created_by        BIGINT        NULL,              -- FK → user_account
+    created_at        DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at        DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP
+                                    ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (invoice_id),
+    UNIQUE KEY uq_invoice_number (invoice_code, invoice_number),
+    INDEX idx_invoice_date (invoice_date),
+    INDEX idx_invoice_voucher (voucher_id),
+    INDEX idx_invoice_type (invoice_type)
+);
