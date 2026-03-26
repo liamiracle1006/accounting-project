@@ -1,10 +1,10 @@
 """
-AgentLedger V1.0 — Application Entry Point
+AgentLedger V2.0 — Application Entry Point
 """
 import logging
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -14,6 +14,7 @@ from api.routes import router
 from api.enterprise_routes import router as enterprise_router
 from api.decision_routes import router as decision_router
 from api.auth_routes import router as auth_router
+from services.auth_service import get_current_user
 
 logging.basicConfig(
     level=logging.DEBUG if APP_DEBUG else logging.INFO,
@@ -35,10 +36,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(router)
-app.include_router(enterprise_router)
-app.include_router(decision_router)
+# auth_router 不需要鉴权（它就是登录入口）
 app.include_router(auth_router)
+
+# 其余所有业务 API 均需要有效 JWT
+_auth = [Depends(get_current_user)]
+app.include_router(router,            dependencies=_auth)
+app.include_router(enterprise_router, dependencies=_auth)
+app.include_router(decision_router,   dependencies=_auth)
 
 _STATIC = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=_STATIC), name="static")
@@ -51,7 +56,7 @@ def index():
 
 @app.get("/health")
 def health_check():
-    return {"status": "ok", "version": "1.0.0"}
+    return {"status": "ok", "version": "2.0.0"}
 
 
 if __name__ == "__main__":
