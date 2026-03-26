@@ -222,3 +222,20 @@ CREATE TABLE IF NOT EXISTS user_account (
                                ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (user_id)
 );
+
+-- ------------------------------------------------------------
+-- 12. Accounting Period — month-end close tracking (Phase 4)
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS accounting_period (
+    period_id          BIGINT    NOT NULL AUTO_INCREMENT,
+    year               INT       NOT NULL,
+    month              INT       NOT NULL,             -- 1-12
+    status             VARCHAR(10) NOT NULL DEFAULT 'OPEN',
+                                                       -- OPEN / CLOSED
+    closed_at          DATETIME  NULL,
+    closed_by          BIGINT    NULL,                 -- FK → user_account
+    closing_voucher_id BIGINT    NULL,                 -- FK → voucher_header
+    created_at         DATETIME  NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (period_id),
+    UNIQUE KEY uq_period_ym (year, month)
+);

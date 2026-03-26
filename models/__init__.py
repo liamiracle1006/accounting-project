@@ -10,6 +10,7 @@ from models.tax_annual_plan import TaxAnnualPlan
 from models.user_account import UserAccount
 from models.department import Department
 from models.expense_request import ExpenseRequest
+from models.accounting_period import AccountingPeriod
 
 __all__ = [
     "AccountSubject",
@@ -24,4 +25,5 @@ __all__ = [
     "UserAccount",
     "Department",
     "ExpenseRequest",
+    "AccountingPeriod",
 ]
