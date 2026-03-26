@@ -18,6 +18,8 @@ from api.department_routes import router as department_router
 from api.expense_routes import router as expense_router
 from api.workbench_routes import router as workbench_router
 from api.report_routes import router as report_router
+from api.audit_routes import router as audit_router
+from api.invoice_routes import router as invoice_router
 from services.auth_service import get_current_user
 
 logging.basicConfig(
@@ -52,6 +54,8 @@ app.include_router(department_router,  dependencies=_auth)
 app.include_router(expense_router,     dependencies=_auth)
 app.include_router(workbench_router,   dependencies=_auth)
 app.include_router(report_router,      dependencies=_auth)
+app.include_router(audit_router,       dependencies=_auth)
+app.include_router(invoice_router,     dependencies=_auth)
 
 _STATIC = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=_STATIC), name="static")
