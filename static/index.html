@@ -409,6 +409,7 @@
     <a href="#" data-page="records"  onclick="navTo('records',this);return false;">流水记录</a>
     <a href="#" data-page="decisions" onclick="navTo('decisions',this);return false;">老板决策台 <span id="nav-decision-badge" style="display:none;background:var(--decision);color:#fff;border-radius:10px;padding:1px 6px;font-size:11px;margin-left:2px">0</span></a>
     <a href="#" data-page="assets"   onclick="navTo('assets',this);return false;">固定资产</a>
+    <a href="#" data-page="taxplan"  onclick="navTo('taxplan',this);return false;">年度规划</a>
     <a href="#" data-page="reports"  onclick="navTo('reports',this);return false;">财务报表</a>
     <a href="#" data-page="settings" onclick="navTo('settings',this);return false;">企业设置</a>
     <a href="/docs" target="_blank">API 文档</a>
@@ -647,6 +648,54 @@
   </div>
 </div>
 
+<!-- ══ 年度税务规划页 ══ -->
+<div id="page-taxplan" class="page">
+  <div class="container">
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-header">
+        <span>🗓️</span>
+        <span class="card-title">年度税务筹划路线图</span>
+        <div style="margin-left:auto;display:flex;align-items:center;gap:8px">
+          <select id="plan-year-select" class="field-input" style="width:100px"></select>
+          <button class="btn btn-outline" onclick="loadAnnualPlan()">查看规划</button>
+          <button class="btn btn-primary" id="btn-generate-plan" onclick="generateAnnualPlan()">生成/更新规划</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="plan-loading" style="display:none;text-align:center;padding:40px;color:var(--text-muted)">
+      <div style="font-size:32px;margin-bottom:8px">⏳</div>
+      <p>AI 正在生成年度税务规划，请稍候（约15-30秒）…</p>
+    </div>
+
+    <div id="plan-content" style="display:none">
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px">
+        <div class="card" style="padding:16px;text-align:center">
+          <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">预估全年利润</div>
+          <div id="plan-profit" style="font-size:20px;font-weight:700;color:var(--primary)">-</div>
+        </div>
+        <div class="card" style="padding:16px;text-align:center">
+          <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">应缴税额基准</div>
+          <div id="plan-tax-baseline" style="font-size:20px;font-weight:700;color:#dc2626">-</div>
+        </div>
+        <div class="card" style="padding:16px;text-align:center">
+          <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px">最多可节税</div>
+          <div id="plan-savings" style="font-size:20px;font-weight:700;color:#16a34a">-</div>
+        </div>
+      </div>
+      <div id="plan-summary-text" style="font-size:13px;color:var(--text-muted);margin-bottom:16px;padding:10px 14px;background:var(--bg-secondary);border-radius:6px"></div>
+      <div id="plan-quarters" style="display:grid;grid-template-columns:repeat(2,1fr);gap:14px"></div>
+      <div id="plan-disclaimer" style="margin-top:16px;font-size:11px;color:var(--text-muted);text-align:center;padding:8px"></div>
+    </div>
+
+    <div id="plan-empty" style="text-align:center;padding:60px 20px;color:var(--text-muted)">
+      <div style="font-size:48px;margin-bottom:12px">📋</div>
+      <p style="font-size:15px;font-weight:600;margin-bottom:6px">尚未生成年度规划</p>
+      <p style="font-size:13px">点击「生成/更新规划」，AI 将根据企业画像和当前财务数据<br>生成全年四季度节税行动路线图</p>
+    </div>
+  </div>
+</div>
+
 <!-- ══ 企业设置页 ══ -->
 <div id="page-settings" class="page">
   <div class="container" style="max-width:680px">
@@ -782,6 +831,7 @@
     if (page === 'reports')   loadReports();
     if (page === 'decisions') loadDecisions();
     if (page === 'assets')    loadAssets();
+    if (page === 'taxplan')   loadAnnualPlan();
     if (page === 'settings')  loadSettings();
   }
 
@@ -832,6 +882,7 @@
   // ── 初始化 ──
   document.addEventListener('DOMContentLoaded', () => {
     initYearSelect();
+    initPlanYearSelect();
     initReportDates();
     loadDashboard();
     // 按 Ctrl+Enter 提交
@@ -1540,6 +1591,107 @@
     el.style.border     = `1px solid ${type === 'success' ? '#9ae6b4' : '#feb2b2'}`;
     el.textContent = msg;
     setTimeout(() => el.style.display = 'none', 3000);
+  }
+
+  // ── 年度税务规划 ──
+  function initPlanYearSelect() {
+    const sel = document.getElementById('plan-year-select');
+    if (!sel) return;
+    const now = new Date().getFullYear();
+    for (let y = now; y >= now - 2; y--) {
+      const o = document.createElement('option');
+      o.value = y; o.textContent = y + '年';
+      sel.appendChild(o);
+    }
+  }
+
+  async function loadAnnualPlan() {
+    const year = document.getElementById('plan-year-select').value || new Date().getFullYear();
+    document.getElementById('plan-content').style.display = 'none';
+    document.getElementById('plan-empty').style.display   = 'none';
+    document.getElementById('plan-loading').style.display  = 'none';
+    try {
+      const res = await fetch(`${API}/api/enterprise/annual-plan/${year}`);
+      if (res.status === 404) {
+        document.getElementById('plan-empty').style.display = 'block';
+        return;
+      }
+      const d = await res.json();
+      renderAnnualPlan(d);
+    } catch (err) {
+      showToast('加载规划失败：' + err.message, 'error');
+      document.getElementById('plan-empty').style.display = 'block';
+    }
+  }
+
+  async function generateAnnualPlan() {
+    const year = document.getElementById('plan-year-select').value || new Date().getFullYear();
+    const btn  = document.getElementById('btn-generate-plan');
+    btn.disabled = true;
+    btn.textContent = '生成中…';
+    document.getElementById('plan-content').style.display  = 'none';
+    document.getElementById('plan-empty').style.display    = 'none';
+    document.getElementById('plan-loading').style.display  = 'block';
+    try {
+      const res = await fetch(`${API}/api/enterprise/annual-plan/${year}/generate`, { method: 'POST' });
+      const d = await res.json();
+      if (!res.ok) { showToast('生成失败：' + (d.detail || res.status), 'error'); document.getElementById('plan-empty').style.display='block'; return; }
+      document.getElementById('plan-loading').style.display = 'none';
+      renderAnnualPlan(d);
+      showToast('年度规划已生成', 'success');
+    } catch (err) {
+      showToast('生成失败：' + err.message, 'error');
+      document.getElementById('plan-empty').style.display = 'block';
+    } finally {
+      btn.disabled = false; btn.textContent = '生成/更新规划';
+      document.getElementById('plan-loading').style.display = 'none';
+    }
+  }
+
+  function renderAnnualPlan(d) {
+    document.getElementById('plan-profit').textContent       = d.estimated_annual_profit != null ? '¥' + d.estimated_annual_profit.toLocaleString() : '-';
+    document.getElementById('plan-tax-baseline').textContent = d.estimated_tax_baseline   != null ? '¥' + d.estimated_tax_baseline.toLocaleString()   : '-';
+    document.getElementById('plan-savings').textContent      = d.total_potential_savings   != null ? '¥' + d.total_potential_savings.toLocaleString()   : '-';
+    document.getElementById('plan-summary-text').textContent = d.profile_summary || '';
+    document.getElementById('plan-disclaimer').textContent   = d.disclaimer || '';
+
+    const qContainer = document.getElementById('plan-quarters');
+    qContainer.innerHTML = '';
+    const priorityColor = { HIGH: '#dc2626', MEDIUM: '#d97706', LOW: '#6b7280' };
+    const catIcon = { '研发':'🔬','折旧':'🏭','增值税':'📄','薪酬':'👥','资质认定':'🏆','其他':'📌' };
+
+    (d.quarters || []).forEach(q => {
+      const actions = (q.actions || []).map(a => `
+        <div style="border:1px solid #e5e7eb;border-radius:6px;padding:10px 12px;margin-bottom:8px;border-left:3px solid ${priorityColor[a.priority]||'#6b7280'}">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+            <span style="font-size:14px">${catIcon[a.category]||'📌'}</span>
+            <span style="font-weight:600;font-size:13px">${a.title||''}</span>
+            <span style="margin-left:auto;font-size:10px;color:${priorityColor[a.priority]||'#6b7280'};font-weight:600">${a.priority||''}</span>
+          </div>
+          <p style="font-size:12px;color:#374151;margin-bottom:4px">${a.detail||''}</p>
+          <div style="display:flex;gap:12px;font-size:11px;color:var(--text-muted)">
+            ${a.deadline ? `<span>⏰ ${a.deadline}</span>` : ''}
+            ${a.potential_saving ? `<span style="color:#16a34a;font-weight:600">节税 ¥${a.potential_saving.toLocaleString()}</span>` : ''}
+            ${a.trigger_condition ? `<span>📌 ${a.trigger_condition}</span>` : ''}
+          </div>
+        </div>`).join('');
+
+      const card = document.createElement('div');
+      card.className = 'card';
+      card.innerHTML = `
+        <div class="card-header" style="background:linear-gradient(135deg,#f0f9ff,#e0f2fe)">
+          <span style="font-size:18px">📅</span>
+          <div>
+            <div class="card-title">${q.quarter} &nbsp;<span style="font-size:12px;color:var(--text-muted)">${q.months||''}</span></div>
+            ${q.theme ? `<div style="font-size:12px;color:#0369a1;margin-top:2px">${q.theme}</div>` : ''}
+          </div>
+        </div>
+        <div class="card-body">${actions || '<p style="color:var(--text-muted);font-size:13px">本季度暂无筹划行动</p>'}</div>`;
+      qContainer.appendChild(card);
+    });
+
+    document.getElementById('plan-content').style.display = 'block';
+    document.getElementById('plan-empty').style.display   = 'none';
   }
 
   // CSV 导出

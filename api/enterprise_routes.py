@@ -23,7 +23,10 @@ from models.enterprise_profile import (
     AccountingStandard,
 )
 from services.transaction_router import TransactionRouter
+from services.tax_annual_plan_service import TaxAnnualPlanService, TaxAnnualPlanServiceError
+from models.tax_annual_plan import TaxAnnualPlan
 from ai.json_parser import ExtractedRecord
+from ai.llm_client import LLMClientError
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/enterprise", tags=["enterprise"])
@@ -262,3 +265,60 @@ def route_preview(
         "threshold": float(profile.decision_threshold) if profile else None,
         "profile_active": profile is not None,
     }
+
+
+# ── Annual Tax Plan endpoints ──────────────────────────────────────────────────
+
+def _plan_to_dict(plan: TaxAnnualPlan) -> dict:
+    import json as _json
+    try:
+        plan_data = _json.loads(plan.plan_json)
+    except Exception:
+        plan_data = {}
+    return {
+        "plan_id":      plan.plan_id,
+        "company_id":   plan.company_id,
+        "year":         plan.year,
+        "status":       plan.status,
+        "generated_at": str(plan.generated_at) if plan.generated_at else None,
+        "updated_at":   str(plan.updated_at)   if plan.updated_at   else None,
+        **plan_data,
+    }
+
+
+@router.get("/annual-plan/{year}")
+def get_annual_plan(year: int, db: Session = Depends(get_db)) -> Any:
+    """
+    获取指定年份的当前生效年度税务规划。
+    若该年份尚无规划，返回 404。
+    """
+    svc  = TaxAnnualPlanService(db)
+    plan = svc.get_active_plan(year)
+    if not plan:
+        raise HTTPException(
+            status_code=404,
+            detail=f"{year} 年度规划尚未生成，请调用 POST /api/enterprise/annual-plan/{year}/generate"
+        )
+    return _plan_to_dict(plan)
+
+
+@router.post("/annual-plan/{year}/generate", status_code=201)
+def generate_annual_plan(year: int, db: Session = Depends(get_db)) -> Any:
+    """
+    （重新）生成指定年份的年度税务筹划路线图。
+    - 调用 LLM 生成 Q1-Q4 四季度行动计划
+    - 旧规划自动标记为 OUTDATED
+    - 需要先配置企业档案
+    """
+    if year < 2020 or year > 2030:
+        raise HTTPException(status_code=422, detail="year 必须在 2020-2030 范围内")
+
+    svc = TaxAnnualPlanService(db)
+    try:
+        plan = svc.generate_plan(year)
+    except TaxAnnualPlanServiceError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except LLMClientError as exc:
+        raise HTTPException(status_code=503, detail=f"AI 服务暂时不可用: {exc}")
+
+    return _plan_to_dict(plan)

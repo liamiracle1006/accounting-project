@@ -6,6 +6,7 @@ from models.voucher_line import VoucherLine
 from models.enterprise_profile import EnterpriseProfile
 from models.boss_decision_log import BossDecisionLog
 from models.asset_register import AssetRegister
+from models.tax_annual_plan import TaxAnnualPlan
 
 __all__ = [
     "AccountSubject",
@@ -16,4 +17,5 @@ __all__ = [
     "EnterpriseProfile",
     "BossDecisionLog",
     "AssetRegister",
+    "TaxAnnualPlan",
 ]

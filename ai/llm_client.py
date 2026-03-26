@@ -12,6 +12,7 @@ import httpx
 from config.settings import LLM_API_KEY, LLM_BASE_URL, LLM_MODEL, LLM_TIMEOUT, LLM_MAX_TOKENS
 from ai.prompts import SYSTEM_PROMPT
 from ai.decision_prompts import DECISION_SYSTEM_PROMPT
+from ai.annual_plan_prompts import ANNUAL_PLAN_SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 
@@ -114,4 +115,47 @@ class LLMClient:
             ) from exc
 
         logger.debug("Decision LLM raw response: %s", json_text[:500])
+        return json_text
+
+    def generate_annual_plan(self, user_prompt: str) -> str:
+        """
+        调用 LLM 生成年度税务筹划路线图 JSON。
+        使用 ANNUAL_PLAN_SYSTEM_PROMPT，输出 Q1-Q4 四季度行动计划。
+        """
+        payload: dict[str, Any] = {
+            "model":           LLM_MODEL,
+            "max_tokens":      3000,
+            "temperature":     0.3,
+            "response_format": {"type": "json_object"},
+            "messages": [
+                {"role": "system", "content": ANNUAL_PLAN_SYSTEM_PROMPT},
+                {"role": "user",   "content": user_prompt},
+            ],
+        }
+
+        logger.debug("Calling LLM for annual tax plan: model=%s", LLM_MODEL)
+
+        try:
+            with httpx.Client(timeout=LLM_TIMEOUT) as client:
+                response = client.post(self._url, headers=self._headers,
+                                       content=json.dumps(payload))
+        except httpx.TimeoutException as exc:
+            raise LLMClientError(f"Annual plan LLM timeout after {LLM_TIMEOUT}s") from exc
+        except httpx.RequestError as exc:
+            raise LLMClientError(f"Annual plan LLM network error: {exc}") from exc
+
+        if response.status_code != 200:
+            raise LLMClientError(
+                f"Annual plan LLM returned HTTP {response.status_code}: {response.text[:300]}"
+            )
+
+        try:
+            body      = response.json()
+            json_text = body["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, ValueError) as exc:
+            raise LLMClientError(
+                f"Unexpected annual plan LLM response structure: {response.text[:300]}"
+            ) from exc
+
+        logger.debug("Annual plan LLM raw response: %s", json_text[:500])
         return json_text
