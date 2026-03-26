@@ -9,6 +9,7 @@ from models.asset_register import AssetRegister
 from models.tax_annual_plan import TaxAnnualPlan
 from models.user_account import UserAccount
 from models.department import Department
+from models.expense_request import ExpenseRequest
 
 __all__ = [
     "AccountSubject",
@@ -22,4 +23,5 @@ __all__ = [
     "TaxAnnualPlan",
     "UserAccount",
     "Department",
+    "ExpenseRequest",
 ]

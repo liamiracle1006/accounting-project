@@ -177,7 +177,30 @@ CREATE TABLE IF NOT EXISTS department (
 );
 
 -- ------------------------------------------------------------
--- 10. User Account — multi-role login (Phase 3)
+-- 10. Expense Request — approval workflow (Phase 3)
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS expense_request (
+    request_id   BIGINT         NOT NULL AUTO_INCREMENT,
+    applicant_id BIGINT         NOT NULL,           -- FK → user_account
+    dept_id      BIGINT         NULL,               -- FK → department
+    title        VARCHAR(200)   NOT NULL,
+    amount       DECIMAL(18, 2) NOT NULL,
+    expense_type VARCHAR(100)   NOT NULL,           -- 差旅/办公/采购/其他
+    description  TEXT           NULL,
+    status       VARCHAR(20)    NOT NULL DEFAULT 'PENDING',
+                                                    -- PENDING / APPROVED / REJECTED
+    reviewer_id  BIGINT         NULL,               -- FK → user_account
+    review_note  TEXT           NULL,
+    reviewed_at  DATETIME       NULL,
+    record_id    BIGINT         NULL,               -- FK → operational_record (审批通过后填入)
+    created_at   DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at   DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP
+                                ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (request_id)
+);
+
+-- ------------------------------------------------------------
+-- 11. User Account — multi-role login (Phase 3)
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS user_account (
     user_id       BIGINT       NOT NULL AUTO_INCREMENT,
