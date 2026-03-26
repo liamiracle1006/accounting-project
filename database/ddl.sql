@@ -81,6 +81,11 @@ CREATE TABLE IF NOT EXISTS voucher_header (
     voucher_date  DATE           NOT NULL,
     total_amount  DECIMAL(18, 2) NOT NULL,
     memo          VARCHAR(500)   NULL,
+    review_status VARCHAR(20)    NOT NULL DEFAULT 'DRAFT',
+                                                     -- DRAFT / PENDING_REVIEW / POSTED / REJECTED
+    reviewer_id   BIGINT         NULL,               -- FK → user_account
+    review_note   VARCHAR(500)   NULL,
+    reviewed_at   DATETIME       NULL,
     created_at    DATETIME       NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (voucher_id),
     CONSTRAINT fk_vh_record FOREIGN KEY (record_id)
