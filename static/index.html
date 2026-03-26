@@ -723,11 +723,13 @@
 
     <!-- 报表 Tabs -->
     <div class="card">
-      <div class="tabs">
+      <div class="tabs" style="flex-wrap:wrap">
         <div class="tab active" id="rpt-tab-ie" onclick="switchRptTab('ie',this)">收支明细</div>
         <div class="tab" id="rpt-tab-tb" onclick="switchRptTab('tb',this)">科目余额表</div>
         <div class="tab" id="rpt-tab-bs" onclick="switchRptTab('bs',this)">资产负债表</div>
         <div class="tab" id="rpt-tab-is" onclick="switchRptTab('is',this)">利润表</div>
+        <div class="tab" id="rpt-tab-cf" onclick="switchRptTab('cf',this)">现金流量表</div>
+        <div class="tab" id="rpt-tab-eq" onclick="switchRptTab('eq',this)">权益变动表</div>
       </div>
 
       <!-- 收支明细 -->
@@ -750,9 +752,9 @@
         </div>
       </div>
 
-      <!-- 资产负债表 -->
+      <!-- 资产负债表 (会企01表) -->
       <div id="rpt-panel-bs" style="display:none">
-        <div style="padding:12px 20px;display:flex;align-items:center;gap:10px">
+        <div style="padding:12px 20px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
           <label style="font-size:13px;color:var(--text-muted)">截至日期：</label>
           <input type="date" id="bs-as-of" style="padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);font-size:13px">
           <button class="btn btn-outline" onclick="loadBalanceSheet()">查询</button>
@@ -763,13 +765,35 @@
         </div>
       </div>
 
-      <!-- 利润表 -->
+      <!-- 利润表 (会企02表) -->
       <div id="rpt-panel-is" style="display:none">
         <div style="padding:12px 20px 0">
           <span style="font-size:12px;color:var(--text-muted)">期间同上方日期筛选栏</span>
         </div>
         <div id="rpt-is-body" style="padding:12px 20px 20px">
           <div class="empty-state"><p style="color:var(--text-muted)">点击查询后显示</p></div>
+        </div>
+      </div>
+
+      <!-- 现金流量表 (会企03表) -->
+      <div id="rpt-panel-cf" style="display:none">
+        <div style="padding:12px 20px 0">
+          <span style="font-size:12px;color:var(--text-muted)">期间同上方日期筛选栏（间接法）</span>
+        </div>
+        <div id="rpt-cf-body" style="padding:12px 20px 20px">
+          <div class="empty-state"><p style="color:var(--text-muted)">点击查询后显示</p></div>
+        </div>
+      </div>
+
+      <!-- 所有者权益变动表 (会企04表) -->
+      <div id="rpt-panel-eq" style="display:none">
+        <div style="padding:12px 20px;display:flex;align-items:center;gap:10px">
+          <label style="font-size:13px;color:var(--text-muted)">年度：</label>
+          <input type="number" id="eq-year" min="2020" max="2035" style="width:90px;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius);font-size:13px">
+          <button class="btn btn-outline" onclick="loadEquityChanges()">查询</button>
+        </div>
+        <div id="rpt-eq-body" style="padding:0 20px 20px">
+          <div class="empty-state"><p style="color:var(--text-muted)">选择年度后点击查询</p></div>
         </div>
       </div>
     </div>
@@ -1505,22 +1529,26 @@
     const now = new Date();
     const y = now.getFullYear();
     const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
     document.getElementById('rpt-from').value  = `${y}-01-01`;
-    document.getElementById('rpt-to').value    = `${y}-${m}-${String(now.getDate()).padStart(2,'0')}`;
-    document.getElementById('bs-as-of').value  = `${y}-${m}-${String(now.getDate()).padStart(2,'0')}`;
+    document.getElementById('rpt-to').value    = `${y}-${m}-${d}`;
+    document.getElementById('bs-as-of').value  = `${y}-${m}-${d}`;
+    document.getElementById('eq-year').value   = y;
   }
 
   function switchRptTab(tab, el) {
     _activeRptTab = tab;
     document.querySelectorAll('.tab[id^="rpt-tab-"]').forEach(t => t.classList.remove('active'));
     el.classList.add('active');
-    document.getElementById('rpt-panel-ie').style.display = tab === 'ie' ? '' : 'none';
-    document.getElementById('rpt-panel-tb').style.display = tab === 'tb' ? '' : 'none';
-    document.getElementById('rpt-panel-bs').style.display = tab === 'bs' ? '' : 'none';
-    document.getElementById('rpt-panel-is').style.display = tab === 'is' ? '' : 'none';
+    ['ie','tb','bs','is','cf','eq'].forEach(t => {
+      document.getElementById(`rpt-panel-${t}`).style.display = t === tab ? '' : 'none';
+    });
     if (tab === 'is') loadIncomeStatement();
+    if (tab === 'cf') loadCashFlow();
+    if (tab === 'eq') loadEquityChanges();
   }
 
+  // ── 资产负债表 (会企01表) ──────────────────────────────────────────────
   async function loadBalanceSheet() {
     const asOf  = document.getElementById('bs-as-of').value;
     const body  = document.getElementById('rpt-bs-body');
@@ -1541,45 +1569,47 @@
         tag.textContent = `⚠ 差额 ¥${fmt(Math.abs(d.diff))}`;
       }
 
-      const rows = items => items.length
-        ? items.map(i => `<tr><td style="padding:6px 10px">${i.name}</td><td style="padding:6px 10px;text-align:right;font-family:monospace">${i.code}</td><td style="padding:6px 10px;text-align:right;font-weight:500">¥${fmt(i.amount)}</td></tr>`).join('')
-        : '<tr><td colspan="3" style="padding:6px 10px;color:var(--text-muted);font-size:12px">—</td></tr>';
+      // 官方两列格式：期末余额 + 期初余额
+      const fmtAmt = v => v === 0 ? '—' : `¥${fmt(v)}`;
+      const renderSection = (items, hdrColor) => items.map(i => {
+        const bg = i.is_total ? `background:${hdrColor}0d;font-weight:700` : '';
+        const indent = !i.is_total && !i.name.match(/^[一二三四五六七]/) ? 'padding-left:20px' : '';
+        return `<tr style="border-top:1px solid var(--border);${bg}">
+          <td style="padding:5px 10px;font-size:13px;${indent}">${i.name}</td>
+          <td style="padding:5px 10px;text-align:right;font-family:monospace;font-size:13px">${fmtAmt(i.end_bal)}</td>
+          <td style="padding:5px 10px;text-align:right;font-family:monospace;font-size:13px;color:var(--text-muted)">${fmtAmt(i.beg_bal)}</td>
+        </tr>`;
+      }).join('');
 
-      const section = (title, items, total, color) => `
-        <div style="margin-bottom:12px">
-          <div style="font-size:12px;font-weight:700;color:${color};padding:6px 10px;background:${color}18;border-radius:4px 4px 0 0">${title}</div>
-          <table style="width:100%;border-collapse:collapse;font-size:13px">
-            ${rows(items)}
-            <tr style="border-top:2px solid ${color}40;background:${color}08">
-              <td colspan="2" style="padding:7px 10px;font-weight:700">小计</td>
-              <td style="padding:7px 10px;text-align:right;font-weight:700;color:${color}">¥${fmt(total)}</td>
-            </tr>
-          </table>
-        </div>`;
+      const thStyle = 'padding:7px 10px;text-align:right;font-size:12px;color:var(--text-muted);font-weight:600;white-space:nowrap';
+      const colHeader = `<thead><tr style="background:var(--bg)">
+        <th style="padding:7px 10px;text-align:left;font-size:12px;color:var(--text-muted);font-weight:600">项目</th>
+        <th style="${thStyle}">期末余额</th>
+        <th style="${thStyle}">期初余额</th>
+      </tr></thead>`;
 
       body.innerHTML = `
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:4px">
+        <p style="font-size:11px;color:var(--text-muted);margin-bottom:8px">编制单位 · 截止日期：${d.as_of_date}　期初：${d.beg_of_year}</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px">
           <div>
-            <div style="font-size:14px;font-weight:700;margin-bottom:10px;padding-bottom:6px;border-bottom:2px solid var(--primary)">资 产</div>
-            ${section('流动资产', d.current_assets, d.current_assets.reduce((s,i)=>s+i.amount,0), '#2563eb')}
-            ${section('非流动资产', d.non_current_assets, d.non_current_assets.reduce((s,i)=>s+i.amount,0), '#7c3aed')}
-            <div style="padding:8px 10px;background:#eff6ff;border-radius:4px;display:flex;justify-content:space-between;font-weight:700;font-size:14px">
-              <span>资产合计</span><span style="color:var(--primary)">¥${fmt(d.total_assets)}</span>
-            </div>
+            <div style="font-size:13px;font-weight:700;color:#2563eb;padding:6px 10px;background:#eff6ff;border-radius:4px 4px 0 0">资　产</div>
+            <table style="width:100%;border-collapse:collapse">${colHeader}<tbody>${renderSection(d.assets,'#2563eb')}</tbody></table>
           </div>
           <div>
-            <div style="font-size:14px;font-weight:700;margin-bottom:10px;padding-bottom:6px;border-bottom:2px solid #dc2626">负债及权益</div>
-            ${section('流动负债', d.current_liabilities, d.current_liabilities.reduce((s,i)=>s+i.amount,0), '#dc2626')}
-            ${section('非流动负债', d.non_current_liabilities, d.non_current_liabilities.reduce((s,i)=>s+i.amount,0), '#b91c1c')}
-            ${section('所有者权益', d.equity_items, d.total_equity, '#16a34a')}
-            <div style="padding:8px 10px;background:#fef2f2;border-radius:4px;display:flex;justify-content:space-between;font-weight:700;font-size:14px">
-              <span>负债及权益合计</span><span style="color:#dc2626">¥${fmt(d.total_liabilities + d.total_equity)}</span>
-            </div>
+            <div style="font-size:13px;font-weight:700;color:#dc2626;padding:6px 10px;background:#fef2f2;border-radius:4px 4px 0 0">负债和所有者权益</div>
+            <table style="width:100%;border-collapse:collapse">${colHeader}
+              <tbody>
+                ${renderSection(d.liabilities,'#dc2626')}
+                <tr><td colspan="3" style="padding:4px 10px;background:var(--bg);font-size:11px;color:var(--text-muted)">所有者权益</td></tr>
+                ${renderSection(d.equity,'#16a34a')}
+              </tbody>
+            </table>
           </div>
         </div>`;
     } catch (e) { body.innerHTML = `<p style="color:var(--error);padding:16px">查询失败：${e.message}</p>`; }
   }
 
+  // ── 利润表 (会企02表) ──────────────────────────────────────────────────
   async function loadIncomeStatement() {
     const from = document.getElementById('rpt-from').value;
     const to   = document.getElementById('rpt-to').value;
@@ -1591,33 +1621,110 @@
       const d   = await res.json();
       if (!res.ok) { body.innerHTML = `<p style="color:var(--error)">${d.detail||'查询失败'}</p>`; return; }
 
-      const row = (label, value, indent=false, bold=false, color='') => `
-        <tr style="border-top:1px solid var(--border)${bold?';background:#f9fafb':''}">
-          <td style="padding:7px 12px${indent?';padding-left:28px':''}${bold?';font-weight:700':''}">${label}</td>
-          <td style="padding:7px 12px;text-align:right;font-family:monospace${bold?';font-weight:700':''}${color?`;color:${color}`:''}">¥${fmt(value)}</td>
+      const fmtAmt = v => v === 0 ? '—' : (v < 0 ? `(¥${fmt(Math.abs(v))})` : `¥${fmt(v)}`);
+      const rows = d.items.map(i => {
+        const bg = i.is_total ? 'background:#f9fafb;font-weight:700' : '';
+        const indent = !i.is_total && i.name.startsWith('  ') ? 'padding-left:28px' : (!i.is_total ? 'padding-left:16px' : '');
+        const color = i.is_total && i.name.includes('净利润') ? (i.cur_amt >= 0 ? 'color:#16a34a' : 'color:#dc2626') : '';
+        return `<tr style="border-top:1px solid var(--border);${bg}">
+          <td style="padding:6px 12px;font-size:13px;${indent}">${i.name.trim()}</td>
+          <td style="padding:6px 12px;text-align:right;font-family:monospace;font-size:13px;${color}">${fmtAmt(i.cur_amt)}</td>
+          <td style="padding:6px 12px;text-align:right;font-family:monospace;font-size:13px;color:var(--text-muted)">${fmtAmt(i.prev_amt)}</td>
         </tr>`;
-
-      const profitColor = d.net_profit >= 0 ? '#16a34a' : '#dc2626';
+      }).join('');
 
       body.innerHTML = `
-        <table style="width:100%;border-collapse:collapse;font-size:13px;max-width:520px">
+        <p style="font-size:11px;color:var(--text-muted);margin-bottom:8px">本期：${d.date_from} ~ ${d.date_to}　上期：${d.prev_from} ~ ${d.prev_to}</p>
+        <table style="width:100%;border-collapse:collapse;max-width:640px">
           <thead><tr style="background:var(--bg)">
-            <th style="padding:8px 12px;text-align:left">项目</th>
-            <th style="padding:8px 12px;text-align:right">${from} ~ ${to}</th>
+            <th style="padding:7px 12px;text-align:left;font-size:12px;color:var(--text-muted)">项目</th>
+            <th style="padding:7px 12px;text-align:right;font-size:12px;color:var(--text-muted)">本期金额</th>
+            <th style="padding:7px 12px;text-align:right;font-size:12px;color:var(--text-muted)">上期金额</th>
           </tr></thead>
-          <tbody>
-            ${row('一、营业收入', d.total_revenue, false, true)}
-            ${row('主营业务收入', d.revenue, true)}
-            ${row('其他业务收入', d.other_revenue, true)}
-            ${row('减：主营业务成本', d.cogs, true)}
-            ${row('二、毛利润', d.gross_profit, false, true)}
-            ${row('减：管理费用', d.admin_expense, true)}
-            ${row('减：财务费用', d.finance_expense, true)}
-            ${row('减：销售费用', d.selling_expense, true)}
-            ${row('三、营业利润', d.operating_profit, false, true, d.operating_profit>=0?'#16a34a':'#dc2626')}
-            ${row('减：所得税费用', d.tax_expense, true)}
-            ${row('四、净利润', d.net_profit, false, true, profitColor)}
-          </tbody>
+          <tbody>${rows}</tbody>
+        </table>`;
+    } catch (e) { body.innerHTML = `<p style="color:var(--error)">查询失败：${e.message}</p>`; }
+  }
+
+  // ── 现金流量表 (会企03表) ──────────────────────────────────────────────
+  async function loadCashFlow() {
+    const from = document.getElementById('rpt-from').value;
+    const to   = document.getElementById('rpt-to').value;
+    const body = document.getElementById('rpt-cf-body');
+    if (!from || !to) { body.innerHTML = '<p style="color:var(--text-muted);font-size:13px">请先在上方设置日期范围</p>'; return; }
+    body.innerHTML = '<div style="text-align:center;padding:30px"><div class="spinner"></div></div>';
+    try {
+      const res = await fetch(`${API}/api/reports/cash-flow?date_from=${from}&date_to=${to}`);
+      const d   = await res.json();
+      if (!res.ok) { body.innerHTML = `<p style="color:var(--error)">${d.detail||'查询失败'}</p>`; return; }
+
+      const fmtAmt = v => v === 0 ? '—' : (v < 0 ? `(¥${fmt(Math.abs(v))})` : `¥${fmt(v)}`);
+      const rows = d.items.map(i => {
+        const bg = i.is_total ? 'background:#f0f9ff;font-weight:700' : '';
+        const indent = !i.is_total ? 'padding-left:24px' : '';
+        const color = i.is_total ? (i.cur_amt >= 0 ? 'color:#16a34a' : 'color:#dc2626') : '';
+        return `<tr style="border-top:1px solid var(--border);${bg}">
+          <td style="padding:6px 12px;font-size:13px;${indent}">${i.name}</td>
+          <td style="padding:6px 12px;text-align:right;font-family:monospace;font-size:13px;${color}">${fmtAmt(i.cur_amt)}</td>
+          <td style="padding:6px 12px;text-align:right;font-family:monospace;font-size:13px;color:var(--text-muted)">${fmtAmt(i.prev_amt)}</td>
+        </tr>`;
+      }).join('');
+
+      body.innerHTML = `
+        <p style="font-size:11px;color:var(--text-muted);margin-bottom:8px">本期：${d.date_from} ~ ${d.date_to}　上期：${d.prev_from} ~ ${d.prev_to}　（间接法）</p>
+        <table style="width:100%;border-collapse:collapse;max-width:640px">
+          <thead><tr style="background:var(--bg)">
+            <th style="padding:7px 12px;text-align:left;font-size:12px;color:var(--text-muted)">项目</th>
+            <th style="padding:7px 12px;text-align:right;font-size:12px;color:var(--text-muted)">本期金额</th>
+            <th style="padding:7px 12px;text-align:right;font-size:12px;color:var(--text-muted)">上期金额</th>
+          </tr></thead>
+          <tbody>${rows}</tbody>
+        </table>`;
+    } catch (e) { body.innerHTML = `<p style="color:var(--error)">查询失败：${e.message}</p>`; }
+  }
+
+  // ── 所有者权益变动表 (会企04表) ────────────────────────────────────────
+  async function loadEquityChanges() {
+    const year = document.getElementById('eq-year').value;
+    const body = document.getElementById('rpt-eq-body');
+    if (!year) { showToast('请输入年度', 'error'); return; }
+    body.innerHTML = '<div style="text-align:center;padding:30px"><div class="spinner"></div></div>';
+    try {
+      const res = await fetch(`${API}/api/reports/equity-changes?year=${year}`);
+      const d   = await res.json();
+      if (!res.ok) { body.innerHTML = `<p style="color:var(--error)">${d.detail||'查询失败'}</p>`; return; }
+
+      const fmtAmt = v => v === 0 ? '—' : `¥${fmt(v)}`;
+      const thS = 'padding:7px 10px;text-align:right;font-size:12px;color:var(--text-muted);white-space:nowrap';
+      const header = `<thead><tr style="background:var(--bg)">
+        <th style="padding:7px 10px;text-align:left;font-size:12px;color:var(--text-muted)">项目</th>
+        <th style="${thS}">实收资本</th>
+        <th style="${thS}">资本公积</th>
+        <th style="${thS}">盈余公积</th>
+        <th style="${thS}">未分配利润</th>
+        <th style="${thS}">合　计</th>
+      </tr></thead>`;
+
+      const renderRows = rows => rows.map(r => {
+        const bg = r.is_total ? 'background:#f9fafb;font-weight:700' : '';
+        return `<tr style="border-top:1px solid var(--border);${bg}">
+          <td style="padding:6px 10px;font-size:13px">${r.name}</td>
+          <td style="padding:6px 10px;text-align:right;font-family:monospace;font-size:13px">${fmtAmt(r.paid_in)}</td>
+          <td style="padding:6px 10px;text-align:right;font-family:monospace;font-size:13px">${fmtAmt(r.capital_reserve)}</td>
+          <td style="padding:6px 10px;text-align:right;font-family:monospace;font-size:13px">${fmtAmt(r.surplus_reserve)}</td>
+          <td style="padding:6px 10px;text-align:right;font-family:monospace;font-size:13px">${fmtAmt(r.retained)}</td>
+          <td style="padding:6px 10px;text-align:right;font-family:monospace;font-size:13px;font-weight:${r.is_total?700:400}">${fmtAmt(r.total)}</td>
+        </tr>`;
+      }).join('');
+
+      body.innerHTML = `
+        <p style="font-size:13px;font-weight:600;margin-bottom:6px">${d.year} 年度</p>
+        <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:20px">
+          ${header}<tbody>${renderRows(d.cur_rows)}</tbody>
+        </table>
+        <p style="font-size:13px;font-weight:600;margin-bottom:6px">${d.year - 1} 年度（上年对比）</p>
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+          ${header}<tbody>${renderRows(d.prev_rows)}</tbody>
         </table>`;
     } catch (e) { body.innerHTML = `<p style="color:var(--error)">查询失败：${e.message}</p>`; }
   }
@@ -1643,6 +1750,10 @@
 
     renderIeTable();
     renderTbTable();
+
+    // 如果当前激活的是官方报表 tab，一并刷新
+    if (_activeRptTab === 'is') loadIncomeStatement();
+    if (_activeRptTab === 'cf') loadCashFlow();
   }
 
   function renderIeTable() {
