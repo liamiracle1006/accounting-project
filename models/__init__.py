@@ -8,6 +8,7 @@ from models.boss_decision_log import BossDecisionLog
 from models.asset_register import AssetRegister
 from models.tax_annual_plan import TaxAnnualPlan
 from models.user_account import UserAccount
+from models.department import Department
 
 __all__ = [
     "AccountSubject",
@@ -20,4 +21,5 @@ __all__ = [
     "AssetRegister",
     "TaxAnnualPlan",
     "UserAccount",
+    "Department",
 ]

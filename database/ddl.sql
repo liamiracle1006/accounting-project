@@ -162,7 +162,22 @@ CREATE TABLE IF NOT EXISTS asset_register (
 );
 
 -- ------------------------------------------------------------
--- 9. User Account — multi-role login (Phase 3)
+-- 9. Department — cost center (Phase 3)
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS department (
+    dept_id     BIGINT      NOT NULL AUTO_INCREMENT,
+    dept_name   VARCHAR(100) NOT NULL UNIQUE,
+    cost_center VARCHAR(50)  NULL,               -- 成本中心代码（可选）
+    manager_id  BIGINT       NULL,               -- FK → user_account.user_id
+    is_active   TINYINT(1)   NOT NULL DEFAULT 1,
+    created_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at  DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP
+                             ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (dept_id)
+);
+
+-- ------------------------------------------------------------
+-- 10. User Account — multi-role login (Phase 3)
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS user_account (
     user_id       BIGINT       NOT NULL AUTO_INCREMENT,

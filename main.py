@@ -14,6 +14,7 @@ from api.routes import router
 from api.enterprise_routes import router as enterprise_router
 from api.decision_routes import router as decision_router
 from api.auth_routes import router as auth_router
+from api.department_routes import router as department_router
 from services.auth_service import get_current_user
 
 logging.basicConfig(
@@ -41,9 +42,10 @@ app.include_router(auth_router)
 
 # 其余所有业务 API 均需要有效 JWT
 _auth = [Depends(get_current_user)]
-app.include_router(router,            dependencies=_auth)
-app.include_router(enterprise_router, dependencies=_auth)
-app.include_router(decision_router,   dependencies=_auth)
+app.include_router(router,             dependencies=_auth)
+app.include_router(enterprise_router,  dependencies=_auth)
+app.include_router(decision_router,    dependencies=_auth)
+app.include_router(department_router,  dependencies=_auth)
 
 _STATIC = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=_STATIC), name="static")
