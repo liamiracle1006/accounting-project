@@ -4,6 +4,8 @@ AgentLedger — Financial Report API (Phase 4, Official Format)
 端点：
   GET  /api/reports/balance-sheet          — 资产负债表（会企01表）
   GET  /api/reports/income-statement       — 利润表（会企02表）
+  GET  /api/reports/cash-flow              — 现金流量表（会企03表）
+  GET  /api/reports/equity-changes         — 所有者权益变动表（会企04表）
   GET  /api/reports/periods                — 会计期间列表
   POST /api/reports/periods/{year}/{month}/close — 月末结账
   POST /api/reports/periods/{year}/{month}/open  — 手动开启期间
@@ -21,6 +23,8 @@ from models.user_account import UserAccount, UserRole
 from services.auth_service import get_current_user, require_role
 from services.report_service import ReportService
 from services.period_closing_service import PeriodClosingService, PeriodClosingError
+from services.cashflow_service import CashFlowService
+from services.equity_change_service import EquityChangeService
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/reports", tags=["reports"])
@@ -111,6 +115,81 @@ def get_income_statement(
             }
             for i in is_.items
         ],
+    }
+
+
+# ── Cash Flow Statement (会企03表) ─────────────────────────────────────────
+
+@router.get("/cash-flow")
+def get_cash_flow(
+    date_from:    str | None = None,
+    date_to:      str | None = None,
+    current_user: UserAccount = Depends(get_current_user),
+    db:           Session     = Depends(get_db),
+) -> Any:
+    """
+    返回指定区间的现金流量表（会企03表，间接法）。
+    默认：当年 1 月 1 日至今天。
+    """
+    today = date.today()
+    try:
+        df = date.fromisoformat(date_from) if date_from else date(today.year, 1, 1)
+        dt = date.fromisoformat(date_to)   if date_to   else today
+    except ValueError:
+        raise HTTPException(status_code=422, detail="日期格式应为 YYYY-MM-DD")
+
+    svc = CashFlowService(db)
+    cf  = svc.get_cash_flow(df, dt)
+
+    return {
+        "date_from": cf.date_from,
+        "date_to":   cf.date_to,
+        "prev_from": cf.prev_from,
+        "prev_to":   cf.prev_to,
+        "items": [
+            {
+                "code":     i.code,
+                "name":     i.name,
+                "cur_amt":  float(i.cur_amt),
+                "prev_amt": float(i.prev_amt),
+                "is_total": i.is_total,
+            }
+            for i in cf.items
+        ],
+    }
+
+
+# ── Statement of Changes in Equity (会企04表) ───────────────────────────────
+
+@router.get("/equity-changes")
+def get_equity_changes(
+    year:         int | None = None,
+    current_user: UserAccount = Depends(get_current_user),
+    db:           Session     = Depends(get_db),
+) -> Any:
+    """
+    返回指定年度的所有者权益变动表（会企04表）。
+    默认：当年。
+    """
+    y = year or date.today().year
+    svc  = EquityChangeService(db)
+    stmt = svc.get_equity_changes(y)
+
+    def row_dict(r):
+        return {
+            "name":            r.name,
+            "paid_in":         float(r.paid_in),
+            "capital_reserve": float(r.capital_reserve),
+            "surplus_reserve": float(r.surplus_reserve),
+            "retained":        float(r.retained),
+            "total":           float(r.total),
+            "is_total":        r.is_total,
+        }
+
+    return {
+        "year":      stmt.year,
+        "cur_rows":  [row_dict(r) for r in stmt.cur_rows],
+        "prev_rows": [row_dict(r) for r in stmt.prev_rows],
     }
 
 
