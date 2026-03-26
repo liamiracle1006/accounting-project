@@ -934,6 +934,54 @@
         <div id="preview-result" style="margin-top:12px;display:none;padding:10px 14px;border-radius:6px;font-size:13px"></div>
       </div>
     </div>
+
+    <!-- 部门管理（仅 BOSS 可见） -->
+    <div class="card boss-only" style="margin-top:16px;display:none">
+      <div class="card-header">
+        <span>🏬</span><span class="card-title">部门管理</span>
+        <span style="margin-left:auto;font-size:12px;color:var(--text-muted)">仅老板可见</span>
+      </div>
+      <div class="card-body">
+        <div style="display:flex;gap:8px;margin-bottom:14px">
+          <input id="dept-name-input" type="text" class="field-input" placeholder="部门名称" style="flex:1">
+          <input id="dept-cost-input" type="text" class="field-input" placeholder="成本中心代码（选填）" style="width:180px">
+          <button class="btn btn-primary" onclick="createDept()">新建</button>
+        </div>
+        <div id="dept-list"></div>
+      </div>
+    </div>
+
+    <!-- 账号管理（仅 BOSS 可见） -->
+    <div class="card boss-only" style="margin-top:16px;display:none">
+      <div class="card-header">
+        <span>👥</span><span class="card-title">账号管理</span>
+        <span style="margin-left:auto;font-size:12px;color:var(--text-muted)">仅老板可见</span>
+      </div>
+      <div class="card-body">
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr auto;gap:8px;margin-bottom:14px;align-items:end">
+          <div>
+            <label class="field-label">用户名</label>
+            <input id="ua-username" type="text" class="field-input" placeholder="登录用户名">
+          </div>
+          <div>
+            <label class="field-label">显示名称</label>
+            <input id="ua-display" type="text" class="field-input" placeholder="姓名">
+          </div>
+          <div>
+            <label class="field-label">角色</label>
+            <select id="ua-role" class="field-input">
+              <option value="ACCOUNTANT">财务</option>
+              <option value="DEPT_MANAGER">部门主管</option>
+              <option value="BOSS">老板</option>
+            </select>
+          </div>
+          <button class="btn btn-primary" onclick="createUser()" style="height:36px">创建</button>
+        </div>
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:12px">初始密码均为 <strong>123456</strong>，创建后请提醒用户及时修改。</div>
+        <div id="ua-list"></div>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -1031,6 +1079,11 @@
       } else {
         a.style.display = '';
       }
+    });
+
+    // BOSS 专属卡片显示
+    document.querySelectorAll('.boss-only').forEach(el => {
+      el.style.display = role === 'BOSS' ? '' : 'none';
     });
   }
 
@@ -1961,6 +2014,10 @@
       document.getElementById('s-threshold').value     = d.decision_threshold;
     } catch (err) { showToast('设置加载失败', 'error'); }
     loadThresholdRecommendation();
+    if (_authUser && _authUser.role === 'BOSS') {
+      loadDepts();
+      loadUsers();
+    }
   }
 
   let _recommendedThreshold = null;
@@ -2157,6 +2214,120 @@
 
     document.getElementById('plan-content').style.display = 'block';
     document.getElementById('plan-empty').style.display   = 'none';
+  }
+
+  // ── 部门管理 ──
+  async function loadDepts() {
+    const listEl = document.getElementById('dept-list');
+    if (!listEl) return;
+    try {
+      const res  = await fetch(`${API}/api/departments`);
+      const data = await res.json();
+      if (!data.length) { listEl.innerHTML = '<p style="font-size:13px;color:var(--text-muted)">暂无部门，请新建</p>'; return; }
+      listEl.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr style="background:var(--bg)">
+          <th style="padding:8px 10px;text-align:left">部门名称</th>
+          <th style="padding:8px 10px;text-align:left">成本中心</th>
+          <th style="padding:8px 10px"></th>
+        </tr></thead><tbody>
+        ${data.map(d => `<tr style="border-top:1px solid var(--border)">
+          <td style="padding:8px 10px;font-weight:600">${escHtml(d.dept_name)}</td>
+          <td style="padding:8px 10px;color:var(--text-muted)">${escHtml(d.cost_center||'—')}</td>
+          <td style="padding:8px 10px;text-align:right">
+            <button class="link-btn" style="color:var(--error)" onclick="deleteDept(${d.dept_id},'${escHtml(d.dept_name)}')">停用</button>
+          </td>
+        </tr>`).join('')}
+        </tbody></table>`;
+    } catch (e) { listEl.innerHTML = `<p style="color:var(--error);font-size:13px">加载失败</p>`; }
+  }
+
+  async function createDept() {
+    const name = document.getElementById('dept-name-input').value.trim();
+    const cost = document.getElementById('dept-cost-input').value.trim() || null;
+    if (!name) { showToast('请输入部门名称', 'error'); return; }
+    const res = await fetch(`${API}/api/departments`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dept_name: name, cost_center: cost }),
+    });
+    const d = await res.json();
+    if (!res.ok) { showToast(d.detail || '创建失败', 'error'); return; }
+    showToast(`部门「${name}」已创建`, 'success');
+    document.getElementById('dept-name-input').value = '';
+    document.getElementById('dept-cost-input').value = '';
+    loadDepts();
+  }
+
+  async function deleteDept(deptId, name) {
+    if (!confirm(`确定停用部门「${name}」？`)) return;
+    const res = await fetch(`${API}/api/departments/${deptId}`, { method: 'DELETE' });
+    const d   = await res.json();
+    if (!res.ok) { showToast(d.detail || '操作失败', 'error'); return; }
+    showToast(`部门「${name}」已停用`, 'success');
+    loadDepts();
+  }
+
+  // ── 账号管理 ──
+  async function loadUsers() {
+    const listEl = document.getElementById('ua-list');
+    if (!listEl) return;
+    try {
+      const res  = await fetch(`${API}/api/auth/users`);
+      const data = await res.json();
+      if (!res.ok) { listEl.innerHTML = `<p style="color:var(--error);font-size:13px">${data.detail||'加载失败'}</p>`; return; }
+      const roleLabel = { BOSS:'老板', ACCOUNTANT:'财务', DEPT_MANAGER:'部门主管' };
+      listEl.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr style="background:var(--bg)">
+          <th style="padding:8px 10px;text-align:left">用户名</th>
+          <th style="padding:8px 10px;text-align:left">姓名</th>
+          <th style="padding:8px 10px;text-align:left">角色</th>
+          <th style="padding:8px 10px;text-align:left">最后登录</th>
+          <th style="padding:8px 10px"></th>
+        </tr></thead><tbody>
+        ${data.map(u => `<tr style="border-top:1px solid var(--border);${!u.is_active?'opacity:.45':''}">
+          <td style="padding:8px 10px;font-family:monospace">${escHtml(u.username)}</td>
+          <td style="padding:8px 10px;font-weight:600">${escHtml(u.display_name)}</td>
+          <td style="padding:8px 10px">
+            <span style="font-size:11px;font-weight:600;padding:2px 7px;border-radius:4px;background:${u.role==='BOSS'?'#fef3c7':u.role==='ACCOUNTANT'?'#eff6ff':'#f0fdf4'};color:${u.role==='BOSS'?'#92400e':u.role==='ACCOUNTANT'?'#1e40af':'#166534'}">
+              ${roleLabel[u.role]||u.role}
+            </span>
+          </td>
+          <td style="padding:8px 10px;color:var(--text-muted);font-size:12px">${u.last_login_at ? u.last_login_at.slice(0,16) : '从未登录'}</td>
+          <td style="padding:8px 10px;text-align:right">
+            <button class="link-btn" onclick="resetPassword(${u.user_id},'${escHtml(u.display_name)}')">重置密码</button>
+          </td>
+        </tr>`).join('')}
+        </tbody></table>`;
+    } catch (e) { listEl.innerHTML = `<p style="color:var(--error);font-size:13px">加载失败</p>`; }
+  }
+
+  async function createUser() {
+    const username = document.getElementById('ua-username').value.trim();
+    const display  = document.getElementById('ua-display').value.trim();
+    const role     = document.getElementById('ua-role').value;
+    if (!username || !display) { showToast('请填写用户名和姓名', 'error'); return; }
+    const res = await fetch(`${API}/api/auth/users`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, display_name: display, role, password: '123456' }),
+    });
+    const d = await res.json();
+    if (!res.ok) { showToast(d.detail || '创建失败', 'error'); return; }
+    showToast(`账号「${display}」已创建，初始密码 123456`, 'success');
+    document.getElementById('ua-username').value = '';
+    document.getElementById('ua-display').value  = '';
+    loadUsers();
+  }
+
+  async function resetPassword(userId, name) {
+    const newPwd = prompt(`重置「${name}」的密码（最少6位）：`);
+    if (!newPwd) return;
+    if (newPwd.length < 6) { showToast('密码不能少于6位', 'error'); return; }
+    const res = await fetch(`${API}/api/auth/users/${userId}/password`, {
+      method: 'PUT', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ new_password: newPwd }),
+    });
+    const d = await res.json();
+    if (!res.ok) { showToast(d.detail || '重置失败', 'error'); return; }
+    showToast(`「${name}」密码已重置`, 'success');
   }
 
   // CSV 导出
