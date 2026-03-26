@@ -945,6 +945,14 @@
           <option value="VERIFIED">已验真</option>
         </select>
         <button class="btn btn-outline" onclick="loadInvoices()">刷新</button>
+        <label class="btn btn-outline" style="cursor:pointer" title="上传发票图片（JPG/PNG），OCR自动识别">
+          📷 扫描发票
+          <input type="file" accept="image/jpeg,image/png,image/webp" style="display:none" onchange="uploadInvoiceOCR(this,event)">
+        </label>
+        <label class="btn btn-outline" style="cursor:pointer" title="上传银行流水CSV，批量导入">
+          📂 导入流水
+          <input type="file" accept=".csv,text/csv" style="display:none" onchange="uploadBankCSV(this)">
+        </label>
         <button class="btn btn-primary" onclick="showInvModal()">+ 录入发票</button>
       </div>
     </div>
@@ -3079,6 +3087,132 @@
   function auditPage(dir) {
     _auditOffset = Math.max(0, _auditOffset + dir * _auditLimit);
     loadAuditLogs(false);
+  }
+
+  // ── OCR 发票上传 ──────────────────────────────────────────────────────
+  let _ocrResult = null;
+
+  async function uploadInvoiceOCR(input, event) {
+    const file = input.files[0];
+    if (!file) return;
+    input.value = '';  // 允许重复选择同一文件
+    showToast('识别中，请稍候…');
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('invoice_type', 'INPUT');
+      const res  = await fetch(`${API}/api/ocr/invoice`, { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) { showToast(data.detail || 'OCR 失败', 'error'); return; }
+      if (data.notice) showToast('⚠ ' + data.notice, 'error');
+      _ocrResult = data.result;
+      showOCRConfirmModal(data.result, data.confidence);
+    } catch (e) { showToast('上传失败：' + e.message, 'error'); }
+  }
+
+  function showOCRConfirmModal(r, confidence) {
+    // 复用录入发票弹窗，预填 OCR 结果
+    document.getElementById('inv-type').value         = r.invoice_type || 'INPUT';
+    document.getElementById('inv-date').value         = r.invoice_date || '';
+    document.getElementById('inv-code').value         = r.invoice_code || '';
+    document.getElementById('inv-number').value       = r.invoice_number || '';
+    document.getElementById('inv-seller').value       = r.seller_name || '';
+    document.getElementById('inv-seller-tax').value   = r.seller_tax_id || '';
+    document.getElementById('inv-subtotal').value     = r.subtotal_amount || '';
+    document.getElementById('inv-taxrate').value      = r.tax_rate !== undefined ? String(r.tax_rate) : '0.13';
+    document.getElementById('inv-tax').value          = r.tax_amount || '';
+    document.getElementById('inv-total').value        = r.total_amount || '';
+    document.getElementById('inv-summary').value      = r.items_summary || '';
+    const conf = Math.round((confidence || 0) * 100);
+    document.getElementById('inv-modal').style.display = '';
+    showToast(conf > 0 ? `OCR 置信度 ${conf}%，请确认后保存` : 'OCR 未配置，请手动填写', conf > 0 ? 'info' : 'error');
+  }
+
+  // ── 银行流水 CSV 上传 ─────────────────────────────────────────────────
+  let _bankTxns = [];
+
+  async function uploadBankCSV(input) {
+    const file = input.files[0];
+    if (!file) return;
+    input.value = '';
+    showToast('解析中…');
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res  = await fetch(`${API}/api/ocr/bank-csv`, { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) { showToast(data.detail || '解析失败', 'error'); return; }
+      if (data.notice) { showToast(data.notice, 'error'); return; }
+      _bankTxns = data.transactions;
+      showBankPreviewModal(data.transactions);
+    } catch (e) { showToast('上传失败：' + e.message, 'error'); }
+  }
+
+  function showBankPreviewModal(txns) {
+    // 动态创建预览弹窗（如果不存在）
+    let modal = document.getElementById('bank-preview-modal');
+    if (!modal) {
+      modal = document.createElement('div');
+      modal.id = 'bank-preview-modal';
+      modal.style.cssText = 'display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:200;overflow-y:auto';
+      modal.innerHTML = `
+        <div style="background:#fff;border-radius:10px;max-width:800px;margin:40px auto;padding:24px;box-shadow:0 8px 32px rgba(0,0,0,.18)">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+            <div>
+              <h3 style="font-size:15px;font-weight:700">银行流水导入预览</h3>
+              <p id="bank-preview-count" style="font-size:12px;color:var(--text-muted)"></p>
+            </div>
+            <button onclick="document.getElementById('bank-preview-modal').style.display='none'"
+                    style="background:none;border:none;font-size:20px;cursor:pointer;color:var(--text-muted)">×</button>
+          </div>
+          <div id="bank-preview-body" style="max-height:400px;overflow-y:auto"></div>
+          <div style="margin-top:16px;display:flex;justify-content:flex-end;gap:10px">
+            <button class="btn btn-outline" onclick="document.getElementById('bank-preview-modal').style.display='none'">取消</button>
+            <button class="btn btn-primary" onclick="confirmBankImport()">确认导入全部</button>
+          </div>
+        </div>`;
+      document.body.appendChild(modal);
+    }
+
+    document.getElementById('bank-preview-count').textContent =
+      `共解析 ${txns.length} 笔交易，确认后生成待处理流水记录`;
+    document.getElementById('bank-preview-body').innerHTML = `
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr style="background:var(--bg)">
+          <th style="padding:6px 10px;text-align:left">日期</th>
+          <th style="padding:6px 10px;text-align:right">金额</th>
+          <th style="padding:6px 10px;text-align:left">方向</th>
+          <th style="padding:6px 10px;text-align:left">摘要</th>
+          <th style="padding:6px 10px;text-align:left">对方</th>
+        </tr></thead>
+        <tbody>
+          ${txns.map(t => `<tr style="border-top:1px solid var(--border)">
+            <td style="padding:6px 10px">${t.trans_date}</td>
+            <td style="padding:6px 10px;text-align:right;font-family:monospace;font-weight:600;color:${t.amount>0?'#16a34a':'#dc2626'}">
+              ${t.amount>0?'+':''}¥${fmt(Math.abs(t.amount))}</td>
+            <td style="padding:6px 10px">${t.direction==='IN'?'收入':'支出'}</td>
+            <td style="padding:6px 10px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.description}</td>
+            <td style="padding:6px 10px;color:var(--text-muted)">${t.counterpart||'—'}</td>
+          </tr>`).join('')}
+        </tbody>
+      </table>`;
+    modal.style.display = '';
+  }
+
+  async function confirmBankImport() {
+    if (!_bankTxns.length) return;
+    try {
+      const res = await fetch(`${API}/api/ocr/bank-csv/import`, {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ transactions: _bankTxns }),
+      });
+      const d = await res.json();
+      if (!res.ok) { showToast(d.detail || '导入失败', 'error'); return; }
+      showToast(d.message);
+      document.getElementById('bank-preview-modal').style.display = 'none';
+      _bankTxns = [];
+    } catch (e) { showToast('网络错误：' + e.message, 'error'); }
   }
 
 </script>
