@@ -63,14 +63,21 @@ VALID_VAT_RATES = {
 # ── Request schemas ───────────────────────────────────────────────────────────
 
 class CreateProfileRequest(BaseModel):
-    company_name:               str     = Field(..., min_length=1, max_length=200)
-    company_type:               str     = Field(default=CompanyType.MICRO)
-    industry_code:              str     = Field(default="通用", max_length=50)
-    tax_payer_type:             str     = Field(default=TaxPayerType.SMALL_SCALE)
-    applicable_income_tax_rate: Decimal = Field(default=Decimal("0.2000"))
-    vat_rate:                   Decimal = Field(default=Decimal("0.0300"))
-    decision_threshold:         Decimal = Field(default=Decimal("5000.00"), gt=0)
-    accounting_standard:        str     = Field(default=AccountingStandard.SMALL_BIZ)
+    company_name:               str          = Field(..., min_length=1, max_length=200)
+    company_type:               str          = Field(default=CompanyType.MICRO)
+    industry_code:              str          = Field(default="通用", max_length=50)
+    tax_payer_type:             str          = Field(default=TaxPayerType.SMALL_SCALE)
+    applicable_income_tax_rate: Decimal      = Field(default=Decimal("0.2000"))
+    vat_rate:                   Decimal      = Field(default=Decimal("0.0300"))
+    decision_threshold:         Decimal      = Field(default=Decimal("5000.00"), gt=0)
+    accounting_standard:        str          = Field(default=AccountingStandard.SMALL_BIZ)
+    # S3: RAG precision-filter fields
+    province:                   str | None   = Field(default=None, max_length=50)
+    city:                       str | None   = Field(default=None, max_length=50)
+    is_hnte:                    int          = Field(default=0, ge=0, le=1)
+    rd_eligible:                int          = Field(default=0, ge=0, le=1)
+    employee_count:             int | None   = Field(default=None, gt=0)
+    annual_revenue_estimate:    Decimal | None = Field(default=None, gt=0)
 
     @field_validator("company_type")
     @classmethod
@@ -114,14 +121,21 @@ class CreateProfileRequest(BaseModel):
 
 
 class UpdateProfileRequest(BaseModel):
-    company_name:               str     | None = Field(default=None, min_length=1, max_length=200)
-    company_type:               str     | None = None
-    industry_code:              str     | None = Field(default=None, max_length=50)
-    tax_payer_type:             str     | None = None
-    applicable_income_tax_rate: Decimal | None = None
-    vat_rate:                   Decimal | None = None
-    decision_threshold:         Decimal | None = Field(default=None, gt=0)
-    accounting_standard:        str     | None = None
+    company_name:               str          | None = Field(default=None, min_length=1, max_length=200)
+    company_type:               str          | None = None
+    industry_code:              str          | None = Field(default=None, max_length=50)
+    tax_payer_type:             str          | None = None
+    applicable_income_tax_rate: Decimal      | None = None
+    vat_rate:                   Decimal      | None = None
+    decision_threshold:         Decimal      | None = Field(default=None, gt=0)
+    accounting_standard:        str          | None = None
+    # S3: RAG precision-filter fields
+    province:                   str          | None = Field(default=None, max_length=50)
+    city:                       str          | None = Field(default=None, max_length=50)
+    is_hnte:                    int          | None = Field(default=None, ge=0, le=1)
+    rd_eligible:                int          | None = Field(default=None, ge=0, le=1)
+    employee_count:             int          | None = Field(default=None, gt=0)
+    annual_revenue_estimate:    Decimal      | None = Field(default=None, gt=0)
 
 
 class RoutePreviewRequest(BaseModel):
@@ -142,6 +156,13 @@ def _profile_to_dict(p: EnterpriseProfile) -> dict:
         "vat_rate":                     float(p.vat_rate),
         "decision_threshold":           float(p.decision_threshold),
         "accounting_standard":          p.accounting_standard,
+        # S3: RAG precision-filter fields
+        "province":                     p.province,
+        "city":                         p.city,
+        "is_hnte":                      bool(p.is_hnte),
+        "rd_eligible":                  bool(p.rd_eligible),
+        "employee_count":               p.employee_count,
+        "annual_revenue_estimate":      float(p.annual_revenue_estimate) if p.annual_revenue_estimate else None,
         "is_active":                    bool(p.is_active),
         "created_at":                   str(p.created_at) if p.created_at else None,
         "updated_at":                   str(p.updated_at) if p.updated_at else None,
@@ -174,6 +195,12 @@ def create_profile(
         vat_rate                   = body.vat_rate,
         decision_threshold         = body.decision_threshold,
         accounting_standard        = body.accounting_standard,
+        province                   = body.province,
+        city                       = body.city,
+        is_hnte                    = body.is_hnte,
+        rd_eligible                = body.rd_eligible,
+        employee_count             = body.employee_count,
+        annual_revenue_estimate    = body.annual_revenue_estimate,
         is_active                  = 1,
     )
     db.add(profile)

@@ -48,6 +48,19 @@ CREATE TABLE IF NOT EXISTS enterprise_profile (
                                                          -- 老板决策触发阈值（元）
     accounting_standard         VARCHAR(20)     NOT NULL DEFAULT 'SMALL_BIZ',
                                                          -- SMALL_BIZ=小企业会计准则, GENERAL=企业会计准则
+    -- S3: RAG precision-filter fields
+    province                    VARCHAR(50)     NULL     DEFAULT NULL,
+                                                         -- 省份, e.g.'广东省', for RAG provincial policy filter
+    city                        VARCHAR(50)     NULL     DEFAULT NULL,
+                                                         -- 城市, e.g.'深圳市', for RAG city-level policy filter
+    is_hnte                     TINYINT(1)      NOT NULL DEFAULT 0,
+                                                         -- 是否高新技术企业: 1=是(15%税率+100%研发加计), 0=否
+    rd_eligible                 TINYINT(1)      NOT NULL DEFAULT 0,
+                                                         -- 是否具备研发加计扣除资格: 1=是, 0=否
+    employee_count              INT             NULL     DEFAULT NULL,
+                                                         -- 员工人数, 用于判断小微资格(≤300人)
+    annual_revenue_estimate     DECIMAL(18, 2)  NULL     DEFAULT NULL,
+                                                         -- 上年度营收估算(元), 广告费限额基数/小微资格判断
     is_active                   TINYINT(1)      NOT NULL DEFAULT 1,
                                                          -- 1=当前激活，系统同时只有一条激活记录
     created_at                  DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,

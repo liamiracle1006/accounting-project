@@ -4,26 +4,17 @@ AgentLedger — EnterpriseProfile model
 存储企业的税收画像与系统行为参数，是整个系统的参数中枢。
 所有税率计算、路由分发、模式判断均读取此表。
 
-company_type:
-  MICRO    — 小微企业 / 个体户：走老板决策卡片流程，适用小企业会计准则
-  STANDARD — 一般企业（50-100人级别）：走审批流程，适用企业会计准则
-
-tax_payer_type:
-  SMALL_SCALE — 小规模纳税人，增值税征收率 3%（部分业务 5%）
-  GENERAL     — 一般纳税人，按行业适用 6% / 9% / 13%
-
-applicable_income_tax_rate:
-  0.25 — 一般企业
-  0.20 — 小型微利企业（名义税率，实际执行优惠见税法）
-  0.15 — 高新技术企业 / 技术先进型服务企业
-
-decision_threshold:
-  金额超过此值 OR 命中敏感关键词 → 拦截进入老板决策流
-  默认 5000.00 元，可按企业体量调整
+S3 新增字段（用于 RAG 精准过滤）：
+  province        — 省份，如"广东省"，对应 RAG regional 切片过滤
+  city            — 城市，如"深圳市"，对应 RAG city-level 切片过滤
+  is_hnte         — 是否高新技术企业（影响税率和研发加计比例）
+  rd_eligible     — 是否具备研发加计扣除资格
+  employee_count  — 员工人数（判断小微资格）
+  annual_revenue_estimate — 上年度营收估算（判断小微/小规模资格、广告费限额基数）
 """
 from decimal import Decimal
 
-from sqlalchemy import String, Numeric, DateTime, func, SmallInteger
+from sqlalchemy import String, Numeric, DateTime, func, SmallInteger, Integer
 from sqlalchemy.orm import Mapped, mapped_column
 
 from database.connection import Base
@@ -58,7 +49,7 @@ class EnterpriseProfile(Base):
 
     industry_code: Mapped[str] = mapped_column(
         String(50), nullable=False, default="通用",
-        comment="行业代码：制造业/软件服务业/批发零售业/餐饮住宿业/建筑业/通用"
+        comment="行业代码：制造业/科技/软件服务业/批发零售业/餐饮住宿业/建筑业/通用"
     )
 
     tax_payer_type: Mapped[str] = mapped_column(
@@ -85,6 +76,40 @@ class EnterpriseProfile(Base):
         String(20), nullable=False, default=AccountingStandard.SMALL_BIZ,
         comment="SMALL_BIZ=小企业会计准则, GENERAL=企业会计准则"
     )
+
+    # ── S3 新增：RAG 精准过滤字段 ────────────────────────────────────────────
+
+    province: Mapped[str | None] = mapped_column(
+        String(50), nullable=True, default=None,
+        comment="省份，如'广东省'，用于 RAG 省级政策过滤"
+    )
+
+    city: Mapped[str | None] = mapped_column(
+        String(50), nullable=True, default=None,
+        comment="城市，如'深圳市'，用于 RAG 城市级政策过滤（前海/临港等园区政策）"
+    )
+
+    is_hnte: Mapped[int] = mapped_column(
+        SmallInteger, nullable=False, default=0,
+        comment="是否高新技术企业：1=是（适用15%税率+100%研发加计），0=否"
+    )
+
+    rd_eligible: Mapped[int] = mapped_column(
+        SmallInteger, nullable=False, default=0,
+        comment="是否具备研发加计扣除资格：1=是，0=否"
+    )
+
+    employee_count: Mapped[int | None] = mapped_column(
+        Integer, nullable=True, default=None,
+        comment="员工人数，用于判断小微企业资格（≤300人）"
+    )
+
+    annual_revenue_estimate: Mapped[Decimal | None] = mapped_column(
+        Numeric(18, 2), nullable=True, default=None,
+        comment="上年度营收估算（元），用于广告费限额基数、小微资格判断"
+    )
+
+    # ─────────────────────────────────────────────────────────────────────────
 
     is_active: Mapped[int] = mapped_column(
         SmallInteger, nullable=False, default=1,
