@@ -126,6 +126,11 @@ class DecisionService:
         decision.chosen_action_code = action_code
         decision.status             = DecisionStatus.DECIDED
         decision.decided_at         = datetime.utcnow()
+
+        # 审计日志：老板决策执行
+        from services.audit_guard import audit_boss_decision
+        audit_boss_decision(self._db, decision_id, choice_id)
+
         self._db.commit()
 
         logger.info(

@@ -246,4 +246,14 @@ class AccountingEngineService:
             "Voucher id=%s created: %d lines, amount=%s",
             header.voucher_id, len(lines_spec), ext.amount,
         )
+
+        # 审计日志：自动生成并入账的凭证
+        from services.audit_guard import write_audit_log
+        write_audit_log(
+            self._db, "voucher_header", header.voucher_id,
+            action      = "CREATE",
+            description = f"自动记账凭证生成并入账：{ext.memo}",
+            after_value = {"review_status": "POSTED", "amount": str(ext.amount)},
+            username    = "system_auto",
+        )
         return header

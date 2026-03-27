@@ -188,6 +188,11 @@ class PeriodClosingService:
         period.closed_by         = user_id
         period.closing_voucher_id = voucher.voucher_id
 
+        # 审计日志：期末结账
+        from services.audit_guard import audit_period_closed
+        period_str = f"{year}-{month:02d}"
+        audit_period_closed(self._db, period_str)
+
         self._db.commit()
 
         # 自动创建下一个期间

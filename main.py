@@ -1,5 +1,5 @@
 """
-AgentLedger V2.0 — Application Entry Point
+AgentLedger V3.0 — Application Entry Point
 """
 import logging
 from pathlib import Path
@@ -22,16 +22,20 @@ from api.audit_routes import router as audit_router
 from api.invoice_routes import router as invoice_router
 from api.ocr_routes import router as ocr_router
 from services.auth_service import get_current_user
+from services.audit_guard import register_voucher_guard
 
 logging.basicConfig(
     level=logging.DEBUG if APP_DEBUG else logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s — %(message)s",
 )
 
+# 注册 POSTED 凭证防篡改事件监听器（进程全局，只需一次）
+register_voucher_guard()
+
 app = FastAPI(
-    title="AgentLedger V2.0",
-    description="基于 LLM 的智能业财融合系统（小微 + 一般企业双模式）",
-    version="2.0.0",
+    title="AgentLedger V3.0",
+    description="基于 LLM 的智能业财融合系统 — Dual-Core Architecture",
+    version="3.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
 )
@@ -70,7 +74,7 @@ def index():
 
 @app.get("/health")
 def health_check():
-    return {"status": "ok", "version": "2.0.0"}
+    return {"status": "ok", "version": "3.0.0"}
 
 
 if __name__ == "__main__":
