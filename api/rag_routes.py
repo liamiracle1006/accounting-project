@@ -13,8 +13,11 @@ AgentLedger — RAG Knowledge Management API (S3-E)
 import logging
 from typing import Any
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
+
+from database.connection import get_db
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/rag", tags=["rag"])
@@ -54,6 +57,12 @@ class SearchRequest(BaseModel):
     city:          str   = Field(default="")
     ytd_profit:    float = Field(default=0.0, ge=0)
     top_k:         int   = Field(default=5, ge=1, le=20)
+
+
+class AskRequest(BaseModel):
+    question: str       = Field(..., min_length=1, description="自由问题，如：研发费加计扣除怎么用？")
+    history:  list[dict]= Field(default_factory=list, description="对话历史 [{role, content}]")
+    top_k:    int       = Field(default=5, ge=1, le=15)
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -188,6 +197,66 @@ def reload_knowledge() -> Any:
         raise HTTPException(status_code=500, detail=f"知识库重载失败: {exc}") from exc
     logger.info("Knowledge base reloaded via API: %s", stats)
     return {"status": "ok", **stats}
+
+
+@router.post("/ask")
+def ask_advisor(
+    body: AskRequest,
+    db:   Session = Depends(get_db),
+) -> Any:
+    """
+    AI 财税顾问自由问答。
+    - 先用 RAG 检索相关政策（Layer 1 硬过滤 + Layer 2 语义匹配）
+    - 将政策上下文 + 对话历史注入 LLM，用自然语言回答
+    - 返回 answer（纯文本）和 sources（引用的政策列表）
+    """
+    from models.enterprise_profile import EnterpriseProfile
+    from rag.retriever import TaxStrategyRetriever, RetrievalContext
+    from ai.llm_client import LLMClient, LLMClientError
+    from ai.advisor_prompts import build_advisor_context
+
+    # 读取激活企业档案（可选，无档案时退化为通用检索）
+    profile = db.query(EnterpriseProfile).filter(EnterpriseProfile.is_active == 1).first()
+
+    # RAG 检索
+    retriever = TaxStrategyRetriever()
+    ctx = RetrievalContext(
+        query_text    = body.question,
+        taxpayer_type = profile.tax_payer_type if profile else "ALL",
+        industry_code = profile.industry_code  if profile else "ALL",
+        province      = (profile.province or "") if profile else "",
+        city          = (profile.city     or "") if profile else "",
+        top_k         = body.top_k,
+    )
+    try:
+        hits = retriever.retrieve(ctx)
+    except Exception as exc:
+        logger.warning("RAG retrieval failed for advisor: %s", exc)
+        hits = []
+
+    rag_context = build_advisor_context(hits)
+
+    # LLM 回答
+    llm = LLMClient()
+    try:
+        answer = llm.answer_tax_question(body.question, rag_context, body.history)
+    except LLMClientError as exc:
+        raise HTTPException(status_code=503, detail=f"AI 服务暂时不可用: {exc}") from exc
+
+    sources = [
+        {
+            "strategy_id":   h.strategy_id,
+            "title":         h.title,
+            "source_doc":    h.source_doc,
+            "similarity":    h.similarity_score,
+            "optimal_timing": h.optimal_timing,
+        }
+        for h in hits
+    ]
+
+    logger.info("Advisor Q&A: question_len=%d hits=%d answer_len=%d",
+                len(body.question), len(hits), len(answer))
+    return {"answer": answer, "sources": sources}
 
 
 @router.post("/search")

@@ -13,6 +13,7 @@ from config.settings import LLM_API_KEY, LLM_BASE_URL, LLM_MODEL, LLM_TIMEOUT, L
 from ai.prompts import SYSTEM_PROMPT
 from ai.decision_prompts import DECISION_SYSTEM_PROMPT
 from ai.annual_plan_prompts import ANNUAL_PLAN_SYSTEM_PROMPT
+from ai.advisor_prompts import ADVISOR_SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 
@@ -159,3 +160,64 @@ class LLMClient:
 
         logger.debug("Annual plan LLM raw response: %s", json_text[:500])
         return json_text
+
+    def answer_tax_question(
+        self,
+        question:    str,
+        rag_context: str,
+        history:     list[dict],
+    ) -> str:
+        """
+        自由问答模式：基于 RAG 检索到的政策上下文，用自然语言回答企业税务问题。
+        输出纯文本（不强制 JSON），支持多轮对话历史。
+        history 格式：[{"role": "user"/"assistant", "content": "..."}]
+        """
+        messages: list[dict] = [{"role": "system", "content": ADVISOR_SYSTEM_PROMPT}]
+
+        # 最多保留最近 6 条历史（3轮对话）避免 token 超限
+        for msg in history[-6:]:
+            role = msg.get("role", "user")
+            if role in ("user", "assistant"):
+                messages.append({"role": role, "content": msg["content"]})
+
+        # 当前问题：将 RAG 上下文和问题合并为 user 消息
+        if rag_context:
+            user_content = f"{rag_context}\n\n---\n用户问题：{question}"
+        else:
+            user_content = question
+        messages.append({"role": "user", "content": user_content})
+
+        payload: dict = {
+            "model":       LLM_MODEL,
+            "max_tokens":  1500,
+            "temperature": 0.4,
+            # 纯文本输出，不使用 json_object
+            "messages": messages,
+        }
+
+        logger.debug("Calling LLM for advisor Q&A: model=%s", LLM_MODEL)
+
+        try:
+            with httpx.Client(timeout=LLM_TIMEOUT) as client:
+                response = client.post(self._url, headers=self._headers,
+                                       content=json.dumps(payload))
+        except httpx.TimeoutException as exc:
+            raise LLMClientError(f"Advisor LLM timeout after {LLM_TIMEOUT}s") from exc
+        except httpx.RequestError as exc:
+            raise LLMClientError(f"Advisor LLM network error: {exc}") from exc
+
+        if response.status_code != 200:
+            raise LLMClientError(
+                f"Advisor LLM returned HTTP {response.status_code}: {response.text[:300]}"
+            )
+
+        try:
+            body   = response.json()
+            answer = body["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, ValueError) as exc:
+            raise LLMClientError(
+                f"Unexpected advisor LLM response structure: {response.text[:300]}"
+            ) from exc
+
+        logger.debug("Advisor LLM answer length: %d chars", len(answer))
+        return answer
