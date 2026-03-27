@@ -53,6 +53,13 @@ INSERT INTO account_subject (subject_code, subject_name, subject_type, direction
 ('1702', '开发支出',           '资产', 'DEBIT'),
 ('1801', '长期待摊费用',       '资产', 'DEBIT'),
 ('1811', '递延所得税资产',     '资产', 'DEBIT'),
+('1901', '待处理财产损溢',     '资产', 'DEBIT'),
+-- 资产减值准备及清理
+('1131', '坏账准备',           '资产', 'CREDIT'),
+('1603', '固定资产清理',       '资产', 'DEBIT'),
+('1606', '固定资产减值准备',   '资产', 'CREDIT'),
+('1703', '累计摊销',           '资产', 'CREDIT'),
+('1704', '无形资产减值准备',   '资产', 'CREDIT'),
 -- 负债类：流动
 ('2001', '短期借款',           '负债', 'CREDIT'),
 ('2201', '应付票据',           '负债', 'CREDIT'),
@@ -63,6 +70,7 @@ INSERT INTO account_subject (subject_code, subject_name, subject_type, direction
 ('2231', '应付利息',           '负债', 'CREDIT'),
 ('2232', '应付股利',           '负债', 'CREDIT'),
 ('2241', '其他应付款',         '负债', 'CREDIT'),
+('2205', '合同负债',           '负债', 'CREDIT'),
 -- 负债类：非流动
 ('2401', '递延收益',           '负债', 'CREDIT'),
 ('2441', '递延所得税负债',     '负债', 'CREDIT'),
@@ -78,6 +86,7 @@ INSERT INTO account_subject (subject_code, subject_name, subject_type, direction
 ('4102', '一般风险准备',       '权益', 'CREDIT'),
 ('4103', '本年利润',           '权益', 'CREDIT'),
 ('4104', '利润分配',           '权益', 'CREDIT'),
+('4005', '其他综合收益',       '权益', 'CREDIT'),
 -- 成本类
 ('6401', '主营业务成本',       '费用', 'DEBIT'),
 ('6402', '其他业务成本',       '费用', 'DEBIT'),
@@ -90,6 +99,8 @@ INSERT INTO account_subject (subject_code, subject_name, subject_type, direction
 ('6701', '资产减值损失',       '费用', 'DEBIT'),
 ('6711', '营业外支出',         '费用', 'DEBIT'),
 ('6801', '所得税费用',         '费用', 'DEBIT'),
+('6120', '信用减值损失',       '费用', 'DEBIT'),
+('6115', '资产处置收益',       '收入', 'CREDIT'),
 -- 收入/利得类
 ('6001', '主营业务收入',       '收入', 'CREDIT'),
 ('6051', '其他业务收入',       '收入', 'CREDIT'),

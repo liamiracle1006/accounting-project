@@ -57,14 +57,24 @@ PAYMENT_METHOD_CREDIT_MAP: dict[str, str] = {
 
 # ── 费用类型关键词 → 借方科目代码 ────────────────────────────────────────────
 EXPENSE_KEYWORD_DEBIT_MAP: list[tuple[list[str], str]] = [
-    (["招待", "餐", "宴", "娱乐", "接待"],        "6601"),  # 销售费用
-    (["差旅", "出差", "交通", "住宿", "机票", "高铁"], "6602"),  # 管理费用
-    (["办公", "文具", "打印", "耗材", "快递"],     "6602"),  # 管理费用
-    (["工资", "薪资", "薪酬", "奖金", "绩效"],     "6602"),  # 管理费用
-    (["广告", "推广", "营销", "促销"],             "6601"),  # 销售费用
-    (["货款", "采购", "原材料", "材料"],           "1403"),  # 原材料
-    (["水电", "物业", "租金", "房租"],             "6602"),  # 管理费用
+    (["招待", "餐", "宴", "娱乐", "接待"],              "6601"),  # 销售费用
+    (["差旅", "出差", "交通", "住宿", "机票", "高铁"],   "6602"),  # 管理费用
+    (["办公", "文具", "打印", "耗材", "快递"],           "6602"),  # 管理费用
+    (["工资", "薪资", "薪酬", "奖金", "绩效", "社保"],   "6602"),  # 管理费用（贷方走2211）
+    (["广告", "推广", "营销", "促销"],                   "6601"),  # 销售费用
+    (["货款", "采购", "原材料", "材料"],                 "1403"),  # 原材料
+    (["水电", "物业", "租金", "房租", "物管"],           "6602"),  # 管理费用
+    (["研发", "开发", "技术服务", "软件"],               "6604"),  # 研发费用
+    (["利息", "手续费", "银行费", "汇兑"],               "6603"),  # 财务费用
+    (["运费", "物流", "仓储", "配送"],                   "6601"),  # 销售费用
+    (["维修", "维护", "保养", "修理"],                   "6602"),  # 管理费用
+    (["保险", "车险", "意外险"],                         "6602"),  # 管理费用
+    (["税", "附加税", "印花税", "房产税"],               "6403"),  # 税金及附加
+    (["折旧", "摊销"],                                   "6602"),  # 管理费用
 ]
+
+# 薪酬类关键词（贷方走 2211 应付职工薪酬，而非资金科目）
+PAYROLL_KEYWORDS: list[str] = ["工资", "薪资", "薪酬", "奖金", "绩效", "社保", "公积金"]
 
 # ── 收入类场景关键词（特殊：借资产 贷收入）───────────────────────────────────
 INCOME_KEYWORDS: list[str] = ["收款", "销售", "回款", "到账", "收到"]
@@ -103,9 +113,11 @@ class AccountingEngineService:
         费用类分录：
           借 费用科目          金额
           贷 支付科目          金额
+        特殊：薪酬类分录贷方走 2211 应付职工薪酬
         """
         debit_code  = self._map_expense_to_debit(ext.expense_type)
-        credit_code = self._map_payment_to_credit(ext.payment_method)
+        is_payroll  = self._is_payroll(ext.expense_type)
+        credit_code = "2211" if is_payroll else self._map_payment_to_credit(ext.payment_method)
 
         entity_id = self._resolve_entity_id(ext.payer_name or ext.counterparty)
 
@@ -195,6 +207,10 @@ class AccountingEngineService:
     @staticmethod
     def _is_income(expense_type: str) -> bool:
         return any(kw in expense_type for kw in INCOME_KEYWORDS)
+
+    @staticmethod
+    def _is_payroll(expense_type: str) -> bool:
+        return any(kw in expense_type for kw in PAYROLL_KEYWORDS)
 
     # ── Persistence (inside caller's transaction) ────────────────────────────
 
