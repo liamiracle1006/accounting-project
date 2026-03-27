@@ -24,6 +24,7 @@ from models.voucher_line import VoucherLine
 from ai.llm_client import LLMClient, LLMClientError
 from ai.annual_plan_prompts import build_annual_plan_prompt
 from models.asset_register import AssetRegister, AssetStatus
+from rag.retriever import TaxStrategyRetriever
 
 logger = logging.getLogger(__name__)
 
@@ -34,8 +35,9 @@ class TaxAnnualPlanServiceError(Exception):
 
 class TaxAnnualPlanService:
     def __init__(self, db: Session) -> None:
-        self._db  = db
-        self._llm = LLMClient()
+        self._db        = db
+        self._llm       = LLMClient()
+        self._retriever = TaxStrategyRetriever()
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
@@ -64,19 +66,40 @@ class TaxAnnualPlanService:
         asset_count              = self._count_assets()
         current_month            = datetime.now().month if datetime.now().year == year else 12
 
+        # RAG 批量检索：按季度分组的适用政策
+        rag_hits_by_quarter: dict = {}
+        try:
+            rag_hits_by_quarter = self._retriever.batch_retrieve_for_annual_plan(
+                taxpayer_type = profile.tax_payer_type,
+                industry_code = profile.industry_code,
+                province      = profile.province or "",
+                city          = profile.city     or "",
+                ytd_profit    = float(ytd_profit),
+                query_date    = str(datetime.now().date()),
+            )
+            total_hits = sum(len(v) for v in rag_hits_by_quarter.values())
+            logger.info("RAG annual plan: retrieved %d total policy hits", total_hits)
+        except Exception as exc:
+            logger.warning("RAG retrieval failed for annual plan, continuing without: %s", exc)
+
         # 构造 LLM 提示词
         user_prompt = build_annual_plan_prompt(
-            year            = year,
-            company_name    = profile.company_name,
-            company_type    = profile.company_type,
-            industry_code   = profile.industry_code,
-            tax_payer_type  = profile.tax_payer_type,
-            income_tax_rate = float(profile.applicable_income_tax_rate),
-            vat_rate        = float(profile.vat_rate),
-            ytd_profit      = float(ytd_profit),
-            ytd_revenue     = float(ytd_revenue),
-            current_month   = current_month,
-            asset_count     = asset_count,
+            year                 = year,
+            company_name         = profile.company_name,
+            company_type         = profile.company_type,
+            industry_code        = profile.industry_code,
+            tax_payer_type       = profile.tax_payer_type,
+            income_tax_rate      = float(profile.applicable_income_tax_rate),
+            vat_rate             = float(profile.vat_rate),
+            ytd_profit           = float(ytd_profit),
+            ytd_revenue          = float(ytd_revenue),
+            current_month        = current_month,
+            asset_count          = asset_count,
+            is_hnte              = bool(profile.is_hnte),
+            rd_eligible          = bool(profile.rd_eligible),
+            province             = profile.province or "",
+            city                 = profile.city     or "",
+            rag_hits_by_quarter  = rag_hits_by_quarter,
         )
 
         # 调用 LLM
