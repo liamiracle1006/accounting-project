@@ -106,6 +106,22 @@ def run(subdir: str | None = None, dry_run: bool = False) -> None:
     print("Done. The retriever will use updated knowledge immediately.")
 
 
+def load_all(dry_run: bool = False, subdir: str | None = None) -> dict:
+    """
+    Programmatic entry point for the API reload endpoint.
+    Returns a stats dict: { slices_parsed, slices_in_db }.
+    """
+    slices = load_json_files(subdir)
+    if not slices or dry_run:
+        return {"slices_parsed": len(slices), "slices_in_db": 0, "dry_run": dry_run}
+
+    embedder = Embedder()
+    vectors  = embedder.embed([s.embed_text() for s in slices])
+    store    = ChromaStore()
+    store.upsert(slices, vectors)
+    return {"slices_parsed": len(slices), "slices_in_db": store.count(), "dry_run": False}
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Load tax strategy slices into ChromaDB")
     parser.add_argument("--dir",     default=None, help="Subdirectory to load (national/industry/regional)")
