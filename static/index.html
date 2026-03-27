@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AgentLedger V2.0</title>
+  <title>AgentLedger V3.0</title>
   <style>
     :root {
       --bg: #f4f6f9;
@@ -398,6 +398,49 @@
       .grid { grid-template-columns: 1fr; }
       .summary-grid { grid-template-columns: 1fr 1fr; }
     }
+
+    /* ── S3: Decision Card Rich Format ── */
+    .opt-analysis { font-size:13px;color:#374151;margin:8px 0 6px;line-height:1.6; }
+    .opt-calc { font-family:monospace;font-size:12px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:5px;padding:6px 10px;margin:6px 0;color:#0369a1; }
+    .opt-steps { margin:6px 0 8px;padding-left:0;list-style:none; }
+    .opt-steps li { font-size:12px;color:#374151;padding:3px 0 3px 18px;position:relative; }
+    .opt-steps li::before { content:counter(step-counter);counter-increment:step-counter;position:absolute;left:0;font-weight:700;color:var(--primary);font-size:11px; }
+    .opt-steps { counter-reset:step-counter; }
+    .risk-badge { display:inline-block;font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;letter-spacing:.3px; }
+    .risk-LOW  { background:#dcfce7;color:#16a34a; }
+    .risk-MEDIUM { background:#fef9c3;color:#b45309; }
+    .risk-HIGH { background:#fee2e2;color:#dc2626; }
+    .policy-refs { margin-top:8px;font-size:11px;color:var(--text-muted); }
+    .policy-refs span { background:#f1f5f9;border:1px solid #e2e8f0;border-radius:4px;padding:1px 6px;margin-right:4px;display:inline-block;margin-bottom:3px; }
+
+    /* ── S3: Annual Plan calculation basis ── */
+    .action-calc { font-family:monospace;font-size:11px;color:#0369a1;background:#f0f9ff;border-radius:4px;padding:3px 7px;margin-top:4px;display:block; }
+    .action-source { font-size:10px;color:var(--text-muted);margin-top:3px; }
+
+    /* ── S3: AI 顾问 Chat ── */
+    #page-advisor { display:none; }
+    #page-advisor.active { display:block; }
+    .chat-wrap { display:flex;flex-direction:column;height:calc(100vh - 130px);min-height:500px; }
+    .chat-messages { flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:14px; }
+    .chat-bubble { max-width:78%;border-radius:12px;padding:12px 16px;font-size:13px;line-height:1.7; }
+    .bubble-user { align-self:flex-end;background:var(--primary);color:#fff;border-bottom-right-radius:3px; }
+    .bubble-ai { align-self:flex-start;background:#fff;border:1px solid var(--border);color:var(--text);border-bottom-left-radius:3px;white-space:pre-wrap; }
+    .chat-sources { font-size:11px;color:var(--text-muted);margin-top:8px;padding-top:6px;border-top:1px solid var(--border); }
+    .chat-source-tag { background:#f1f5f9;border:1px solid #e2e8f0;border-radius:4px;padding:1px 6px;margin-right:4px;display:inline-block;margin-bottom:3px;color:var(--text-muted); }
+    .chat-input-wrap { border-top:1px solid var(--border);padding:14px 20px;display:flex;gap:10px;align-items:flex-end;background:#fff; }
+    .chat-input-wrap textarea { flex:1;min-height:44px;max-height:120px;resize:none;border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:14px;font-family:inherit; }
+    .chat-input-wrap textarea:focus { outline:none;border-color:var(--primary); }
+    .bubble-thinking { align-self:flex-start;background:#f8fafc;border:1px solid var(--border);border-radius:12px;padding:10px 14px;font-size:12px;color:var(--text-muted);font-style:italic; }
+
+    /* ── S3: RAG 知识库管理页 ── */
+    #page-ragmgmt { display:none; }
+    #page-ragmgmt.active { display:block; }
+    .rag-stat-grid { display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px; }
+    .search-hit { background:#fff;border:1px solid var(--border);border-radius:6px;padding:12px 14px;margin-bottom:8px; }
+    .search-hit-title { font-weight:600;font-size:13px;margin-bottom:4px; }
+    .search-hit-sim { font-size:11px;color:var(--primary);font-weight:700; }
+    .search-hit-meta { font-size:11px;color:var(--text-muted);margin-top:6px; }
+    .search-hit-content { font-size:12px;color:#374151;margin-top:6px;line-height:1.5; }
   </style>
 </head>
 <body>
@@ -407,7 +450,7 @@
   <div style="background:#fff;border-radius:12px;padding:40px 36px;width:360px;box-shadow:0 24px 48px rgba(0,0,0,0.3)">
     <div style="text-align:center;margin-bottom:28px">
       <div style="font-size:28px;font-weight:800;color:var(--primary);letter-spacing:-1px">AgentLedger</div>
-      <div style="font-size:13px;color:var(--text-muted);margin-top:4px">智能业财系统 V2.0</div>
+      <div style="font-size:13px;color:var(--text-muted);margin-top:4px">智能业财系统 V3.0</div>
     </div>
     <div style="margin-bottom:14px">
       <label style="font-size:12px;font-weight:600;color:var(--text);display:block;margin-bottom:4px">用户名</label>
@@ -433,7 +476,7 @@
 </div>
 
 <header>
-  <div class="logo">AgentLedger <span>V2.0 · 智能业财系统</span></div>
+  <div class="logo">AgentLedger <span>V3.0 · 双核智能业财</span></div>
   <nav id="mainNav">
     <a href="#" class="active" data-page="dashboard" onclick="navTo('dashboard',this);return false;">仪表盘</a>
     <a href="#" data-page="records"  onclick="navTo('records',this);return false;">流水记录</a>
@@ -446,6 +489,8 @@
     <a href="#" data-page="reports"  onclick="navTo('reports',this);return false;">财务报表</a>
     <a href="#" data-page="invoices" onclick="navTo('invoices',this);return false;" class="finance-only">发票台账</a>
     <a href="#" data-page="auditlog" onclick="navTo('auditlog',this);return false;" class="finance-only">审计日志</a>
+    <a href="#" data-page="advisor"  onclick="navTo('advisor',this);return false;">AI 顾问</a>
+    <a href="#" data-page="ragmgmt" onclick="navTo('ragmgmt',this);return false;" class="finance-only">知识库</a>
     <a href="#" data-page="settings" onclick="navTo('settings',this);return false;">企业设置</a>
     <a href="/docs" target="_blank">API 文档</a>
   </nav>
@@ -925,6 +970,116 @@
   </div>
 </div>
 
+<!-- ══ AI 财税顾问页 ══ -->
+<div id="page-advisor" class="page">
+  <div class="container" style="max-width:860px;padding-bottom:0">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div>
+        <h2 style="font-size:16px;font-weight:700">AI 财税顾问</h2>
+        <p style="font-size:12px;color:var(--text-muted);margin-top:2px">基于知识库实时检索 · 支持多轮对话 · 结合企业画像精准回答</p>
+      </div>
+      <button class="btn btn-outline" onclick="clearAdvisorChat()">清空对话</button>
+    </div>
+    <div class="card chat-wrap">
+      <div class="chat-messages" id="advisor-messages">
+        <div class="chat-bubble bubble-ai">
+          您好！我是 AgentLedger AI 财税顾问，基于中国现行税收政策知识库为您提供专业建议。<br><br>
+          您可以直接问我，例如：<br>
+          · 研发费用加计扣除怎么申报？<br>
+          · 我们是一般纳税人，广告费超了15%限额怎么处理？<br>
+          · 固定资产500万以下能一次性扣除吗？<br><br>
+          系统会先从知识库检索相关政策，再结合您的企业画像给出针对性建议。
+        </div>
+      </div>
+      <div class="chat-input-wrap">
+        <textarea id="advisor-input" placeholder="请输入您的财税问题…（Ctrl+Enter 发送）" rows="2"
+          onkeydown="if(event.ctrlKey&&event.key==='Enter'){event.preventDefault();sendAdvisorQuestion();}"></textarea>
+        <button class="btn btn-primary" id="advisor-send-btn" onclick="sendAdvisorQuestion()">发送</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ RAG 知识库管理页 ══ -->
+<div id="page-ragmgmt" class="page">
+  <div class="container">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <div>
+        <h2 style="font-size:16px;font-weight:700">税收政策知识库</h2>
+        <p style="font-size:12px;color:var(--text-muted);margin-top:2px">RAG 向量知识库管理 · 策略切片查询与检索测试</p>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-outline" onclick="loadRagStats()">刷新统计</button>
+        <button class="btn btn-primary" id="btn-rag-reload" onclick="reloadKnowledge()">重载知识库</button>
+      </div>
+    </div>
+
+    <!-- 统计卡片 -->
+    <div class="rag-stat-grid">
+      <div class="card" style="padding:14px 16px">
+        <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px">策略切片总数</div>
+        <div id="rag-slice-count" style="font-size:28px;font-weight:700;color:var(--primary);margin-top:4px">--</div>
+      </div>
+      <div class="card" style="padding:14px 16px">
+        <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px">知识库集合</div>
+        <div id="rag-collection" style="font-size:14px;font-weight:600;margin-top:8px;color:var(--text)">--</div>
+      </div>
+      <div class="card" style="padding:14px 16px">
+        <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.4px">向量存储路径</div>
+        <div id="rag-path" style="font-size:12px;font-family:monospace;margin-top:8px;color:var(--text-muted);word-break:break-all">--</div>
+      </div>
+    </div>
+
+    <!-- 语义检索测试 -->
+    <div class="card" style="margin-bottom:16px">
+      <div class="card-header"><span>🔍</span><span class="card-title">语义检索测试</span></div>
+      <div class="card-body">
+        <div style="display:grid;grid-template-columns:1fr 130px 130px 80px auto;gap:8px;align-items:flex-end;margin-bottom:14px">
+          <div>
+            <label class="field-label">检索问题</label>
+            <input id="rag-search-q" type="text" class="field-input" placeholder="如：研发费用加计扣除">
+          </div>
+          <div>
+            <label class="field-label">纳税人</label>
+            <select id="rag-search-tp" class="field-input">
+              <option value="ALL">全部</option>
+              <option value="SMALL_SCALE">小规模</option>
+              <option value="GENERAL">一般纳税人</option>
+            </select>
+          </div>
+          <div>
+            <label class="field-label">行业</label>
+            <select id="rag-search-ind" class="field-input">
+              <option value="ALL">全部</option>
+              <option value="制造业">制造业</option>
+              <option value="软件服务业">软件服务业</option>
+              <option value="批发零售业">批发零售业</option>
+              <option value="餐饮住宿业">餐饮住宿业</option>
+            </select>
+          </div>
+          <div>
+            <label class="field-label">数量</label>
+            <input id="rag-search-k" type="number" class="field-input" value="5" min="1" max="15">
+          </div>
+          <button class="btn btn-outline" onclick="doRagSearch()" style="margin-bottom:1px">检索</button>
+        </div>
+        <div id="rag-search-results"></div>
+      </div>
+    </div>
+
+    <!-- 切片 ID 列表 -->
+    <div class="card">
+      <div class="card-header">
+        <span>📑</span><span class="card-title">已载入切片</span>
+        <button class="btn btn-outline" style="margin-left:auto;font-size:12px" onclick="loadSliceIds()">加载列表</button>
+      </div>
+      <div class="card-body" id="rag-slice-list" style="max-height:300px;overflow-y:auto">
+        <p style="color:var(--text-muted);font-size:13px">点击「加载列表」查看所有切片 ID</p>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ══ 发票台账页 ══ -->
 <div id="page-invoices" class="page">
   <div class="container">
@@ -1172,6 +1327,43 @@
           </div>
         </div>
 
+        </div><!-- /grid -->
+
+        <!-- S3: RAG 精准过滤字段 -->
+        <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+          <div style="font-size:12px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px">AI 顾问精准过滤（可选）</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+            <div>
+              <label class="field-label">省份</label>
+              <input id="s-province" type="text" class="field-input" placeholder="如：广东省">
+            </div>
+            <div>
+              <label class="field-label">城市</label>
+              <input id="s-city" type="text" class="field-input" placeholder="如：深圳市">
+            </div>
+            <div>
+              <label class="field-label">员工人数</label>
+              <input id="s-employee-count" type="number" class="field-input" min="1" placeholder="如：50（≤300视为小微）">
+            </div>
+            <div>
+              <label class="field-label">上年营收估算（元）</label>
+              <input id="s-revenue-estimate" type="number" class="field-input" min="0" placeholder="如：5000000">
+            </div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+                <input type="checkbox" id="s-is-hnte" style="width:15px;height:15px">
+                高新技术企业（HNTE）
+              </label>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+                <input type="checkbox" id="s-rd-eligible">
+                具备研发加计扣除资格
+              </label>
+            </div>
+          </div>
+        </div>
+
         <div style="margin-top:20px;display:flex;gap:10px">
           <button class="btn btn-primary" onclick="saveSettings()" id="save-settings-btn">保存设置</button>
           <button class="btn btn-outline" onclick="loadSettings()">重置</button>
@@ -1373,6 +1565,7 @@
     if (page === 'settings')  loadSettings();
     if (page === 'invoices')  loadInvoices();
     if (page === 'auditlog')  loadAuditLogs();
+    if (page === 'ragmgmt')   loadRagStats();
   }
 
   // ── 仪表盘 ──
@@ -2182,28 +2375,54 @@
           <div class="snapshot-label">当前现金余额</div>
           <div class="snapshot-value" style="color:#2b4acb">${snap.current_cash!=null ? '¥'+fmt(snap.current_cash) : '--'}</div>
         </div>
-        <div style="margin-left:auto;font-size:12px;color:var(--text-muted);align-self:center;max-width:240px;line-height:1.5">${card.tax_analysis || ''}</div>
+        <div style="margin-left:auto;font-size:12px;color:var(--text-muted);align-self:center;max-width:280px;line-height:1.5">${escHtml(card.tax_analysis || '')}</div>
       </div>`;
 
     const optionsHtml = options.map(opt => {
       const isRec    = opt.id === card.recommendation;
       const isNotRec = notRec.includes(opt.id);
+      const riskLevel = opt.risk_level || 'LOW';
+      const riskLabel = {LOW:'低风险', MEDIUM:'中风险', HIGH:'高风险'}[riskLevel] || riskLevel;
+
+      // Steps list
+      const stepsArr = Array.isArray(opt.steps) ? opt.steps : [];
+      const stepsHtml = stepsArr.length
+        ? `<ol class="opt-steps">${stepsArr.map(s=>`<li>${escHtml(s)}</li>`).join('')}</ol>`
+        : '';
+
+      // Policy references
+      const refs = Array.isArray(opt.policy_references || card.policy_references)
+        ? (opt.policy_references || [])
+        : [];
+      const refsHtml = refs.length
+        ? `<div class="policy-refs">📄 ${refs.map(r=>`<span>${escHtml(r)}</span>`).join('')}</div>`
+        : '';
+
       return `
         <div class="option-card ${isRec?'recommended':''} ${isNotRec?'not-recommended':''}">
           ${isRec ? '<div class="rec-badge">AI 推荐</div>' : ''}
-          <div class="opt-title">${escHtml(opt.label)} · ${escHtml(opt.title)}</div>
-          <div class="opt-text">${escHtml(opt.plain_text)}</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
+            <div class="opt-title" style="margin:0">${escHtml(opt.label)} · ${escHtml(opt.title)}</div>
+            <span class="risk-badge risk-${riskLevel}">${riskLabel}</span>
+          </div>
+          <div class="opt-analysis">${escHtml(opt.analysis || opt.plain_text || '')}</div>
+          ${opt.tax_calculation ? `<div class="opt-calc">🔢 ${escHtml(opt.tax_calculation)}</div>` : ''}
+          ${stepsHtml}
           ${opt.savings_this_year ? `<div class="opt-savings">今年省税 ¥${fmt(opt.savings_this_year)}</div>` : ''}
           ${opt.savings_total && opt.savings_total !== opt.savings_this_year ? `<div style="font-size:11px;color:var(--text-muted)">合计省税 ¥${fmt(opt.savings_total)}</div>` : ''}
-          <div class="opt-risk">风险：${escHtml(opt.risk || '无')}</div>
+          ${opt.risk_detail ? `<div class="opt-risk">⚠️ ${escHtml(opt.risk_detail)}</div>` : (opt.risk ? `<div class="opt-risk">风险：${escHtml(opt.risk)}</div>` : '')}
+          ${refsHtml}
           <button class="opt-btn" onclick="submitDecisionChoice(${card.decision_id}, '${opt.id}', '${escHtml(opt.title)}')">
             选择此方案
           </button>
         </div>`;
     }).join('');
 
+    const refs = Array.isArray(card.policy_references) && card.policy_references.length
+      ? `<div style="padding:8px 20px;font-size:11px;color:var(--text-muted)">📄 本次引用政策：${card.policy_references.map(r=>`<span style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:4px;padding:1px 6px;margin-right:4px">${escHtml(r)}</span>`).join('')}</div>`
+      : '';
     const recReason = card.recommendation_reason
-      ? `<div style="padding:10px 20px 14px;font-size:12px;color:var(--text-muted)">💡 ${escHtml(card.recommendation_reason)}</div>`
+      ? `<div style="padding:10px 20px 6px;font-size:12px;color:var(--text-muted)">💡 ${escHtml(card.recommendation_reason)}</div>`
       : '';
     const disclaimer = card.disclaimer
       ? `<div style="padding:8px 20px;font-size:11px;color:var(--text-muted);border-top:1px solid var(--border)">${escHtml(card.disclaimer)}</div>`
@@ -2211,9 +2430,8 @@
 
     document.getElementById('decisionModalBody').innerHTML =
       snapshotHtml +
-      (card.tax_analysis ? '' : '') +
       `<div class="option-grid">${optionsHtml}</div>` +
-      recReason + disclaimer;
+      refs + recReason + disclaimer;
   }
 
   async function submitDecisionChoice(decisionId, choiceId, choiceTitle) {
@@ -2545,6 +2763,13 @@
       document.getElementById('s-income-tax').value    = d.applicable_income_tax_rate.toFixed(2);
       document.getElementById('s-vat').value            = d.vat_rate.toFixed(2);
       document.getElementById('s-threshold').value     = d.decision_threshold;
+      // S3: RAG precision-filter fields
+      document.getElementById('s-province').value          = d.province || '';
+      document.getElementById('s-city').value              = d.city || '';
+      document.getElementById('s-employee-count').value    = d.employee_count || '';
+      document.getElementById('s-revenue-estimate').value  = d.annual_revenue_estimate || '';
+      document.getElementById('s-is-hnte').checked         = !!d.is_hnte;
+      document.getElementById('s-rd-eligible').checked     = !!d.rd_eligible;
     } catch (err) { showToast('设置加载失败', 'error'); }
     loadThresholdRecommendation();
     if (_authUser && _authUser.role === 'BOSS') {
@@ -2583,6 +2808,8 @@
     const spinner = document.getElementById('settings-spinner');
     btn.disabled = true; spinner.style.display = 'flex';
 
+    const empVal = document.getElementById('s-employee-count').value;
+    const revVal = document.getElementById('s-revenue-estimate').value;
     const body = {
       company_name: name,
       company_type: document.getElementById('s-company-type').value,
@@ -2592,6 +2819,13 @@
       applicable_income_tax_rate: parseFloat(document.getElementById('s-income-tax').value),
       vat_rate: parseFloat(document.getElementById('s-vat').value),
       decision_threshold: parseFloat(document.getElementById('s-threshold').value),
+      // S3: RAG precision-filter fields
+      province:               document.getElementById('s-province').value.trim() || null,
+      city:                   document.getElementById('s-city').value.trim() || null,
+      is_hnte:                document.getElementById('s-is-hnte').checked ? 1 : 0,
+      rd_eligible:            document.getElementById('s-rd-eligible').checked ? 1 : 0,
+      employee_count:         empVal ? parseInt(empVal) : null,
+      annual_revenue_estimate: revVal ? parseFloat(revVal) : null,
     };
 
     try {
@@ -2724,10 +2958,12 @@
             <span style="margin-left:auto;font-size:10px;color:${priorityColor[a.priority]||'#6b7280'};font-weight:600">${a.priority||''}</span>
           </div>
           <p style="font-size:12px;color:#374151;margin-bottom:4px">${a.detail||''}</p>
-          <div style="display:flex;gap:12px;font-size:11px;color:var(--text-muted)">
+          ${a.calculation_basis ? `<span class="action-calc">🔢 ${escHtml(a.calculation_basis)}</span>` : ''}
+          <div style="display:flex;gap:12px;font-size:11px;color:var(--text-muted);margin-top:5px;flex-wrap:wrap">
             ${a.deadline ? `<span>⏰ ${a.deadline}</span>` : ''}
             ${a.potential_saving ? `<span style="color:#16a34a;font-weight:600">节税 ¥${a.potential_saving.toLocaleString()}</span>` : ''}
             ${a.trigger_condition ? `<span>📌 ${a.trigger_condition}</span>` : ''}
+            ${a.source_doc ? `<span class="action-source">📄 ${escHtml(a.source_doc)}</span>` : ''}
           </div>
         </div>`).join('');
 
@@ -3213,6 +3449,203 @@
       document.getElementById('bank-preview-modal').style.display = 'none';
       _bankTxns = [];
     } catch (e) { showToast('网络错误：' + e.message, 'error'); }
+  }
+
+  // ══════════════════════════════════════════════════════════════════
+  // S3: AI 财税顾问对话
+  // ══════════════════════════════════════════════════════════════════
+
+  let _advisorHistory = [];   // [{role, content}] — 多轮对话历史
+
+  function clearAdvisorChat() {
+    _advisorHistory = [];
+    const msgs = document.getElementById('advisor-messages');
+    msgs.innerHTML = `<div class="chat-bubble bubble-ai">
+      对话已清空。请继续提问！</div>`;
+  }
+
+  function _appendChatBubble(role, text, sources) {
+    const msgs = document.getElementById('advisor-messages');
+    const div  = document.createElement('div');
+    div.className = `chat-bubble bubble-${role === 'user' ? 'user' : 'ai'}`;
+
+    if (role === 'user') {
+      div.textContent = text;
+    } else {
+      // AI 回复：保留换行，转义 HTML
+      div.textContent = text;
+
+      // 来源展示
+      if (sources && sources.length) {
+        const srcDiv = document.createElement('div');
+        srcDiv.className = 'chat-sources';
+        srcDiv.innerHTML = '📄 参考政策：' +
+          sources.map(s => `<span class="chat-source-tag" title="${escHtml(s.title||'')} · 相关度 ${(s.similarity*100).toFixed(0)}%">${escHtml(s.source_doc || s.strategy_id)}</span>`).join('');
+        div.appendChild(srcDiv);
+      }
+    }
+
+    msgs.appendChild(div);
+    msgs.scrollTop = msgs.scrollHeight;
+    return div;
+  }
+
+  function _appendThinking() {
+    const msgs = document.getElementById('advisor-messages');
+    const div  = document.createElement('div');
+    div.className = 'bubble-thinking';
+    div.id = 'advisor-thinking';
+    div.textContent = 'AI 正在检索政策并分析中…';
+    msgs.appendChild(div);
+    msgs.scrollTop = msgs.scrollHeight;
+  }
+
+  function _removeThinking() {
+    const el = document.getElementById('advisor-thinking');
+    if (el) el.remove();
+  }
+
+  async function sendAdvisorQuestion() {
+    const input = document.getElementById('advisor-input');
+    const q     = input.value.trim();
+    if (!q) return;
+
+    const btn = document.getElementById('advisor-send-btn');
+    btn.disabled = true;
+    input.value  = '';
+    input.style.height = '';
+
+    // 显示用户气泡
+    _appendChatBubble('user', q);
+    _appendThinking();
+
+    // 加入历史
+    _advisorHistory.push({ role: 'user', content: q });
+
+    try {
+      const res = await fetch(`${API}/api/rag/ask`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: q, history: _advisorHistory.slice(-6), top_k: 5 }),
+      });
+      _removeThinking();
+      if (!res.ok) {
+        const e = await res.json();
+        _appendChatBubble('assistant', '❌ ' + (e.detail || '请求失败'));
+        return;
+      }
+      const d = await res.json();
+      _appendChatBubble('assistant', d.answer, d.sources);
+      // 将 AI 回复加入历史
+      _advisorHistory.push({ role: 'assistant', content: d.answer });
+      // 只保留最近 10 条（5轮）
+      if (_advisorHistory.length > 10) _advisorHistory = _advisorHistory.slice(-10);
+    } catch (err) {
+      _removeThinking();
+      _appendChatBubble('assistant', '❌ 网络错误：' + err.message);
+    } finally {
+      btn.disabled = false;
+      input.focus();
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════
+  // S3: RAG 知识库管理
+  // ══════════════════════════════════════════════════════════════════
+
+  async function loadRagStats() {
+    try {
+      const res = await fetch(`${API}/api/rag/stats`);
+      if (!res.ok) return;
+      const d = await res.json();
+      document.getElementById('rag-slice-count').textContent   = d.total_slices ?? '--';
+      document.getElementById('rag-collection').textContent    = d.collection_name || '--';
+      document.getElementById('rag-path').textContent          = d.chroma_path || '--';
+    } catch (_) {}
+  }
+
+  async function loadSliceIds() {
+    const el = document.getElementById('rag-slice-list');
+    el.innerHTML = '<div class="spinner"></div>';
+    try {
+      const res = await fetch(`${API}/api/rag/slices`);
+      const d   = await res.json();
+      if (!d.ids || !d.ids.length) {
+        el.innerHTML = '<p style="font-size:13px;color:var(--text-muted)">知识库为空，请先载入知识文件</p>';
+        return;
+      }
+      el.innerHTML = `
+        <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px">共 ${d.count} 个切片</p>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+          ${d.ids.map(id => `<span style="background:#f1f5f9;border:1px solid #e2e8f0;border-radius:4px;padding:2px 8px;font-size:12px;font-family:monospace">${escHtml(id)}</span>`).join('')}
+        </div>`;
+    } catch (err) {
+      el.innerHTML = `<p style="color:var(--error);font-size:13px">加载失败：${err.message}</p>`;
+    }
+  }
+
+  async function reloadKnowledge() {
+    const btn = document.getElementById('btn-rag-reload');
+    btn.disabled = true;
+    btn.textContent = '重载中…';
+    try {
+      const res = await fetch(`${API}/api/rag/reload`, { method: 'POST' });
+      const d   = await res.json();
+      if (res.ok) {
+        showToast(`知识库重载完成：解析 ${d.slices_parsed} 条，库中共 ${d.slices_in_db} 条`, 'success');
+        loadRagStats();
+      } else {
+        showToast('重载失败：' + (d.detail || res.status), 'error');
+      }
+    } catch (err) {
+      showToast('网络错误：' + err.message, 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '重载知识库';
+    }
+  }
+
+  async function doRagSearch() {
+    const q   = document.getElementById('rag-search-q').value.trim();
+    const tp  = document.getElementById('rag-search-tp').value;
+    const ind = document.getElementById('rag-search-ind').value;
+    const k   = parseInt(document.getElementById('rag-search-k').value) || 5;
+    if (!q) { showToast('请输入检索问题', 'error'); return; }
+
+    const el = document.getElementById('rag-search-results');
+    el.innerHTML = '<div class="spinner"></div>';
+
+    try {
+      const res = await fetch(`${API}/api/rag/search`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: q, taxpayer_type: tp, industry_code: ind, top_k: k }),
+      });
+      const d = await res.json();
+      if (!res.ok) { el.innerHTML = `<p style="color:var(--error)">${d.detail || '检索失败'}</p>`; return; }
+      if (!d.hits || !d.hits.length) {
+        el.innerHTML = '<p style="font-size:13px;color:var(--text-muted)">未找到相关切片，尝试调整过滤条件或重载知识库</p>';
+        return;
+      }
+      el.innerHTML = d.hits.map(h => `
+        <div class="search-hit">
+          <div style="display:flex;align-items:flex-start;gap:10px">
+            <div style="flex:1">
+              <div class="search-hit-title">${escHtml(h.title)}</div>
+              <div class="search-hit-meta">
+                <span class="search-hit-sim">相关度 ${(h.similarity*100).toFixed(1)}%</span>
+                &nbsp;·&nbsp; ${escHtml(h.strategy_id)}
+                ${h.source_doc ? `&nbsp;·&nbsp; 📄 ${escHtml(h.source_doc)}` : ''}
+                ${h.optimal_timing && h.optimal_timing !== 'ANY' ? `&nbsp;·&nbsp; ⏰ ${h.optimal_timing}最优` : ''}
+              </div>
+              <div class="search-hit-content">${escHtml(h.core_content)}</div>
+              ${h.action_suggestions ? `<div style="margin-top:6px;font-size:11px;color:#0369a1">操作：${escHtml(h.action_suggestions)}</div>` : ''}
+            </div>
+          </div>
+        </div>`).join('');
+    } catch (err) {
+      el.innerHTML = `<p style="color:var(--error)">检索出错：${err.message}</p>`;
+    }
   }
 
 </script>
