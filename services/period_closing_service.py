@@ -27,10 +27,25 @@ from models.operational_record import OperationalRecord, RecordStatus
 logger = logging.getLogger(__name__)
 
 # 损益类科目：结账时要归零的科目 (code_prefix, direction)
-INCOME_ACCOUNTS  = [("6001", "CREDIT"), ("6051", "CREDIT")]
+INCOME_ACCOUNTS  = [
+    ("6001", "CREDIT"),   # 主营业务收入
+    ("6051", "CREDIT"),   # 其他业务收入
+    ("6101", "CREDIT"),   # 公允价值变动收益
+    ("6111", "CREDIT"),   # 投资收益
+    ("6117", "CREDIT"),   # 其他收益
+    ("6301", "CREDIT"),   # 营业外收入
+]
 EXPENSE_ACCOUNTS = [
-    ("6401", "DEBIT"), ("6602", "DEBIT"), ("6603", "DEBIT"),
-    ("6711", "DEBIT"), ("6801", "DEBIT"),
+    ("6401", "DEBIT"),    # 主营业务成本
+    ("6402", "DEBIT"),    # 其他业务成本
+    ("6403", "DEBIT"),    # 税金及附加
+    ("6601", "DEBIT"),    # 销售费用
+    ("6602", "DEBIT"),    # 管理费用
+    ("6603", "DEBIT"),    # 财务费用
+    ("6604", "DEBIT"),    # 研发费用
+    ("6701", "DEBIT"),    # 资产减值损失
+    ("6711", "DEBIT"),    # 营业外支出
+    ("6801", "DEBIT"),    # 所得税费用
 ]
 RETAINED_EARNINGS_CODE = "4103"   # 本年利润
 
@@ -86,14 +101,13 @@ class PeriodClosingService:
         last_day  = self._last_day(year, month)
 
         # 计算各损益科目本期发生额
-        income_total  = self._sum_period("6001", "CREDIT", date_from, last_day) + \
-                        self._sum_period("6051", "CREDIT", date_from, last_day)
-        expense_total = (
-            self._sum_period("6401", "DEBIT", date_from, last_day) +
-            self._sum_period("6602", "DEBIT", date_from, last_day) +
-            self._sum_period("6603", "DEBIT", date_from, last_day) +
-            self._sum_period("6711", "DEBIT", date_from, last_day) +
-            self._sum_period("6801", "DEBIT", date_from, last_day)
+        income_total = sum(
+            self._sum_period(prefix, direction, date_from, last_day)
+            for prefix, direction in INCOME_ACCOUNTS
+        )
+        expense_total = sum(
+            self._sum_period(prefix, direction, date_from, last_day)
+            for prefix, direction in EXPENSE_ACCOUNTS
         )
         net_profit = income_total - expense_total
 
@@ -123,8 +137,8 @@ class PeriodClosingService:
 
         lines: list[VoucherLine] = []
 
-        # 借：收入科目归零
-        for prefix in ("6001", "6051"):
+        # 借：收入科目归零（反向冲销贷方余额）
+        for prefix, _ in INCOME_ACCOUNTS:
             amt = self._sum_period(prefix, "CREDIT", date_from, last_day)
             if amt > 0:
                 lines.append(VoucherLine(
@@ -135,8 +149,8 @@ class PeriodClosingService:
                     memo         = "损益结转",
                 ))
 
-        # 贷：费用/成本科目归零
-        for prefix in ("6401", "6602", "6603", "6711", "6801"):
+        # 贷：费用/成本科目归零（反向冲销借方余额）
+        for prefix, _ in EXPENSE_ACCOUNTS:
             amt = self._sum_period(prefix, "DEBIT", date_from, last_day)
             if amt > 0:
                 lines.append(VoucherLine(

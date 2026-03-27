@@ -32,7 +32,7 @@ from ai.json_parser import parse_llm_output
 from models.operational_record import OperationalRecord, RecordStatus
 from models.boss_decision_log import BossDecisionLog, DecisionStatus
 from models.asset_register import AssetRegister, DepreciationMethod, AssetStatus
-from models.voucher_header import VoucherHeader
+from models.voucher_header import VoucherHeader, VoucherReviewStatus
 from models.voucher_line import VoucherLine
 from models.account_subject import AccountSubject
 from models.enterprise_profile import EnterpriseProfile
@@ -379,10 +379,11 @@ class DecisionService:
 
         # 生成凭证
         header = VoucherHeader(
-            record_id    = record.record_id,
-            voucher_date = date.today(),
-            total_amount = Decimal(str(amount)),
-            memo         = f"购入固定资产：{extracted.expense_type}",
+            record_id     = record.record_id,
+            voucher_date  = date.today(),
+            total_amount  = Decimal(str(amount)),
+            memo          = f"购入固定资产：{extracted.expense_type}",
+            review_status = VoucherReviewStatus.POSTED,
         )
         self._db.add(header)
         self._db.flush()

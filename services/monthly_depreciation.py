@@ -30,9 +30,10 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from models.asset_register import AssetRegister, AssetStatus, DepreciationMethod
-from models.voucher_header import VoucherHeader
+from models.voucher_header import VoucherHeader, VoucherReviewStatus
 from models.voucher_line import VoucherLine
 from models.account_subject import AccountSubject
+from models.operational_record import OperationalRecord, RecordStatus
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +68,14 @@ class MonthlyDepreciationService:
 
         self._assert_subjects_exist()
 
+        # 创建系统级流水记录，供本次折旧批次的所有凭证引用
+        dep_record = OperationalRecord(
+            raw_text = f"[系统] {period} 月度固定资产折旧计提",
+            status   = RecordStatus.PROCESSED,
+        )
+        self._db.add(dep_record)
+        self._db.flush()
+
         assets = (
             self._db.query(AssetRegister)
             .filter(
@@ -89,7 +98,7 @@ class MonthlyDepreciationService:
                     result.skipped += 1
                     continue
 
-                voucher = self._post_depreciation(asset, dep_amount, period, year, month)
+                voucher = self._post_depreciation(asset, dep_amount, period, year, month, dep_record.record_id)
                 self._update_asset(asset, dep_amount)
 
                 result.processed      += 1
@@ -180,6 +189,7 @@ class MonthlyDepreciationService:
         period:     str,
         year:       int,
         month:      int,
+        record_id:  int,
     ) -> VoucherHeader:
         """生成折旧凭证：借 管理费用，贷 累计折旧"""
         marker = f"[DEP:{asset.asset_id}:{period}]"
@@ -189,10 +199,11 @@ class MonthlyDepreciationService:
         last_day = _last_day_of_month(year, month)
 
         header = VoucherHeader(
-            record_id    = 1,        # 折旧凭证无对应流水，使用占位值 1
-            voucher_date = last_day,
-            total_amount = dep_amount,
-            memo         = memo,
+            record_id     = record_id,
+            voucher_date  = last_day,
+            total_amount  = dep_amount,
+            memo          = memo,
+            review_status = VoucherReviewStatus.POSTED,
         )
         self._db.add(header)
         self._db.flush()

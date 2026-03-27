@@ -33,7 +33,7 @@ from sqlalchemy.orm import Session
 
 from ai.json_parser import ExtractedRecord
 from models.operational_record import OperationalRecord
-from models.voucher_header import VoucherHeader
+from models.voucher_header import VoucherHeader, VoucherReviewStatus
 from models.voucher_line import VoucherLine
 from models.account_subject import AccountSubject
 from models.auxiliary_entity import AuxiliaryEntity
@@ -205,10 +205,11 @@ class AccountingEngineService:
         lines_spec: list[dict],
     ) -> VoucherHeader:
         header = VoucherHeader(
-            record_id    = record.record_id,
-            voucher_date = date.today(),
-            total_amount = ext.amount,
-            memo         = ext.memo,
+            record_id     = record.record_id,
+            voucher_date  = date.today(),
+            total_amount  = ext.amount,
+            memo          = ext.memo,
+            review_status = VoucherReviewStatus.POSTED,
         )
         self._db.add(header)
         self._db.flush()   # get voucher_id

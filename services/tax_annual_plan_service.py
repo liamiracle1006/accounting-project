@@ -129,43 +129,60 @@ class TaxAnnualPlanService:
 
     def _calc_ytd(self, year: int) -> tuple[Decimal, Decimal]:
         """
-        从凭证明细粗算 YTD 利润和收入。
-        收入 = 6001(主营业务收入) 贷方合计
-        成本 = 6401(主营业务成本) 借方合计
-        利润 = 收入 - 成本（简化计算，不计其他费用）
+        从凭证明细计算 YTD 利润和收入。
+        利润 = 全部收入科目贷方合计 - 全部费用/成本科目借方合计
+        收入 = 主营业务收入(6001)贷方合计
         """
         from models.voucher_line import VoucherLine
-        from models.voucher_header import VoucherHeader
+        from models.voucher_header import VoucherHeader, VoucherReviewStatus
 
         year_prefix = f"{year}-%"
 
-        # 收入：科目 6001，贷方
-        revenue_row = (
-            self._db.query(func.sum(VoucherLine.amount))
+        # 一次查询所有损益科目的发生额
+        rows = (
+            self._db.query(
+                VoucherLine.subject_code,
+                VoucherLine.direction,
+                func.sum(VoucherLine.amount).label("total"),
+            )
             .join(VoucherHeader, VoucherLine.voucher_id == VoucherHeader.voucher_id)
             .filter(
-                VoucherLine.subject_code.like("6001%"),
-                VoucherLine.direction == "CREDIT",
+                VoucherLine.subject_code >= "6001",
+                VoucherLine.subject_code <= "6899",
                 VoucherHeader.voucher_date.cast(text("CHAR")).like(year_prefix),
+                VoucherHeader.review_status == VoucherReviewStatus.POSTED,
             )
-            .scalar()
+            .group_by(VoucherLine.subject_code, VoucherLine.direction)
+            .all()
         )
-        ytd_revenue = Decimal(str(revenue_row or 0))
 
-        # 成本：科目 6401，借方
-        cost_row = (
-            self._db.query(func.sum(VoucherLine.amount))
-            .join(VoucherHeader, VoucherLine.voucher_id == VoucherHeader.voucher_id)
-            .filter(
-                VoucherLine.subject_code.like("6401%"),
-                VoucherLine.direction == "DEBIT",
-                VoucherHeader.voucher_date.cast(text("CHAR")).like(year_prefix),
-            )
-            .scalar()
-        )
-        ytd_cost = Decimal(str(cost_row or 0))
+        # 收入类科目：贷方增加
+        INCOME_PREFIXES = {"6001", "6051", "6101", "6111", "6117", "6301"}
 
-        ytd_profit = ytd_revenue - ytd_cost
+        total_income  = Decimal("0")
+        total_expense = Decimal("0")
+        ytd_revenue   = Decimal("0")
+
+        for code, direction, total in rows:
+            val = Decimal(str(total))
+            prefix = code[:4]
+
+            if prefix in INCOME_PREFIXES:
+                if direction == "CREDIT":
+                    total_income += val
+                else:
+                    total_income -= val
+                # 主营业务收入单独记录
+                if prefix == "6001" and direction == "CREDIT":
+                    ytd_revenue += val
+            else:
+                # 费用/成本类科目：借方增加
+                if direction == "DEBIT":
+                    total_expense += val
+                else:
+                    total_expense -= val
+
+        ytd_profit = total_income - total_expense
         return ytd_profit, ytd_revenue
 
     def _count_assets(self) -> int:
