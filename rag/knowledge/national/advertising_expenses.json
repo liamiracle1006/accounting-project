@@ -1,0 +1,106 @@
+[
+  {
+    "strategy_id": "ADV-001",
+    "title": "广告费和业务宣传费扣除限额（15%营收）",
+    "trigger_keywords": ["广告费", "宣传费", "扣除限额", "15%", "营收"],
+    "scenario": "企业广告和业务宣传费超过当年营业收入15%时，超额部分不能当年扣除",
+    "core_content": "企业每年广告费和业务宣传费在不超过当年销售（营业）收入15%的范围内税前扣除，超出部分结转以后年度。例外：化妆品、医药、饮料食品企业为30%。广告费和业务宣传费合并计算限额。",
+    "action_suggestions": [
+      "Q3预算时预测全年营收，计算剩余可用广告费额度",
+      "若当年广告预算充足但有超限风险，将部分费用合同签署推迟到次年",
+      "将促销物料（样品、礼品）与广告费分开核算，促销物料超标准部分并入广告费",
+      "结转的超限广告费在下一年度营收增长后可全额扣除"
+    ],
+    "risk_notes": "赞助费若有广告宣传内容，应归入广告费；无宣传内容的纯赞助不得扣除",
+    "metadata": {
+      "applicable_taxpayer": ["GENERAL", "SMALL_SCALE"],
+      "applicable_industry": ["ALL"],
+      "region_scope": "NATIONAL",
+      "applicable_regions": [],
+      "profit_range": {"min": 0, "max": 99999999},
+      "optimal_timing": "Q3",
+      "valid_from": "2008-01-01",
+      "valid_until": "2099-12-31",
+      "source_doc": "企业所得税法实施条例第44条",
+      "confidence": 0.99
+    }
+  },
+  {
+    "strategy_id": "ADV-002",
+    "title": "广告费跨关联企业分摊扣除",
+    "trigger_keywords": ["广告费分摊", "关联企业", "集团分摊", "品牌宣传", "共同广告"],
+    "scenario": "同一集团下多家关联企业共同开展品牌推广，广告费可在关联企业间分摊扣除",
+    "core_content": "签订关联企业广告费分摊协议后，广告费用可按协议约定比例在各关联企业间分摊，各企业按分摊额分别计算扣除限额（以各自营业收入15%为限）。集团品牌推广费通过此方式拆分，可大幅提升整体可扣除额。",
+    "action_suggestions": [
+      "签订关联企业广告费用分摊协议，明确分摊依据（营收比例或约定比例）",
+      "分摊协议须在广告费发生前签订，不可事后补签",
+      "各关联企业按分摊额分别在汇算时申报扣除",
+      "保留广告合同、付款凭证、分摊协议三份文件备查"
+    ],
+    "risk_notes": "分摊协议须有合理商业目的，否则被认定为利润转移；跨境分摊需符合转让定价规则",
+    "metadata": {
+      "applicable_taxpayer": ["GENERAL"],
+      "applicable_industry": ["ALL"],
+      "region_scope": "NATIONAL",
+      "applicable_regions": [],
+      "profit_range": {"min": 0, "max": 99999999},
+      "optimal_timing": "Q1",
+      "valid_from": "2012-01-01",
+      "valid_until": "2099-12-31",
+      "source_doc": "国税总局公告2012年第48号",
+      "confidence": 0.97
+    }
+  },
+  {
+    "strategy_id": "ADV-003",
+    "title": "业务招待费扣除上限（60%且不超0.5%营收）",
+    "trigger_keywords": ["业务招待费", "招待费", "60%", "0.5%", "扣除上限"],
+    "scenario": "企业发生业务招待费（餐饮、礼品等），仅能按规定比例部分扣除",
+    "core_content": "业务招待费扣除标准：实际发生额的60%，且不超过当年销售（营业）收入的0.5%，取两者孰低。例如：营收1000万，招待费上限=min(实际×60%, 1000万×0.5%)=min(X, 5万)。因此当招待费超过8.33万时，0.5%成为瓶颈。",
+    "action_suggestions": [
+      "Q2时检查已发生招待费，对照0.5%营收上限，超限部分需在年末纳税调增",
+      "将合规会议费（有会议纪要、住宿费）从招待费中剥离，会议费全额扣除",
+      "差旅住宿餐饮费（有出差报告）不归入招待费，按差旅费全额扣除",
+      "礼品发放附上客户签收单，否则被视为非业务需要的个人消费"
+    ],
+    "risk_notes": "招待费超限是稽查中最常见的纳税调增项；餐饮发票无对应客户信息容易被质疑",
+    "metadata": {
+      "applicable_taxpayer": ["GENERAL", "SMALL_SCALE"],
+      "applicable_industry": ["ALL"],
+      "region_scope": "NATIONAL",
+      "applicable_regions": [],
+      "profit_range": {"min": 0, "max": 99999999},
+      "optimal_timing": "Q3",
+      "valid_from": "2008-01-01",
+      "valid_until": "2099-12-31",
+      "source_doc": "企业所得税法实施条例第43条",
+      "confidence": 0.99
+    }
+  },
+  {
+    "strategy_id": "ADV-004",
+    "title": "职工福利费、工会经费、教育经费扣除限额",
+    "trigger_keywords": ["职工福利费", "工会经费", "职工教育", "14%", "2%", "8%", "三费扣除"],
+    "scenario": "企业支出职工三费（福利费、工会经费、教育经费），各有不同扣除比例上限",
+    "core_content": "三费税前扣除上限（以应付工资总额为基数）：①职工福利费14%②工会经费2%（须向工会组织拨缴才可扣除）③职工教育经费8%（高新企业和科技中小企业无上限）。职工教育经费超限部分可结转后年度扣除。",
+    "action_suggestions": [
+      "年末预测工资总额，计算三费扣除上限，合理控制支出节奏",
+      "职工教育经费高科技企业无上限，应充分利用（培训、职业发展）",
+      "向工会缴纳的工会经费才可全额扣除，企业自建工会也可",
+      "福利费需实际发放给员工（不可以预提方式扣除）"
+    ],
+    "risk_notes": "超限额部分做纳税调增；虚列福利费（实为老板个人支出）被视为抽逃资金",
+    "metadata": {
+      "applicable_taxpayer": ["GENERAL", "SMALL_SCALE"],
+      "applicable_industry": ["ALL"],
+      "region_scope": "NATIONAL",
+      "applicable_regions": [],
+      "profit_range": {"min": 0, "max": 99999999},
+      "optimal_timing": "Q4",
+      "valid_from": "2008-01-01",
+      "valid_until": "2099-12-31",
+      "source_doc": "企业所得税法实施条例第40-42条",
+      "confidence": 0.99
+    }
+  }
+]

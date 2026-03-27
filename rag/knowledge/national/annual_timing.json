@@ -1,0 +1,159 @@
+[
+  {
+    "strategy_id": "TIME-001",
+    "title": "Q1：企业所得税年度汇算清缴（1-5月）",
+    "trigger_keywords": ["汇算清缴", "年度申报", "企业所得税", "5月31日", "退税"],
+    "scenario": "每年1月至5月31日，完成上一年度企业所得税汇算清缴申报",
+    "core_content": "企业须于次年1月1日至5月31日完成上一纳税年度企业所得税汇算清缴。汇算内容：全年收入、扣除项目、纳税调整、各类优惠。多退少补。逾期未申报罚款2000-10000元；逾期不补缴，加收日万分之五滞纳金。",
+    "action_suggestions": [
+      "1月：整理全年财务报表，核查纳税调整项目清单",
+      "2-3月：完成各类优惠备案（研发加计、高新认定、加速折旧）",
+      "4月：完成申报表填报，核查与账务的一致性",
+      "5月31日前：提交申报并处理退（补）税",
+      "保留汇算清缴资料5年备查"
+    ],
+    "risk_notes": "主动延期申请须在5月31日前提出；境外所得汇算可申请延期至9月",
+    "metadata": {
+      "applicable_taxpayer": ["GENERAL", "SMALL_SCALE"],
+      "applicable_industry": ["ALL"],
+      "region_scope": "NATIONAL",
+      "applicable_regions": [],
+      "profit_range": {"min": 0, "max": 99999999},
+      "optimal_timing": "Q1",
+      "valid_from": "2008-01-01",
+      "valid_until": "2099-12-31",
+      "source_doc": "企业所得税法第54条；国税发〔2008〕31号",
+      "confidence": 1.0
+    }
+  },
+  {
+    "strategy_id": "TIME-002",
+    "title": "Q1：增值税年度对账与留抵退税申请",
+    "trigger_keywords": ["增值税年报", "留抵退税", "年度对账", "Q1申报", "一月份"],
+    "scenario": "年初完成增值税全年数据核对，评估留抵退税申请时机",
+    "core_content": "1月份完成上年度增值税申报数据年度汇总，核查进项留抵余额。若连续6个月增量留抵税额>0且最后一期≥50万元，可向税务局申请留抵退税。制造业、科技等6类行业可同时申请存量留抵退税。",
+    "action_suggestions": [
+      "1月完成年度增值税数据核对，确认留抵余额",
+      "检查是否连续6个月有增量留抵（查近期申报表）",
+      "符合条件的向主管税务局提交退税申请（附近6期申报表）",
+      "退税申请前确认无欠税记录"
+    ],
+    "risk_notes": "留抵退税申请期间不得申请出口退税；退税后再欠税可能追回",
+    "metadata": {
+      "applicable_taxpayer": ["GENERAL"],
+      "applicable_industry": ["ALL"],
+      "region_scope": "NATIONAL",
+      "applicable_regions": [],
+      "profit_range": {"min": 0, "max": 99999999},
+      "optimal_timing": "Q1",
+      "valid_from": "2022-04-01",
+      "valid_until": "2099-12-31",
+      "source_doc": "财税〔2022〕14号",
+      "confidence": 0.96
+    }
+  },
+  {
+    "strategy_id": "TIME-003",
+    "title": "Q2：科技型中小企业评价申报窗口",
+    "trigger_keywords": ["科小评价", "科技型中小企业", "Q2申报", "评价系统", "3-6月"],
+    "scenario": "每年3-6月是科技型中小企业评价申报的集中窗口期",
+    "core_content": "科技型中小企业评价每年滚动进行，建议在3-6月申请。评价通过后当年即可享受：企业所得税研发加计扣除100%、亏损结转10年。评价有效期为一个自然年，次年须重新申请（无需重新评审，只需更新数据）。",
+    "action_suggestions": [
+      "3月准备评价材料：研发人员名单、研发项目说明、知识产权证书",
+      "在国家科技型中小企业信息服务平台完成网上填报",
+      "获得评价号后，在Q3预缴企业所得税时即可享受100%加计",
+      "同时评估是否申请高新技术企业（税率更优）"
+    ],
+    "risk_notes": "填报数据须与财务报告一致，虚报将影响信用评级；评价号须在汇算前取得",
+    "metadata": {
+      "applicable_taxpayer": ["GENERAL", "SMALL_SCALE"],
+      "applicable_industry": ["ALL"],
+      "region_scope": "NATIONAL",
+      "applicable_regions": [],
+      "profit_range": {"min": 0, "max": 99999999},
+      "optimal_timing": "Q2",
+      "valid_from": "2017-01-01",
+      "valid_until": "2099-12-31",
+      "source_doc": "国科发政〔2017〕115号",
+      "confidence": 0.97
+    }
+  },
+  {
+    "strategy_id": "TIME-004",
+    "title": "Q3：企业所得税预缴与研发加计扣除享受",
+    "trigger_keywords": ["Q3预缴", "研发加计", "10月预缴", "三季度", "提前享受"],
+    "scenario": "10月企业所得税Q3预缴时，可提前享受研发费用加计扣除优惠",
+    "core_content": "自2021年起，企业在Q3（10月份）预缴企业所得税时，可享受前三季度研发费用加计扣除优惠（不必等到年度汇算）。10月份预缴申报时，将前三季度已发生的研发费用乘以加计比例直接扣除，减少预缴额。",
+    "action_suggestions": [
+      "9月整理前三季度研发费用辅助账",
+      "10月预缴申报时填报《研发费用加计扣除优惠明细表》",
+      "确认科小评价号或高新证书有效，方可享受对应比例",
+      "预缴享受的优惠在年度汇算时会自动核对，无需重复申报"
+    ],
+    "risk_notes": "若科小评价号或高新证书在Q4到期未续期，Q3预缴享受的优惠需在汇算时调回",
+    "metadata": {
+      "applicable_taxpayer": ["GENERAL"],
+      "applicable_industry": ["ALL"],
+      "region_scope": "NATIONAL",
+      "applicable_regions": [],
+      "profit_range": {"min": 0, "max": 99999999},
+      "optimal_timing": "Q3",
+      "valid_from": "2021-10-01",
+      "valid_until": "2099-12-31",
+      "source_doc": "国税总局公告2021年第28号",
+      "confidence": 0.98
+    }
+  },
+  {
+    "strategy_id": "TIME-005",
+    "title": "Q4：高新技术企业认定申报窗口",
+    "trigger_keywords": ["高新认定", "高新技术企业", "Q4申报", "认定窗口", "到期续期"],
+    "scenario": "高新技术企业认定每年Q3-Q4集中受理，到期企业须提前准备续期",
+    "core_content": "高新技术企业认定每批次通常于Q3-Q4受理并公示，认定有效期3年。到期须重新申请：提前6个月准备材料（知识产权证书、研发费用辅助账、研发人员比例证明、财务报告）。未续期的，从次年起按25%缴税，并须补缴优惠期差额税款。",
+    "action_suggestions": [
+      "7-8月：评估是否满足重新认定条件（研发费占比、知识产权、研发人员比例）",
+      "8-9月：向省级科技局、财政局、税务局联合受理窗口提交申请",
+      "期间：补充注册知识产权（专利、软件著作权）达到认定数量要求",
+      "公示通过后：在次年汇算时申报享受15%税率"
+    ],
+    "risk_notes": "认定期内须每年保持研发费用占比达标，否则被取消认定并追税",
+    "metadata": {
+      "applicable_taxpayer": ["GENERAL"],
+      "applicable_industry": ["ALL"],
+      "region_scope": "NATIONAL",
+      "applicable_regions": [],
+      "profit_range": {"min": 0, "max": 99999999},
+      "optimal_timing": "Q3",
+      "valid_from": "2016-01-01",
+      "valid_until": "2099-12-31",
+      "source_doc": "国科发火〔2016〕32号",
+      "confidence": 0.98
+    }
+  },
+  {
+    "strategy_id": "TIME-006",
+    "title": "Q4：年终利润规划与税负平滑",
+    "trigger_keywords": ["年终规划", "利润规划", "Q4节税", "税负平滑", "临界点"],
+    "scenario": "Q4末进行全年利润预测，通过合规安排规避税率跳档或把握优惠临界点",
+    "core_content": "年末利润规划要点：①小微300万临界点：利润在280-310万区间的，多1元可能多交数万税，需精确控制②固定资产采购：Q4购置设备可一次性扣除，降低当年利润③加速折旧资产：确认是否选择加速折旧④预提合理费用：年末提前预提下年初的费用（需有实际发生依据）。",
+    "action_suggestions": [
+      "11月做全年利润预测，识别税率跳档风险点",
+      "若利润接近小微300万上限，评估加大Q4采购或费用预提",
+      "若利润充裕，考虑Q4增加研发投入或公益捐赠",
+      "与审计师确认跨期费用的会计处理，避免年末突击调账"
+    ],
+    "risk_notes": "突击购买资产需有业务需要，纯为节税的无合理目的交易税务风险高；合法节税≠逃税",
+    "metadata": {
+      "applicable_taxpayer": ["GENERAL", "SMALL_SCALE"],
+      "applicable_industry": ["ALL"],
+      "region_scope": "NATIONAL",
+      "applicable_regions": [],
+      "profit_range": {"min": 0, "max": 99999999},
+      "optimal_timing": "Q4",
+      "valid_from": "2023-01-01",
+      "valid_until": "2099-12-31",
+      "source_doc": "综合性税务筹划参考",
+      "confidence": 0.90
+    }
+  }
+]

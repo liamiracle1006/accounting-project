@@ -1,0 +1,158 @@
+[
+  {
+    "strategy_id": "VAT-001",
+    "title": "小规模纳税人增值税1%征收率优惠",
+    "trigger_keywords": ["小规模纳税人", "1%", "增值税", "季度销售额", "免税"],
+    "scenario": "年应税销售额≤500万元的小规模纳税人，享受低税率或免税优惠",
+    "core_content": "小规模纳税人增值税征收率为3%，现阶段优惠为1%（延续至2027年底）。季度销售额≤30万元（月销售额≤10万元）免征增值税。超标准部分按1%征收。",
+    "action_suggestions": [
+      "监控季度销售额是否接近30万元临界点",
+      "合理安排开票时间，避免单季度突破免税额度",
+      "评估是否需要转为一般纳税人（年销售额将超500万时）",
+      "享受优惠时在发票备注栏注明减免政策依据"
+    ],
+    "risk_notes": "主动放弃免税资格后36个月内不得重新申请；销售额剔除免税收入后判断",
+    "metadata": {
+      "applicable_taxpayer": ["SMALL_SCALE"],
+      "applicable_industry": ["ALL"],
+      "region_scope": "NATIONAL",
+      "applicable_regions": [],
+      "profit_range": {"min": 0, "max": 99999999},
+      "optimal_timing": "ANY",
+      "valid_from": "2023-01-01",
+      "valid_until": "2027-12-31",
+      "source_doc": "财税〔2023〕1号；国家税务总局公告2023年第1号",
+      "confidence": 0.98
+    }
+  },
+  {
+    "strategy_id": "VAT-002",
+    "title": "一般纳税人进项税额抵扣优化",
+    "trigger_keywords": ["进项抵扣", "专用发票", "增值税进项", "抵扣链条", "采购"],
+    "scenario": "一般纳税人采购时，应尽量取得增值税专用发票以最大化进项抵扣",
+    "core_content": "一般纳税人可凭增值税专用发票、海关完税凭证、农产品收购凭证等抵扣进项税。标准税率13%（货物/制造）、9%（农产品/交通/房地产）、6%（服务/金融/现代服务）。不得抵扣：用于集体福利、个人消费、免税项目的进项。",
+    "action_suggestions": [
+      "要求供应商开具专用发票，并及时认证（180天内）",
+      "采购农产品可按9%扣除率计算进项（凭收购凭证）",
+      "评估供应商是否为一般纳税人，无法开专票时重新议价",
+      "每月核查进项抵扣台账，避免认证超期"
+    ],
+    "risk_notes": "未在规定期限内认证的专用发票不得抵扣；虚开发票刑事责任",
+    "metadata": {
+      "applicable_taxpayer": ["GENERAL"],
+      "applicable_industry": ["ALL"],
+      "region_scope": "NATIONAL",
+      "applicable_regions": [],
+      "profit_range": {"min": 0, "max": 99999999},
+      "optimal_timing": "ANY",
+      "valid_from": "2016-05-01",
+      "valid_until": "2099-12-31",
+      "source_doc": "财税〔2016〕36号附件1",
+      "confidence": 0.99
+    }
+  },
+  {
+    "strategy_id": "VAT-003",
+    "title": "差额征税——劳务派遣、旅游、经纪",
+    "trigger_keywords": ["差额征税", "劳务派遣", "旅游服务", "经纪代理", "差额开票"],
+    "scenario": "提供劳务派遣、旅游、经纪代理等服务，可选择差额方式缴纳增值税",
+    "core_content": "劳务派遣：可选差额征税，以收取全部价款扣除代付给劳务工工资、福利及社保公积金余额为销售额，按5%简易征收率。旅游：扣除向旅游供应商支付价款后差额计税。经纪代理：扣除代付费用后差额计税。",
+    "action_suggestions": [
+      "评估差额征税与全额征税的税负差异，选最优方案",
+      "差额开票时须在发票备注栏注明差额征税",
+      "向主管税务局报告选择差额征税（一经选择当年不可更改）",
+      "保留支付给第三方的完整付款凭证"
+    ],
+    "risk_notes": "差额征税下，进项税额不得抵扣（两者不可混用）；需开具差额发票",
+    "metadata": {
+      "applicable_taxpayer": ["GENERAL", "SMALL_SCALE"],
+      "applicable_industry": ["服务业", "劳务派遣", "旅游", "ALL"],
+      "region_scope": "NATIONAL",
+      "applicable_regions": [],
+      "profit_range": {"min": 0, "max": 99999999},
+      "optimal_timing": "Q1",
+      "valid_from": "2016-05-01",
+      "valid_until": "2099-12-31",
+      "source_doc": "财税〔2016〕36号附件2第一条",
+      "confidence": 0.97
+    }
+  },
+  {
+    "strategy_id": "VAT-004",
+    "title": "不动产租赁增值税简易计税",
+    "trigger_keywords": ["不动产租赁", "房屋出租", "简易计税", "5%", "租金"],
+    "scenario": "企业出租持有的不动产（厂房、办公室等），可选简易计税方式",
+    "core_content": "一般纳税人出租2016年4月30日前取得的不动产，可选择简易计税（5%征收率），放弃进项抵扣。2016年5月1日后取得的不动产出租，一般纳税人适用9%税率计税。小规模纳税人出租不动产适用5%征收率。",
+    "action_suggestions": [
+      "统计持有不动产的取得时间，2016年4月30日前取得的可选简易",
+      "测算简易计税（5%）vs一般计税（9%-进项）哪个税负更低",
+      "选择简易计税须向税务局备案",
+      "租赁合同中明确含税价还是不含税价，避免税务纠纷"
+    ],
+    "risk_notes": "选择简易计税后36个月内不可更改；注意计税方式对账务处理的影响",
+    "metadata": {
+      "applicable_taxpayer": ["GENERAL"],
+      "applicable_industry": ["ALL"],
+      "region_scope": "NATIONAL",
+      "applicable_regions": [],
+      "profit_range": {"min": 0, "max": 99999999},
+      "optimal_timing": "Q1",
+      "valid_from": "2016-05-01",
+      "valid_until": "2099-12-31",
+      "source_doc": "财税〔2016〕36号附件2第一条第(一)项",
+      "confidence": 0.98
+    }
+  },
+  {
+    "strategy_id": "VAT-005",
+    "title": "出口退税资格申请与流程优化",
+    "trigger_keywords": ["出口退税", "出口", "外贸", "退税率", "跨境"],
+    "scenario": "企业有出口业务，应及时申请退税资格并优化退税流程",
+    "core_content": "生产型企业出口自产货物，适用免抵退税办法；外贸企业购进出口适用免退税办法。退税率按货物HS编码确定（13%、9%、6%不等，部分货物退税率低于征税率，差额部分计入成本）。退税申报期限：出口之日起次月申报，最迟不超过次年4月30日。",
+    "action_suggestions": [
+      "出口前向主管税务局申请出口退税资格备案",
+      "按HS编码分类货物，确认对应退税率",
+      "每月及时申报退税，避免超期丧失退税权利",
+      "退税率低于征税率部分做进项转出处理"
+    ],
+    "risk_notes": "虚开发票骗取退税，刑事责任；出口代理需核实代理资质",
+    "metadata": {
+      "applicable_taxpayer": ["GENERAL"],
+      "applicable_industry": ["制造业", "贸易", "ALL"],
+      "region_scope": "NATIONAL",
+      "applicable_regions": [],
+      "profit_range": {"min": 0, "max": 99999999},
+      "optimal_timing": "ANY",
+      "valid_from": "2016-05-01",
+      "valid_until": "2099-12-31",
+      "source_doc": "财税〔2012〕39号；国税发〔2012〕24号",
+      "confidence": 0.97
+    }
+  },
+  {
+    "strategy_id": "VAT-006",
+    "title": "增值税留抵退税政策",
+    "trigger_keywords": ["留抵退税", "进项留抵", "退税", "增量留抵", "存量留抵"],
+    "scenario": "企业长期存在大额增值税留抵税额，可申请退还部分或全部留抵",
+    "core_content": "符合条件的企业可申请退还增量留抵税额（当期留抵超过2019年3月底存量留抵的部分）。制造业、研发等6类行业可申请全额存量留抵退税。退税条件：连续6个月增量留抵大于0，且最后一期增量留抵≥50万元。",
+    "action_suggestions": [
+      "每月末查看增值税申报表，统计留抵余额趋势",
+      "满足连续6个月条件后，向主管税务局提交退税申请",
+      "退税申请前确认无欠税、未被列入异常名单",
+      "6类重点行业可优先申请存量留抵退税"
+    ],
+    "risk_notes": "留抵退税后再次产生欠税，税务局可追缴已退税款；申请前核查历史纳税状态",
+    "metadata": {
+      "applicable_taxpayer": ["GENERAL"],
+      "applicable_industry": ["ALL"],
+      "region_scope": "NATIONAL",
+      "applicable_regions": [],
+      "profit_range": {"min": 0, "max": 99999999},
+      "optimal_timing": "ANY",
+      "valid_from": "2022-04-01",
+      "valid_until": "2099-12-31",
+      "source_doc": "财税〔2022〕14号；国税总局公告2022年第14号",
+      "confidence": 0.96
+    }
+  }
+]

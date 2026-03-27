@@ -1,0 +1,132 @@
+[
+  {
+    "strategy_id": "IIT-001",
+    "title": "年终奖单独计税与合并计税比较",
+    "trigger_keywords": ["年终奖", "全年一次性奖金", "单独计税", "合并计税", "个税"],
+    "scenario": "企业向员工发放年终奖金，选择单独计税还是合并计税影响员工个税负担",
+    "core_content": "2024年起，全年一次性奖金（年终奖）可选择：①单独计税：年终奖/12找适用税率，税负较低；②合并计税：并入当年综合所得。建议对比两种方式的税负，按月综合所得高的员工通常选单独计税。政策延续至2027年底。",
+    "action_suggestions": [
+      "HR在发薪前先做两种方式的税额测算",
+      "年终奖金额注意避开税率级距跳档节点（36000、144000、300000等）",
+      "若员工全年工资高（>96万），则年终奖合并计税可能更优",
+      "向员工书面告知两种计税方式的差异，由员工自行选择"
+    ],
+    "risk_notes": "每人每年只能选择一次，当年申报后不可更改；企业代扣代缴时须按员工选择执行",
+    "metadata": {
+      "applicable_taxpayer": ["GENERAL", "SMALL_SCALE"],
+      "applicable_industry": ["ALL"],
+      "region_scope": "NATIONAL",
+      "applicable_regions": [],
+      "profit_range": {"min": 0, "max": 99999999},
+      "optimal_timing": "Q4",
+      "valid_from": "2022-01-01",
+      "valid_until": "2027-12-31",
+      "source_doc": "财税〔2021〕42号",
+      "confidence": 0.98
+    }
+  },
+  {
+    "strategy_id": "IIT-002",
+    "title": "员工股权激励个税递延政策",
+    "trigger_keywords": ["股权激励", "期权", "限制性股票", "个税递延", "上市公司"],
+    "scenario": "企业（特别是上市公司）通过股权激励留住核心人才，享受个税递延优惠",
+    "core_content": "上市公司员工获得的股权激励所得，可递延至转让股票时缴纳个税，税率按20%的资本利得税率，而非最高45%的薪资税率。非上市公司股权激励可申请暂不征税，至真实转让时纳税。",
+    "action_suggestions": [
+      "制定股权激励方案前咨询专业税务顾问",
+      "上市公司：向证监会、税务局完成股权激励计划备案",
+      "非上市公司：向主管税务局提交递延纳税申请",
+      "建立股权激励台账，记录授予日、行权日、转让日及对应价格"
+    ],
+    "risk_notes": "未在规定期内行权或转让，优惠递延失效并加收利息；需区分劳动报酬vs资本所得性质",
+    "metadata": {
+      "applicable_taxpayer": ["GENERAL"],
+      "applicable_industry": ["ALL"],
+      "region_scope": "NATIONAL",
+      "applicable_regions": [],
+      "profit_range": {"min": 0, "max": 99999999},
+      "optimal_timing": "ANY",
+      "valid_from": "2016-09-01",
+      "valid_until": "2099-12-31",
+      "source_doc": "财税〔2016〕101号",
+      "confidence": 0.96
+    }
+  },
+  {
+    "strategy_id": "IIT-003",
+    "title": "企业年金个税优惠",
+    "trigger_keywords": ["企业年金", "职业年金", "个税优惠", "养老", "补充养老"],
+    "scenario": "企业为员工建立企业年金计划，雇主和员工缴费均享受个税优惠",
+    "core_content": "企业年金个人缴费部分：在本人工资4%以内的部分，暂不缴纳个人所得税，递延至领取时按10%税率缴税。企业缴费部分：在职工工资的8%以内，不计入员工当期应税收入。",
+    "action_suggestions": [
+      "与人力资源部门联合设计企业年金方案（缴费比例建议设在4%/8%上限）",
+      "向人社局和税务局进行企业年金计划备案",
+      "系统设置自动在发薪时扣除个人缴费并申报",
+      "向员工说明年金递延纳税的长期价值"
+    ],
+    "risk_notes": "未建立正式年金计划的，超标准缴费视为工资薪金征个税；领取时按10%分次缴税",
+    "metadata": {
+      "applicable_taxpayer": ["GENERAL"],
+      "applicable_industry": ["ALL"],
+      "region_scope": "NATIONAL",
+      "applicable_regions": [],
+      "profit_range": {"min": 0, "max": 99999999},
+      "optimal_timing": "Q1",
+      "valid_from": "2014-01-01",
+      "valid_until": "2099-12-31",
+      "source_doc": "财税〔2013〕103号",
+      "confidence": 0.97
+    }
+  },
+  {
+    "strategy_id": "IIT-004",
+    "title": "薪酬结构优化——福利替代部分工资",
+    "trigger_keywords": ["薪酬结构", "福利", "通讯补贴", "交通补贴", "餐补免税"],
+    "scenario": "通过合规福利替代部分现金工资，降低员工个税负担，同时增加企业税前扣除",
+    "core_content": "以下福利享受个人所得税免税：①独生子女补贴②托儿补助费③差旅费津贴（标准内）④误餐补助⑤探亲路费。通讯补贴、交通补贴各地有不同标准（一般300-500元/月）。住房公积金缴至上限可全额免税。",
+    "action_suggestions": [
+      "将部分工资拆分为合规免税福利项目（通讯、交通、餐补）",
+      "提高住房公积金缴存比例至上限（12%）",
+      "向员工提供实物福利（年节礼品200元以内免税）",
+      "确认当地通讯费、交通费免税标准，按标准执行"
+    ],
+    "risk_notes": "超标准发放的福利仍需并入工资缴税；发放不合规凭证可能被认定为隐性工资",
+    "metadata": {
+      "applicable_taxpayer": ["GENERAL", "SMALL_SCALE"],
+      "applicable_industry": ["ALL"],
+      "region_scope": "NATIONAL",
+      "applicable_regions": [],
+      "profit_range": {"min": 0, "max": 99999999},
+      "optimal_timing": "Q1",
+      "valid_from": "2018-01-01",
+      "valid_until": "2099-12-31",
+      "source_doc": "个人所得税法第4条；国税发〔1998〕155号",
+      "confidence": 0.95
+    }
+  },
+  {
+    "strategy_id": "IIT-005",
+    "title": "员工工资薪酬税前扣除标准",
+    "trigger_keywords": ["工资薪酬", "税前扣除", "合理工资", "薪酬费用", "扣除标准"],
+    "scenario": "企业支付给员工的工资薪酬全额税前扣除，但需满足合理性要求",
+    "core_content": "企业向员工实际支付的工资薪酬（合理范围内）可全额税前扣除，无总额或比例限制。合理性判断：①是否有正式劳动合同②是否实际到岗工作③是否与市场水平相符④是否包含在职工薪酬总额核定内。关联方间工资支付须特别注意定价合理性。",
+    "action_suggestions": [
+      "签订规范劳动合同，薪资明确约定",
+      "按月发薪并代扣代缴个税，保留工资单和个税申报记录",
+      "股东工资需与其工作内容和市场水平匹配，防止偏高被调整",
+      "派遣员工费用须取得增值税发票，否则不得全额扣除"
+    ],
+    "risk_notes": "向非雇佣人员（仅挂名股东）发高额工资，税务稽查时常被调整；股东工资不合理可能被重新界定为税后利润分配",
+    "metadata": {
+      "applicable_taxpayer": ["GENERAL", "SMALL_SCALE"],
+      "applicable_industry": ["ALL"],
+      "region_scope": "NATIONAL",
+      "applicable_regions": [],
+      "profit_range": {"min": 0, "max": 99999999},
+      "optimal_timing": "ANY",
+      "valid_from": "2008-01-01",
+      "valid_until": "2099-12-31",
+      "source_doc": "企业所得税法实施条例第34条",
+      "confidence": 0.99
+    }
+  }
+]

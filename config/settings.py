@@ -45,3 +45,14 @@ APP_DEBUG = os.getenv("APP_DEBUG", "false").lower() == "true"
 JWT_SECRET_KEY   = os.getenv("JWT_SECRET_KEY", "CHANGE_ME_IN_PRODUCTION_32chars!!")
 JWT_ALGORITHM    = "HS256"
 JWT_EXPIRE_HOURS = int(os.getenv("JWT_EXPIRE_HOURS", "12"))
+
+# ── RAG / Vector Store ────────────────────────────────────────────────────────
+# ChromaDB 持久化路径（相对于项目根目录）
+CHROMA_PATH      = os.getenv("CHROMA_PATH", "./chroma_db")
+CHROMA_COLLECTION= os.getenv("CHROMA_COLLECTION", "tax_strategies")
+
+# Embedding API（OpenAI-compatible，可替换千问 text-embedding-v3 等）
+EMBED_API_KEY    = os.getenv("EMBED_API_KEY",  os.getenv("LLM_API_KEY", ""))
+EMBED_BASE_URL   = os.getenv("EMBED_BASE_URL", "https://api.openai.com/v1")
+EMBED_MODEL      = os.getenv("EMBED_MODEL",    "text-embedding-3-small")
+EMBED_BATCH_SIZE = int(os.getenv("EMBED_BATCH_SIZE", "32"))

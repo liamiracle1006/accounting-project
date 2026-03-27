@@ -1,0 +1,106 @@
+[
+  {
+    "strategy_id": "TECH-001",
+    "title": "软件企业增值税即征即退",
+    "trigger_keywords": ["软件企业", "即征即退", "增值税", "自主研发", "软件产品"],
+    "scenario": "经认定的软件企业销售自主研发软件产品，享受增值税即征即退优惠",
+    "core_content": "经认定的软件企业销售自主开发生产的软件产品，增值税实际税负超3%的部分即征即退。退税率=（实际缴纳增值税-不含税销售额×3%）/销售额×100%。嵌入式软件产品随硬件销售时，分别核算软硬件收入可单独享受即征即退。",
+    "action_suggestions": [
+      "向省级软件行业协会和税务局申请软件企业认定（有效期1年，须年审）",
+      "分别核算软件产品收入和硬件收入（混合销售须拆分）",
+      "每月申报后及时申请即征即退退税款",
+      "退税款纳入企业所得税应纳税所得额（不免企业所得税）"
+    ],
+    "risk_notes": "认定须年审，逾期未审资格自动失效；退税款不计入增值税负担计算",
+    "metadata": {
+      "applicable_taxpayer": ["GENERAL"],
+      "applicable_industry": ["科技", "软件", "互联网"],
+      "region_scope": "NATIONAL",
+      "applicable_regions": [],
+      "profit_range": {"min": 0, "max": 99999999},
+      "optimal_timing": "ANY",
+      "valid_from": "2011-01-01",
+      "valid_until": "2099-12-31",
+      "source_doc": "财税〔2011〕100号",
+      "confidence": 0.97
+    }
+  },
+  {
+    "strategy_id": "TECH-002",
+    "title": "集成电路企业所得税重大优惠",
+    "trigger_keywords": ["集成电路", "芯片", "半导体", "\"两免三减半\"", "十年免税"],
+    "scenario": "集成电路设计、制造、封测企业享受阶段性企业所得税减免",
+    "core_content": "①线宽<28nm（含）制造企业：10年免税②线宽<65nm制造、投资≥150亿：先进制造也享10年免税③线宽<130nm制造企业：5年免税、之后减半④集成电路设计企业：2年免税、3年减半（高新同时享受15%）。2020年起执行，不追溯此前优惠。",
+    "action_suggestions": [
+      "向省级工信部门申请集成电路企业认定（一次认定，长期有效）",
+      "结合高新技术企业认定，税率由25%降至15%并叠加免减税期",
+      "减免税期从获利年度起算（首个应纳税所得额>0的年度）",
+      "企业所得税申报时选择分阶段免税优惠，勿遗漏"
+    ],
+    "risk_notes": "与其他所得税优惠（高新15%）选最优不叠加；改变主营业务将影响优惠资格",
+    "metadata": {
+      "applicable_taxpayer": ["GENERAL"],
+      "applicable_industry": ["集成电路", "半导体", "科技"],
+      "region_scope": "NATIONAL",
+      "applicable_regions": [],
+      "profit_range": {"min": 0, "max": 99999999},
+      "optimal_timing": "Q1",
+      "valid_from": "2020-01-01",
+      "valid_until": "2099-12-31",
+      "source_doc": "财税〔2020〕45号",
+      "confidence": 0.97
+    }
+  },
+  {
+    "strategy_id": "TECH-003",
+    "title": "数字经济企业知识产权优化布局",
+    "trigger_keywords": ["知识产权", "专利", "软件著作权", "无形资产", "技术许可"],
+    "scenario": "科技企业将核心技术以知识产权形式保护并合理布局，实现多重税务优惠",
+    "core_content": "科技企业持有知识产权可同时享受：①高新技术认定加分②研发加计扣除（开发阶段资本化后摊销也加计75%/100%）③技术转让/许可所得前500万免税、500万后减半④海外IP布局（香港低税率地区持有IP并授权大陆使用）。",
+    "action_suggestions": [
+      "制定IP战略：将公司核心技术及时申报专利保护",
+      "软件著作权登记费用低（300元/件），尽快完善覆盖",
+      "知识产权转让给关联方须按公允价值定价（防范转让定价风险）",
+      "探索香港子公司持有IP、向大陆母公司收取许可费（需实质经营）"
+    ],
+    "risk_notes": "无实质业务的纯离岸IP公司可能被认定为受控外国企业；关联交易须做同期资料",
+    "metadata": {
+      "applicable_taxpayer": ["GENERAL"],
+      "applicable_industry": ["科技", "互联网", "软件"],
+      "region_scope": "NATIONAL",
+      "applicable_regions": [],
+      "profit_range": {"min": 0, "max": 99999999},
+      "optimal_timing": "ANY",
+      "valid_from": "2015-01-01",
+      "valid_until": "2099-12-31",
+      "source_doc": "企业所得税法第27条；财税〔2016〕52号",
+      "confidence": 0.93
+    }
+  },
+  {
+    "strategy_id": "TECH-004",
+    "title": "互联网企业跨地区经营汇总纳税",
+    "trigger_keywords": ["跨地区", "汇总纳税", "总分机构", "分公司", "属地预缴"],
+    "scenario": "在多个省市设有分支机构的互联网/科技企业，总分机构企业所得税汇总申报",
+    "core_content": "跨地区经营的企业，企业所得税按照总机构集中汇算、分机构就地预缴。分配比例：总机构25%、分机构按三因素（收入、工资、资产各占1/3）分配75%。可利用分机构所在地区税收优惠（西部15%、海南9%等）进行合理规划。",
+    "action_suggestions": [
+      "总机构确保汇总申报合规，掌握各分机构预缴情况",
+      "分机构设在低税率地区可争取当地税收优惠",
+      "三因素分配比例影响各地预缴额，年末核查分配合理性",
+      "分机构不单独进行汇算清缴，由总机构统一处理"
+    ],
+    "risk_notes": "分机构必须实际经营（有场地、人员），否则不能享受当地优惠；空壳分机构面临反避税调查",
+    "metadata": {
+      "applicable_taxpayer": ["GENERAL"],
+      "applicable_industry": ["科技", "互联网", "ALL"],
+      "region_scope": "NATIONAL",
+      "applicable_regions": [],
+      "profit_range": {"min": 0, "max": 99999999},
+      "optimal_timing": "Q1",
+      "valid_from": "2012-01-01",
+      "valid_until": "2099-12-31",
+      "source_doc": "国税发〔2012〕57号",
+      "confidence": 0.97
+    }
+  }
+]
