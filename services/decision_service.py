@@ -29,6 +29,7 @@ from sqlalchemy.orm import Session
 from ai.llm_client import LLMClient, LLMClientError
 from ai.decision_prompts import build_decision_user_prompt
 from ai.json_parser import parse_llm_output
+from rag.retriever import TaxStrategyRetriever, RetrievalContext
 from models.operational_record import OperationalRecord, RecordStatus
 from models.boss_decision_log import BossDecisionLog, DecisionStatus
 from models.asset_register import AssetRegister, DepreciationMethod, AssetStatus
@@ -67,8 +68,9 @@ class DecisionServiceError(ValueError):
 
 class DecisionService:
     def __init__(self, db: Session) -> None:
-        self._db  = db
-        self._llm = LLMClient()
+        self._db       = db
+        self._llm      = LLMClient()
+        self._retriever = TaxStrategyRetriever()
 
     # ── Public: 获取或生成决策卡片 ─────────────────────────────────────────────
 
@@ -154,6 +156,24 @@ class DecisionService:
         profile   = self._get_active_profile()
         snapshot  = self._get_financial_snapshot()
 
+        # RAG 检索：根据企业画像 + 业务描述获取相关政策
+        rag_hits = []
+        try:
+            rag_ctx = RetrievalContext(
+                query_text    = f"{extracted.expense_type} {record.raw_text}",
+                taxpayer_type = profile.tax_payer_type if profile else "ALL",
+                industry_code = profile.industry_code  if profile else "ALL",
+                province      = profile.province or "" if profile else "",
+                city          = profile.city     or "" if profile else "",
+                ytd_profit    = snapshot["ytd_profit"],
+                top_k         = 5,
+                query_date    = str(date.today()),
+            )
+            rag_hits = self._retriever.retrieve(rag_ctx)
+            logger.info("RAG retrieved %d hits for decision card", len(rag_hits))
+        except Exception as exc:
+            logger.warning("RAG retrieval failed, continuing without policy context: %s", exc)
+
         # 调用 LLM 生成方案结构
         user_prompt = build_decision_user_prompt(
             expense_type    = extracted.expense_type,
@@ -165,6 +185,11 @@ class DecisionService:
             ytd_profit      = snapshot["ytd_profit"],
             current_cash    = snapshot["current_cash"],
             current_month   = datetime.now().month,
+            rag_hits        = rag_hits,
+            is_hnte         = bool(profile.is_hnte)    if profile else False,
+            rd_eligible     = bool(profile.rd_eligible) if profile else False,
+            province        = profile.province or ""   if profile else "",
+            city            = profile.city     or ""   if profile else "",
         )
 
         try:
