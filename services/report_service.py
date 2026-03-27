@@ -174,9 +174,10 @@ class ReportService:
         a("1101", "交易性金融资产",          E("1101"),  B("1101"))
         a("1111", "应收票据",                E("1111"),  B("1111"))
         a("1122", "应收账款",                E("1122"),  B("1122"))
-        a("1221", "其他应收款",              E("1221"),  B("1221"))
         a("1123", "预付款项",                E("1123"),  B("1123"))
-        a("1401+1402+1403+1405", "存货",
+        a("1221", "其他应收款",
+          E("1121","1221"), B("1121","1221"))
+        a("1401+", "存货",
           E("1401","1402","1403","1405","1406","1408"),
           B("1401","1402","1403","1405","1406","1408"))
         a("1801", "其他流动资产",            E("1801"),  B("1801"))
@@ -186,20 +187,26 @@ class ReportService:
         atotal("流动资产合计", ca_end, ca_beg)
 
         # 非流动资产
+        a("1501", "长期股权投资",            E("1501"),  B("1501"))
+        a("1502", "投资性房地产",            E("1502"),  B("1502"))
+
         fa_end = _net_asset(end_bal, "1601", "1602")
         fa_beg = _net_asset(beg_bal, "1601", "1602")
-        a("1601", "固定资产",               fa_end, fa_beg)
-        a("1604", "在建工程",               E("1604"), B("1604"))
-        ia_end = _net_asset(end_bal, "1701", "1702") + E("1702")
-        ia_beg = _net_asset(beg_bal, "1701", "1702") + B("1702")
-        a("1701", "无形资产",               E("1701"),  B("1701"))
-        a("1501", "长期股权投资",           E("1501"),  B("1501"))
-        a("1811", "递延所得税资产",         E("1811"),  B("1811"))
+        a("1601", "固定资产",                fa_end, fa_beg)
+        a("1604", "在建工程",                E("1604"), B("1604"))
 
-        nca_items = [i for i in bs.assets if not i.is_total][8:]  # non-current items
-        # recalculate from named items
-        nca_end = fa_end + E("1604") + E("1701") + E("1501") + E("1811")
-        nca_beg = fa_beg + B("1604") + B("1701") + B("1501") + B("1811")
+        # 无形资产 = 原值 - 累计摊销 - 减值准备
+        ia_end = E("1701") - EL("1703") - EL("1704")
+        ia_beg = B("1701") - BL("1703") - BL("1704")
+        a("1701", "无形资产",                ia_end,  ia_beg)
+        a("1702", "开发支出",                E("1702"),  B("1702"))
+        a("1801", "长期待摊费用",            E("1801"),  B("1801"))
+        a("1811", "递延所得税资产",          E("1811"),  B("1811"))
+
+        nca_end = (E("1501") + E("1502") + fa_end + E("1604")
+                   + ia_end + E("1702") + E("1801") + E("1811"))
+        nca_beg = (B("1501") + B("1502") + fa_beg + B("1604")
+                   + ia_beg + B("1702") + B("1801") + B("1811"))
         atotal("非流动资产合计", nca_end, nca_beg)
 
         ta_end = ca_end + nca_end
@@ -218,9 +225,10 @@ class ReportService:
         l("2201", "应付票据",               EL("2201"), BL("2201"))
         l("2202", "应付账款",               EL("2202"), BL("2202"))
         l("2203", "预收款项",               EL("2203"), BL("2203"))
+        l("2205", "合同负债",               EL("2205"), BL("2205"))
         l("2211", "应付职工薪酬",           EL("2211"), BL("2211"))
         l("2221", "应交税费",               EL("2221"), BL("2221"))
-        l("2232", "应付利息",               EL("2231"), BL("2231"))
+        l("2231", "应付利息",               EL("2231"), BL("2231"))
         l("2232", "应付股利",               EL("2232"), BL("2232"))
         l("2241", "其他应付款",             EL("2241"), BL("2241"))
 
@@ -231,11 +239,15 @@ class ReportService:
         # 非流动负债
         l("2501", "长期借款",               EL("2501"), BL("2501"))
         l("2502", "应付债券",               EL("2502"), BL("2502"))
+        l("2511", "长期应付款",             EL("2511"), BL("2511"))
         l("2601", "预计负债",               EL("2601"), BL("2601"))
+        l("2401", "递延收益",               EL("2401"), BL("2401"))
         l("2441", "递延所得税负债",         EL("2441"), BL("2441"))
 
-        ncl_end = EL("2501") + EL("2502") + EL("2601") + EL("2441")
-        ncl_beg = BL("2501") + BL("2502") + BL("2601") + BL("2441")
+        ncl_end = (EL("2501") + EL("2502") + EL("2511")
+                   + EL("2601") + EL("2401") + EL("2441"))
+        ncl_beg = (BL("2501") + BL("2502") + BL("2511")
+                   + BL("2601") + BL("2401") + BL("2441"))
         ltotal("非流动负债合计", ncl_end, ncl_beg)
 
         tl_end = cl_end + ncl_end
@@ -251,8 +263,9 @@ class ReportService:
 
         e("4001", "实收资本（股本）",       EL("4001","3001"), BL("4001","3001"))
         e("4002", "资本公积",               EL("4002"), BL("4002"))
+        e("4005", "其他综合收益",           EL("4005"), BL("4005"))
         e("4101", "盈余公积",               EL("4101"), BL("4101"))
-        e("4103", "未分配利润",             EL("4103"), BL("4103"))
+        e("4103", "未分配利润",             EL("4103","4104"), BL("4103","4104"))
 
         te_end = sum(i.end_bal for i in bs.equity)
         te_beg = sum(i.beg_bal for i in bs.equity)
@@ -351,16 +364,26 @@ class ReportService:
         oth_p     = S("6117","CREDIT", prev_from, prev_to)
         row("6117", "加：其他收益",                    oth_c, oth_p)
 
-        # 加：资产减值损失（转回为正）
+        # 加：资产减值损失（转回为正，损失为负）
         imp_c     = S("6701","CREDIT", date_from, date_to) - S("6701","DEBIT", date_from, date_to)
         imp_p     = S("6701","CREDIT", prev_from, prev_to) - S("6701","DEBIT", prev_from, prev_to)
         row("6701", "加：资产减值转回（减：损失）",    imp_c, imp_p)
 
+        # 加：信用减值损失（转回为正，损失为负）
+        cred_imp_c = S("6120","CREDIT", date_from, date_to) - S("6120","DEBIT", date_from, date_to)
+        cred_imp_p = S("6120","CREDIT", prev_from, prev_to) - S("6120","DEBIT", prev_from, prev_to)
+        row("6120", "加：信用减值转回（减：损失）",    cred_imp_c, cred_imp_p)
+
+        # 加：资产处置收益
+        disp_c    = S("6115","CREDIT", date_from, date_to) - S("6115","DEBIT", date_from, date_to)
+        disp_p    = S("6115","CREDIT", prev_from, prev_to) - S("6115","DEBIT", prev_from, prev_to)
+        row("6115", "加：资产处置收益",                disp_c, disp_p)
+
         # 二、营业利润
         op_c = (trev_c - cogs_c - tax_sur_c - sell_c - admin_c - fin_c - rd_c
-                + fv_c + inv_c + oth_c + imp_c)
+                + fv_c + inv_c + oth_c + imp_c + cred_imp_c + disp_c)
         op_p = (trev_p - cogs_p - tax_sur_p - sell_p - admin_p - fin_p - rd_p
-                + fv_p + inv_p + oth_p + imp_p)
+                + fv_p + inv_p + oth_p + imp_p + cred_imp_p + disp_p)
         row("", "二、营业利润",                        op_c, op_p, True)
 
         # 加：营业外收入

@@ -1,13 +1,15 @@
 """
-AgentLedger — CashFlowService (Phase 4)
+AgentLedger — CashFlowService (会企03表，直接法)
 
-现金流量表（会企03表，间接法）
+直接法：经营活动的现金流量按收/支现金项目逐项列示。
+投资/筹资活动：从相关科目发生额推算。
 
-间接法：从净利润出发，调整非现金项目，得出经营活动现金流量。
-投资/筹资活动：直接从相关科目变动推算。
-
-注意：完整的现金流量表需要辅助现金科目标记，此处采用近似估算法，
-      通过期末/期初余额变动推算各类现金流量，适用于小微企业报表。
+实现策略（近似法）：
+  - 销售收到的现金 ≈ 主营/其他业务收入 + 预收款项变动 - 应收账款变动
+  - 购买商品付的现金 ≈ 主营成本 + 存货增加 + 应付账款减少
+  - 支付员工的现金 ≈ 管理/销售费用中的薪酬部分（应付职工薪酬变动修正）
+  - 支付税款 ≈ 所得税费用 + 应交税费减少
+  适用于小微企业，实务中可按现金收付标注细化。
 """
 import logging
 import calendar
@@ -42,6 +44,8 @@ class CashFlowStatement:
     prev_to:      str
     items:        list[CFLineItem] = field(default_factory=list)
 
+
+# ── 通用查询辅助 ─────────────────────────────────────────────────────────────
 
 def _build_balances(db: Session, as_of: date) -> dict[str, Decimal]:
     rows = (
@@ -92,47 +96,7 @@ def _liab_bal(b: dict, *codes: str) -> Decimal:
     return sum((max(-b.get(c, Decimal("0")), Decimal("0")) for c in codes), Decimal("0"))
 
 
-def _actual_depreciation(db: Session, date_from: date, date_to: date) -> Decimal:
-    """
-    从 asset_register 计算区间内实际计提折旧额。
-
-    策略：对每项资产，统计区间内实际折旧月数（折旧开始月到折旧结束月与区间的交集），
-    乘以月折旧额。已处置（DISPOSED）的资产仍包含在内（折旧在处置前已发生）。
-    ONE_TIME（一次性扣除）资产：若购入日期在区间内则计入全额。
-    """
-    assets = db.query(AssetRegister).all()
-    total = Decimal("0")
-    from_ym = (date_from.year, date_from.month)
-    to_ym   = (date_to.year, date_to.month)
-
-    for a in assets:
-        if not a.depreciation_start_month:
-            continue
-        start_y, start_m = map(int, a.depreciation_start_month.split("-"))
-        start_ym = (start_y, start_m)
-
-        monthly = Decimal(str(a.monthly_depreciation))
-        if monthly <= 0:
-            continue
-
-        # 折旧结束月（开始月 + 总月数 - 1）
-        total_months = int(a.useful_life_months)
-        end_m_offset = start_m + total_months - 2   # 0-based offset
-        end_y  = start_y + end_m_offset // 12
-        end_m  = end_m_offset % 12 + 1
-        end_ym = (end_y, end_m)
-
-        # 区间交集
-        eff_start = max(start_ym, from_ym)
-        eff_end   = min(end_ym,   to_ym)
-        if eff_start > eff_end:
-            continue
-
-        months = (eff_end[0] - eff_start[0]) * 12 + (eff_end[1] - eff_start[1]) + 1
-        total += monthly * months
-
-    return total
-
+# ── CashFlowService ──────────────────────────────────────────────────────────
 
 class CashFlowService:
     def __init__(self, db: Session) -> None:
@@ -140,7 +104,7 @@ class CashFlowService:
 
     def get_cash_flow(self, date_from: date, date_to: date) -> CashFlowStatement:
         """
-        间接法现金流量表（会企03表）。
+        直接法现金流量表（会企03表）。
         上期 = 上年同期。
         """
         prev_from = date(date_from.year - 1, date_from.month, date_from.day)
@@ -164,133 +128,196 @@ class CashFlowService:
                 is_total=is_total,
             ))
 
-        # ── 一、经营活动产生的现金流量（间接法） ─────────────────────────
-
-        # 净利润（本期）
-        rev_c  = S("6001","CREDIT", date_from, date_to) + S("6051","CREDIT", date_from, date_to)
-        exp_c  = (S("6401","DEBIT", date_from, date_to)
-                  + S("6403","DEBIT", date_from, date_to)
-                  + S("6601","DEBIT", date_from, date_to)
-                  + S("6602","DEBIT", date_from, date_to)
-                  + S("6603","DEBIT", date_from, date_to)
-                  + S("6604","DEBIT", date_from, date_to)
-                  + S("6711","DEBIT", date_from, date_to)
-                  + S("6801","DEBIT", date_from, date_to))
-        ebt_c  = rev_c - exp_c + S("6301","CREDIT", date_from, date_to)
-        np_c   = ebt_c - S("6801","DEBIT", date_from, date_to)
-
-        rev_p  = S("6001","CREDIT", prev_from, prev_to) + S("6051","CREDIT", prev_from, prev_to)
-        exp_p  = (S("6401","DEBIT", prev_from, prev_to)
-                  + S("6403","DEBIT", prev_from, prev_to)
-                  + S("6601","DEBIT", prev_from, prev_to)
-                  + S("6602","DEBIT", prev_from, prev_to)
-                  + S("6603","DEBIT", prev_from, prev_to)
-                  + S("6604","DEBIT", prev_from, prev_to)
-                  + S("6711","DEBIT", prev_from, prev_to)
-                  + S("6801","DEBIT", prev_from, prev_to))
-        ebt_p  = rev_p - exp_p + S("6301","CREDIT", prev_from, prev_to)
-        np_p   = ebt_p - S("6801","DEBIT", prev_from, prev_to)
-
-        row("NP", "净利润", np_c, np_p)
-
-        # 调整项：计算期末/期初余额变动
+        # 期末/期初余额（用于运营资本变动修正）
         end_bal  = _build_balances(self._db, date_to)
-        beg_bal  = _build_balances(self._db, date(date_from.year, date_from.month, date_from.day)
-                                   if date_from.month > 1
-                                   else date(date_from.year - 1, 12, 31))
+        beg_bal  = _build_balances(
+            self._db,
+            date(date_from.year - 1, 12, 31) if date_from.month == 1
+            else date(date_from.year, date_from.month, 1),
+        )
         pend_bal = _build_balances(self._db, prev_to)
-        pbeg_bal = _build_balances(self._db, date(prev_from.year, prev_from.month, prev_from.day)
-                                   if prev_from.month > 1
-                                   else date(prev_from.year - 1, 12, 31))
+        pbeg_bal = _build_balances(
+            self._db,
+            date(prev_from.year - 1, 12, 31) if prev_from.month == 1
+            else date(prev_from.year, prev_from.month, 1),
+        )
 
-        def asset_chg(b_end, b_beg, *codes):
-            """资产增加为现金流出（负），减少为流入（正）"""
-            return (_asset_bal(b_beg, *codes) - _asset_bal(b_end, *codes))
+        def asset_dec(b_end, b_beg, *codes):
+            """资产余额减少 = 现金流入（正）"""
+            return _asset_bal(b_beg, *codes) - _asset_bal(b_end, *codes)
 
-        def liab_chg(b_end, b_beg, *codes):
-            """负债增加为现金流入（正），减少为流出（负）"""
-            return (_liab_bal(b_end, *codes) - _liab_bal(b_beg, *codes))
+        def liab_inc(b_end, b_beg, *codes):
+            """负债余额增加 = 现金流入（正）"""
+            return _liab_bal(b_end, *codes) - _liab_bal(b_beg, *codes)
 
-        # 固定资产折旧及无形资产摊销（从 asset_register 取实际计提数）
-        depr_c = _actual_depreciation(self._db, date_from, date_to)
-        depr_p = _actual_depreciation(self._db, prev_from, prev_to)
-        row("DEPR", "加：资产折旧及摊销", depr_c, depr_p)
+        # ── 一、经营活动产生的现金流量（直接法） ─────────────────────────────
 
-        # 应收账款减少（增加）
-        ar_chg_c = asset_chg(end_bal, beg_bal, "1122", "1111")
-        ar_chg_p = asset_chg(pend_bal, pbeg_bal, "1122", "1111")
-        row("AR", "应收账款（增加）/减少", ar_chg_c, ar_chg_p)
+        row("", "一、经营活动产生的现金流量：", Decimal("0"), Decimal("0"))
 
-        # 存货减少（增加）
-        inv_chg_c = asset_chg(end_bal, beg_bal, "1401","1402","1403","1405")
-        inv_chg_p = asset_chg(pend_bal, pbeg_bal, "1401","1402","1403","1405")
-        row("INV", "存货（增加）/减少", inv_chg_c, inv_chg_p)
+        # 1. 销售商品、提供劳务收到的现金
+        #    ≈ 营业收入 + 应收账款减少 + 预收款/合同负债增加
+        rev_c  = S("6001","CREDIT", date_from, date_to) + S("6051","CREDIT", date_from, date_to)
+        rev_p  = S("6001","CREDIT", prev_from, prev_to) + S("6051","CREDIT", prev_from, prev_to)
+        ar_dec_c = asset_dec(end_bal, beg_bal, "1122","1111")
+        ar_dec_p = asset_dec(pend_bal, pbeg_bal, "1122","1111")
+        adv_inc_c = liab_inc(end_bal, beg_bal, "2203","2205")
+        adv_inc_p = liab_inc(pend_bal, pbeg_bal, "2203","2205")
+        cash_recv_c = rev_c + ar_dec_c + adv_inc_c
+        cash_recv_p = rev_p + ar_dec_p + adv_inc_p
+        row("6001", "销售商品、提供劳务收到的现金",    cash_recv_c, cash_recv_p)
 
-        # 应付账款增加（减少）
-        ap_chg_c = liab_chg(end_bal, beg_bal, "2202", "2201")
-        ap_chg_p = liab_chg(pend_bal, pbeg_bal, "2202", "2201")
-        row("AP", "应付账款增加/（减少）", ap_chg_c, ap_chg_p)
+        # 2. 收到的税费返还（应交税费贷方发生额中VAT退税近似）
+        tax_ref_c = S("2221","DEBIT", date_from, date_to)
+        tax_ref_p = S("2221","DEBIT", prev_from, prev_to)
+        row("2221", "收到的税费返还",                  Decimal("0"), Decimal("0"))
 
-        # 应付职工薪酬增加（减少）
-        sal_chg_c = liab_chg(end_bal, beg_bal, "2211")
-        sal_chg_p = liab_chg(pend_bal, pbeg_bal, "2211")
-        row("SAL", "应付职工薪酬增加/（减少）", sal_chg_c, sal_chg_p)
+        # 3. 收到其他与经营活动有关的现金（营业外收入+其他收益）
+        other_in_c = S("6301","CREDIT", date_from, date_to) + S("6117","CREDIT", date_from, date_to)
+        other_in_p = S("6301","CREDIT", prev_from, prev_to) + S("6117","CREDIT", prev_from, prev_to)
+        row("6301", "收到其他与经营活动有关的现金",    other_in_c, other_in_p)
 
-        # 应交税费增加（减少）
-        tax_chg_c = liab_chg(end_bal, beg_bal, "2221")
-        tax_chg_p = liab_chg(pend_bal, pbeg_bal, "2221")
-        row("TAX", "应交税费增加/（减少）", tax_chg_c, tax_chg_p)
+        op_in_c = cash_recv_c + other_in_c
+        op_in_p = cash_recv_p + other_in_p
+        row("", "经营活动现金流入小计",                op_in_c, op_in_p, True)
 
-        op_cf_c = np_c + depr_c + ar_chg_c + inv_chg_c + ap_chg_c + sal_chg_c + tax_chg_c
-        op_cf_p = np_p + depr_p + ar_chg_p + inv_chg_p + ap_chg_p + sal_chg_p + tax_chg_p
-        row("", "一、经营活动产生的现金流量净额", op_cf_c, op_cf_p, True)
+        # 4. 购买商品、接受劳务支付的现金
+        #    ≈ 主营业务成本 + 存货增加 - 应付账款增加
+        cogs_c   = S("6401","DEBIT", date_from, date_to) + S("6402","DEBIT", date_from, date_to)
+        cogs_p   = S("6401","DEBIT", prev_from, prev_to) + S("6402","DEBIT", prev_from, prev_to)
+        inv_inc_c  = _asset_bal(end_bal,"1401","1402","1403","1405") - _asset_bal(beg_bal,"1401","1402","1403","1405")
+        inv_inc_p  = _asset_bal(pend_bal,"1401","1402","1403","1405") - _asset_bal(pbeg_bal,"1401","1402","1403","1405")
+        ap_inc_c   = liab_inc(end_bal, beg_bal, "2202","2201")
+        ap_inc_p   = liab_inc(pend_bal, pbeg_bal, "2202","2201")
+        cash_goods_c = max(cogs_c + inv_inc_c - ap_inc_c, Decimal("0"))
+        cash_goods_p = max(cogs_p + inv_inc_p - ap_inc_p, Decimal("0"))
+        row("6401", "购买商品、接受劳务支付的现金",    -cash_goods_c, -cash_goods_p)
 
-        # ── 二、投资活动 ────────────────────────────────────────────────────
+        # 5. 支付给职工以及为职工支付的现金
+        #    ≈ 6602管理费用中的薪酬部分，用应付职工薪酬变动修正
+        #    简化：6602借方 + 6601借方中的销售薪酬，减应付职工薪酬增加
+        sal_exp_c = S("6602","DEBIT", date_from, date_to) * Decimal("0.4")  # 估算40%为薪酬
+        sal_exp_p = S("6602","DEBIT", prev_from, prev_to) * Decimal("0.4")
+        sal_liab_inc_c = liab_inc(end_bal, beg_bal, "2211")
+        sal_liab_inc_p = liab_inc(pend_bal, pbeg_bal, "2211")
+        cash_sal_c = max(sal_exp_c - sal_liab_inc_c, Decimal("0"))
+        cash_sal_p = max(sal_exp_p - sal_liab_inc_p, Decimal("0"))
+        row("2211", "支付给职工以及为职工支付的现金",  -cash_sal_c, -cash_sal_p)
 
-        # 购建固定资产（1601借方发生额）
-        fa_buy_c = S("1601","DEBIT", date_from, date_to)
-        fa_buy_p = S("1601","DEBIT", prev_from, prev_to)
-        row("FA_BUY", "减：购建固定资产、无形资产", -fa_buy_c, -fa_buy_p)
+        # 6. 支付的各项税费
+        #    ≈ 所得税费用 + 税金及附加 + 应交税费减少
+        tax_exp_c  = S("6801","DEBIT", date_from, date_to) + S("6403","DEBIT", date_from, date_to)
+        tax_exp_p  = S("6801","DEBIT", prev_from, prev_to) + S("6403","DEBIT", prev_from, prev_to)
+        tax_liab_dec_c = -liab_inc(end_bal, beg_bal, "2221")   # 负值表示减少（现金流出）
+        tax_liab_dec_p = -liab_inc(pend_bal, pbeg_bal, "2221")
+        cash_tax_c = max(tax_exp_c + tax_liab_dec_c, Decimal("0"))
+        cash_tax_p = max(tax_exp_p + tax_liab_dec_p, Decimal("0"))
+        row("6801", "支付的各项税费",                  -cash_tax_c, -cash_tax_p)
 
-        # 处置固定资产（1601贷方发生额 → 收入）
-        fa_sell_c = S("1601","CREDIT", date_from, date_to)
-        fa_sell_p = S("1601","CREDIT", prev_from, prev_to)
-        row("FA_SELL", "收回处置固定资产净额", fa_sell_c, fa_sell_p)
+        # 7. 支付其他与经营活动有关的现金（销售+财务+其余管理费用）
+        other_op_c = (S("6601","DEBIT", date_from, date_to)
+                      + S("6603","DEBIT", date_from, date_to)
+                      + S("6604","DEBIT", date_from, date_to)
+                      + S("6711","DEBIT", date_from, date_to)
+                      + S("6602","DEBIT", date_from, date_to) * Decimal("0.6"))
+        other_op_p = (S("6601","DEBIT", prev_from, prev_to)
+                      + S("6603","DEBIT", prev_from, prev_to)
+                      + S("6604","DEBIT", prev_from, prev_to)
+                      + S("6711","DEBIT", prev_from, prev_to)
+                      + S("6602","DEBIT", prev_from, prev_to) * Decimal("0.6"))
+        row("6601", "支付其他与经营活动有关的现金",    -other_op_c, -other_op_p)
 
-        inv_cf_c = -fa_buy_c + fa_sell_c
-        inv_cf_p = -fa_buy_p + fa_sell_p
-        row("", "二、投资活动产生的现金流量净额", inv_cf_c, inv_cf_p, True)
+        op_out_c = cash_goods_c + cash_sal_c + cash_tax_c + other_op_c
+        op_out_p = cash_goods_p + cash_sal_p + cash_tax_p + other_op_p
+        row("", "经营活动现金流出小计",                -op_out_c, -op_out_p, True)
 
-        # ── 三、筹资活动 ────────────────────────────────────────────────────
+        op_cf_c = op_in_c - op_out_c
+        op_cf_p = op_in_p - op_out_p
+        row("", "一、经营活动产生的现金流量净额",      op_cf_c, op_cf_p, True)
 
-        # 借款收到
+        # ── 二、投资活动产生的现金流量 ────────────────────────────────────────
+
+        row("", "二、投资活动产生的现金流量：", Decimal("0"), Decimal("0"))
+
+        # 处置固定资产收到的现金（1601贷方 + 1603借方发生额）
+        fa_disp_c = S("1603","DEBIT", date_from, date_to)
+        fa_disp_p = S("1603","DEBIT", prev_from, prev_to)
+        row("1603", "处置固定资产、无形资产收到的现金净额", fa_disp_c, fa_disp_p)
+
+        # 收到投资收益
+        inv_income_c = S("6111","CREDIT", date_from, date_to)
+        inv_income_p = S("6111","CREDIT", prev_from, prev_to)
+        row("6111", "收到的投资收益",                  inv_income_c, inv_income_p)
+
+        inv_in_c = fa_disp_c + inv_income_c
+        inv_in_p = fa_disp_p + inv_income_p
+        row("", "投资活动现金流入小计",                inv_in_c, inv_in_p, True)
+
+        # 购建固定资产、无形资产支付的现金
+        fa_buy_c = S("1601","DEBIT", date_from, date_to) + S("1701","DEBIT", date_from, date_to)
+        fa_buy_p = S("1601","DEBIT", prev_from, prev_to) + S("1701","DEBIT", prev_from, prev_to)
+        row("1601", "购建固定资产、无形资产支付的现金", -fa_buy_c, -fa_buy_p)
+
+        # 对外投资支付的现金
+        equity_inv_c = S("1501","DEBIT", date_from, date_to)
+        equity_inv_p = S("1501","DEBIT", prev_from, prev_to)
+        row("1501", "对外投资支付的现金",               -equity_inv_c, -equity_inv_p)
+
+        inv_out_c = fa_buy_c + equity_inv_c
+        inv_out_p = fa_buy_p + equity_inv_p
+        row("", "投资活动现金流出小计",                -inv_out_c, -inv_out_p, True)
+
+        inv_cf_c = inv_in_c - inv_out_c
+        inv_cf_p = inv_in_p - inv_out_p
+        row("", "二、投资活动产生的现金流量净额",      inv_cf_c, inv_cf_p, True)
+
+        # ── 三、筹资活动产生的现金流量 ────────────────────────────────────────
+
+        row("", "三、筹资活动产生的现金流量：", Decimal("0"), Decimal("0"))
+
+        # 吸收投资收到的现金（实收资本增加）
+        equity_in_c = S("4001","CREDIT", date_from, date_to) + S("3001","CREDIT", date_from, date_to)
+        equity_in_p = S("4001","CREDIT", prev_from, prev_to) + S("3001","CREDIT", prev_from, prev_to)
+        row("4001", "吸收投资收到的现金",               equity_in_c, equity_in_p)
+
+        # 借款收到的现金
         borrow_c = S("2001","CREDIT", date_from, date_to) + S("2501","CREDIT", date_from, date_to)
         borrow_p = S("2001","CREDIT", prev_from, prev_to) + S("2501","CREDIT", prev_from, prev_to)
-        row("BORROW", "借款收到的现金", borrow_c, borrow_p)
+        row("2001", "借款收到的现金",                   borrow_c, borrow_p)
 
-        # 偿还借款
-        repay_c = S("2001","DEBIT",  date_from, date_to) + S("2501","DEBIT",  date_from, date_to)
-        repay_p = S("2001","DEBIT",  prev_from, prev_to) + S("2501","DEBIT",  prev_from, prev_to)
-        row("REPAY", "偿还债务支付的现金", -repay_c, -repay_p)
+        fin_in_c = equity_in_c + borrow_c
+        fin_in_p = equity_in_p + borrow_p
+        row("", "筹资活动现金流入小计",                fin_in_c, fin_in_p, True)
 
-        fin_cf_c = borrow_c - repay_c
-        fin_cf_p = borrow_p - repay_p
-        row("", "三、筹资活动产生的现金流量净额", fin_cf_c, fin_cf_p, True)
+        # 偿还债务支付的现金
+        repay_c = S("2001","DEBIT", date_from, date_to) + S("2501","DEBIT", date_from, date_to)
+        repay_p = S("2001","DEBIT", prev_from, prev_to) + S("2501","DEBIT", prev_from, prev_to)
+        row("", "偿还债务支付的现金",                   -repay_c, -repay_p)
 
-        # ── 四、现金及现金等价物净增加 ──────────────────────────────────────
+        # 分配股利、利润或偿付利息支付的现金
+        div_c = S("4104","DEBIT", date_from, date_to) + S("2232","DEBIT", date_from, date_to)
+        div_p = S("4104","DEBIT", prev_from, prev_to) + S("2232","DEBIT", prev_from, prev_to)
+        row("4104", "分配股利、利润或偿付利息支付的现金", -div_c, -div_p)
+
+        fin_out_c = repay_c + div_c
+        fin_out_p = repay_p + div_p
+        row("", "筹资活动现金流出小计",                -fin_out_c, -fin_out_p, True)
+
+        fin_cf_c = fin_in_c - fin_out_c
+        fin_cf_p = fin_in_p - fin_out_p
+        row("", "三、筹资活动产生的现金流量净额",      fin_cf_c, fin_cf_p, True)
+
+        # ── 四、现金及现金等价物净增加额 ─────────────────────────────────────
 
         net_c = op_cf_c + inv_cf_c + fin_cf_c
         net_p = op_cf_p + inv_cf_p + fin_cf_p
-        row("", "四、现金及现金等价物净增加额", net_c, net_p, True)
+        row("", "四、现金及现金等价物净增加额",         net_c, net_p, True)
 
-        # 期初现金余额
         cash_beg_c = _asset_bal(beg_bal, "1001","1002","1012")
         cash_beg_p = _asset_bal(pbeg_bal, "1001","1002","1012")
-        row("CASH_BEG", "加：期初现金及现金等价物余额", cash_beg_c, cash_beg_p)
+        row("", "加：期初现金及现金等价物余额",         cash_beg_c, cash_beg_p)
 
-        # 期末现金余额
         cash_end_c = _asset_bal(end_bal, "1001","1002","1012")
         cash_end_p = _asset_bal(pend_bal, "1001","1002","1012")
-        row("CASH_END", "五、期末现金及现金等价物余额", cash_end_c, cash_end_p, True)
+        row("", "五、期末现金及现金等价物余额",         cash_end_c, cash_end_p, True)
 
         return cf
