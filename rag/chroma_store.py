@@ -3,21 +3,42 @@ AgentLedger RAG — ChromaDB Store
 
 Wraps the ChromaDB client for reading and writing strategy slices.
 All slices share one collection (configurable via CHROMA_COLLECTION).
+
+If chromadb is not installed (e.g. Windows without C++ Build Tools),
+ChromaStore will raise RAGUnavailableError on instantiation.
+All callers should catch this and degrade gracefully.
 """
 import logging
 from typing import Any
-
-import chromadb
-from chromadb.config import Settings as ChromaSettings
 
 from config.settings import CHROMA_PATH, CHROMA_COLLECTION
 from rag.schema import StrategySlice
 
 logger = logging.getLogger(__name__)
 
+try:
+    import chromadb
+    from chromadb.config import Settings as ChromaSettings
+    _CHROMADB_AVAILABLE = True
+except ImportError:
+    _CHROMADB_AVAILABLE = False
+    logger.warning(
+        "chromadb is not installed — RAG/vector-store features are disabled. "
+        "To enable: pip install chromadb"
+    )
+
+
+class RAGUnavailableError(RuntimeError):
+    """Raised when chromadb is not installed."""
+
 
 class ChromaStore:
     def __init__(self) -> None:
+        if not _CHROMADB_AVAILABLE:
+            raise RAGUnavailableError(
+                "chromadb is not installed. RAG features are unavailable. "
+                "Install with: pip install chromadb"
+            )
         self._client = chromadb.PersistentClient(
             path=CHROMA_PATH,
             settings=ChromaSettings(anonymized_telemetry=False),

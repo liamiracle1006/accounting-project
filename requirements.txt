@@ -9,6 +9,9 @@ httpx==0.27.2
 pydantic==2.10.3
 
 # RAG / Vector Store
+# Windows 用户：如安装 chromadb 报 C++ 编译错误，可先注释掉此行。
+# 核心会计功能不受影响；RAG/AI顾问/知识库功能将不可用。
+# 解决办法：安装 Microsoft C++ Build Tools 后再 pip install chromadb==0.6.3
 chromadb==0.6.3
 bcrypt==4.2.1
 

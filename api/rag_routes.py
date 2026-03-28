@@ -65,6 +65,18 @@ class AskRequest(BaseModel):
     top_k:    int       = Field(default=5, ge=1, le=15)
 
 
+# ── RAG availability guard ────────────────────────────────────────────────────
+
+def _require_rag() -> None:
+    """Raise HTTP 503 if chromadb is not installed."""
+    from rag.chroma_store import _CHROMADB_AVAILABLE
+    if not _CHROMADB_AVAILABLE:
+        raise HTTPException(
+            status_code=503,
+            detail="RAG 功能不可用：chromadb 未安装。请先安装 C++ Build Tools 后执行 pip install chromadb。",
+        )
+
+
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 def _build_slice(body: SliceIn):
@@ -120,6 +132,7 @@ def _upsert_slice(body: SliceIn) -> dict:
 @router.get("/stats")
 def get_stats() -> Any:
     """返回知识库统计信息。"""
+    _require_rag()
     from rag.chroma_store import ChromaStore
     store = ChromaStore()
     return {
@@ -132,6 +145,7 @@ def get_stats() -> Any:
 @router.get("/slices")
 def list_slices() -> Any:
     """列出知识库中所有切片的 ID。"""
+    _require_rag()
     from rag.chroma_store import ChromaStore
     store = ChromaStore()
     ids = store.get_all_ids()
@@ -173,6 +187,7 @@ def update_slice(strategy_id: str, body: SliceIn) -> Any:
 @router.delete("/slices/{strategy_id}", status_code=200)
 def delete_slice(strategy_id: str) -> Any:
     """从知识库中删除指定切片。"""
+    _require_rag()
     from rag.chroma_store import ChromaStore
     store = ChromaStore()
     existing = store.get_all_ids()

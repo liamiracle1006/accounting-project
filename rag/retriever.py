@@ -27,7 +27,7 @@ from datetime import date
 from typing import Any
 
 from rag.embedder import Embedder
-from rag.chroma_store import ChromaStore
+from rag.chroma_store import ChromaStore, RAGUnavailableError
 
 logger = logging.getLogger(__name__)
 
@@ -59,10 +59,19 @@ class StrategyHit:
 
 class TaxStrategyRetriever:
     def __init__(self) -> None:
-        self._embedder = Embedder()
-        self._store    = ChromaStore()
+        try:
+            self._embedder = Embedder()
+            self._store    = ChromaStore()
+            self._available = True
+        except (RAGUnavailableError, Exception) as exc:
+            logger.warning("TaxStrategyRetriever unavailable: %s", exc)
+            self._embedder  = None  # type: ignore[assignment]
+            self._store     = None  # type: ignore[assignment]
+            self._available = False
 
     def retrieve(self, ctx: RetrievalContext) -> list[StrategyHit]:
+        if not self._available:
+            return []
         """
         Full dual-layer retrieval pipeline.
         Returns up to ctx.top_k hits, ranked best-first.
