@@ -143,8 +143,6 @@ def get_financial_health(db: Session = Depends(get_db)) -> Any:
     ytd_profit, ytd_revenue = _monthly_pl(db, today.year, 0)  # 0 = whole year
 
     # Re-do YTD with year-range filter (not month filter)
-    from sqlalchemy import text as sqltxt
-    year_prefix = f"{today.year}-%"
     INCOME_CODES = {"6001", "6051", "6101", "6111", "6117", "6301"}
     ytd_rows = (
         db.query(VoucherLine.subject_code, VoucherLine.direction, func.sum(VoucherLine.amount))
@@ -153,7 +151,7 @@ def get_financial_health(db: Session = Depends(get_db)) -> Any:
             VoucherHeader.review_status == VoucherReviewStatus.POSTED,
             VoucherLine.subject_code >= "6001",
             VoucherLine.subject_code <= "6899",
-            VoucherHeader.voucher_date.cast(sqltxt("CHAR")).like(year_prefix),
+            extract("year", VoucherHeader.voucher_date) == today.year,
         )
         .group_by(VoucherLine.subject_code, VoucherLine.direction)
         .all()
