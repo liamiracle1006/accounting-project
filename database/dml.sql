@@ -3,17 +3,21 @@
 -- ============================================================
 
 -- ------------------------------------------------------------
--- 企业档案默认数据（示例：小微企业）
--- 生产环境请通过 POST /api/enterprise/profile 接口创建真实数据
+-- 企业档案默认数据（示例：软件科技小微企业，登录后即可直接使用）
+-- 如需修改请通过「企业设置」页面操作，无需改此文件
 -- ------------------------------------------------------------
 INSERT INTO enterprise_profile (
     company_name, company_type, industry_code,
     tax_payer_type, applicable_income_tax_rate,
-    vat_rate, decision_threshold, accounting_standard, is_active
+    vat_rate, decision_threshold, accounting_standard,
+    province, city, is_hnte, rd_eligible,
+    employee_count, annual_revenue_estimate, is_active
 ) VALUES (
-    '示例企业（请修改）', 'MICRO', '通用',
+    '星辰科技有限公司', 'MICRO', '软件服务业',
     'SMALL_SCALE', 0.2000,
-    0.0300, 5000.00, 'SMALL_BIZ', 1
+    0.0300, 5000.00, 'SMALL_BIZ',
+    '广东省', '深圳市', 0, 0,
+    50, 1800000.00, 1
 ) ON DUPLICATE KEY UPDATE company_name = VALUES(company_name);
 
 -- ------------------------------------------------------------

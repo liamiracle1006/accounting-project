@@ -219,8 +219,8 @@ def get_summary(
         .first()
     )
 
-    total_income  = float(agg.total_income  or 0)
-    total_expense = float(agg.total_expense or 0)
+    total_income  = float(agg.total_income  or 0) if agg else 0.0
+    total_expense = float(agg.total_expense or 0) if agg else 0.0
 
     total_vouchers = (
         db.query(func.count(VoucherHeader.voucher_id))
