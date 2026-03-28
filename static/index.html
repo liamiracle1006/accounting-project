@@ -3079,8 +3079,14 @@
     document.getElementById('plan-loading').style.display  = 'block';
     try {
       const res = await fetch(`${API}/api/enterprise/annual-plan/${year}/generate`, { method: 'POST' });
+      if (!res.ok) {
+        let msg = `HTTP ${res.status}`;
+        try { const e = await res.json(); msg = e.detail || msg; } catch {}
+        showToast('生成失败：' + msg, 'error');
+        document.getElementById('plan-empty').style.display = 'block';
+        return;
+      }
       const d = await res.json();
-      if (!res.ok) { showToast('生成失败：' + (d.detail || res.status), 'error'); document.getElementById('plan-empty').style.display='block'; return; }
       document.getElementById('plan-loading').style.display = 'none';
       renderAnnualPlan(d);
       showToast('年度规划已生成', 'success');

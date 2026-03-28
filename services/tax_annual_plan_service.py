@@ -14,7 +14,7 @@ import logging
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import func, text
+from sqlalchemy import func, extract
 from sqlalchemy.orm import Session
 
 from models.enterprise_profile import EnterpriseProfile
@@ -159,8 +159,6 @@ class TaxAnnualPlanService:
         from models.voucher_line import VoucherLine
         from models.voucher_header import VoucherHeader, VoucherReviewStatus
 
-        year_prefix = f"{year}-%"
-
         # 一次查询所有损益科目的发生额
         rows = (
             self._db.query(
@@ -172,7 +170,7 @@ class TaxAnnualPlanService:
             .filter(
                 VoucherLine.subject_code >= "6001",
                 VoucherLine.subject_code <= "6899",
-                VoucherHeader.voucher_date.cast(text("CHAR")).like(year_prefix),
+                extract("year", VoucherHeader.voucher_date) == year,
                 VoucherHeader.review_status == VoucherReviewStatus.POSTED,
             )
             .group_by(VoucherLine.subject_code, VoucherLine.direction)
