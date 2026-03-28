@@ -77,18 +77,23 @@ class DecisionService:
     def get_or_generate_card(self, record_id: int) -> BossDecisionLog:
         """
         懒加载决策卡片。
-        已有未过期卡片 → 直接返回。
-        无卡片或已过期 → 重新生成。
+        已有未过期 PENDING 卡 → 直接返回（包括后台预生成的）。
+        无卡或最新卡已DECIDED/EXPIRED → 重新生成。
         """
-        existing = (
+        # 优先返回任意一张 PENDING_DECISION 且未过期的卡（防止重复生成）
+        pending = (
             self._db.query(BossDecisionLog)
-            .filter(BossDecisionLog.record_id == record_id)
+            .filter(
+                BossDecisionLog.record_id == record_id,
+                BossDecisionLog.status == DecisionStatus.PENDING_DECISION,
+            )
             .order_by(BossDecisionLog.decision_id.desc())
             .first()
         )
-        if existing and existing.status == DecisionStatus.PENDING_DECISION and not existing.is_expired():
-            logger.info("Decision card cache hit for record_id=%s", record_id)
-            return existing
+        if pending and not pending.is_expired():
+            logger.info("Decision card cache hit for record_id=%s decision_id=%s",
+                        record_id, pending.decision_id)
+            return pending
 
         return self._generate_card(record_id)
 

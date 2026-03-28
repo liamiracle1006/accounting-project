@@ -163,18 +163,21 @@ def list_pending_decisions(
             record_status_map[r.record_id] = r.status
 
     logged_record_ids = set()
-    seen_decided_record_ids: set[int] = set()  # 已有DECIDED卡的流水，避免重复
+    # 对同一 record_id 的 PENDING 卡去重：因 query 按 decision_id desc，第一个seen的是最新的
+    seen_pending_record_ids: set[int] = set()
 
     for d in logged:
         logged_record_ids.add(d.record_id)
         underlying_status = record_status_map.get(d.record_id, "")
 
-        # 僵尸卡：决策卡是PENDING但流水已被PROCESSED → 跳过（不展示为待决策）
-        if d.status == DecisionStatus.PENDING_DECISION and underlying_status == RecordStatus.PROCESSED:
-            continue
-
-        if d.status == DecisionStatus.DECIDED:
-            seen_decided_record_ids.add(d.record_id)
+        if d.status == DecisionStatus.PENDING_DECISION:
+            # 僵尸卡：流水已PROCESSED → 跳过
+            if underlying_status == RecordStatus.PROCESSED:
+                continue
+            # 同一流水已展示过一张PENDING卡 → 跳过重复的
+            if d.record_id in seen_pending_record_ids:
+                continue
+            seen_pending_record_ids.add(d.record_id)
 
         try:
             rec = json.loads(d.ai_options_json).get("recommendation") if d.ai_options_json else None
