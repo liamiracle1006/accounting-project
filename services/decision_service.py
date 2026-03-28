@@ -129,6 +129,13 @@ class DecisionService:
         decision.status             = DecisionStatus.DECIDED
         decision.decided_at         = datetime.utcnow()
 
+        # 将同一流水的其他 PENDING 重复卡片标为 EXPIRED（防止双击产生孤儿卡）
+        self._db.query(BossDecisionLog).filter(
+            BossDecisionLog.record_id  == decision.record_id,
+            BossDecisionLog.decision_id != decision_id,
+            BossDecisionLog.status     == DecisionStatus.PENDING_DECISION,
+        ).update({"status": DecisionStatus.EXPIRED})
+
         # 审计日志：老板决策执行
         from services.audit_guard import audit_boss_decision
         audit_boss_decision(self._db, decision_id, choice_id)
