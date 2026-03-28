@@ -2476,7 +2476,7 @@
     <div class="decision-item" onclick="${isPending ? `openDecisionCard(${d.record_id})` : ''}">
       <div style="display:flex;align-items:center;justify-content:space-between">
         <div>
-          <span style="font-size:12px;color:var(--text-muted)">流水 #${d.record_id} · 决策 #${d.decision_id}</span>
+          <span style="font-size:12px;color:var(--text-muted)">流水 #${d.record_id}${d.decision_id != null ? ` · 决策 #${d.decision_id}` : ' · 待生成决策卡'}</span>
           ${d.recommendation ? `<span style="margin-left:8px;font-size:11px;background:#f0f4ff;color:var(--primary);padding:2px 7px;border-radius:10px">AI推荐：${d.recommendation}</span>` : ''}
         </div>
         <span style="font-size:12px;font-weight:600;color:${statusColor}">${statusLabel}</span>

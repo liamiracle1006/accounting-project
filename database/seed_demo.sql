@@ -230,6 +230,22 @@ INSERT IGNORE INTO voucher_line (line_id, voucher_id, subject_code, direction, a
 (14022, 1402, '1602', 'CREDIT', 500.00, '累计折旧—电子设备');
 
 -- ============================================================
+-- 老板决策台演示数据（PENDING_BOSS_DECISION 状态）
+-- ============================================================
+
+-- 一笔大额设备采购，金额超过阈值且命中关键词，触发老板决策流
+-- extracted_json 包含 LLM 解析结果（amount/expense_type 等）
+INSERT IGNORE INTO operational_record (
+    record_id, raw_text, extracted_json, status, created_at
+) VALUES (
+    1501,
+    '采购一套视频会议系统及配套服务器设备，含主控主机、摄像头×4、会议终端×2，共计 85000 元，银行转账支付，供应商：深圳视联科技',
+    '{"amount": 85000, "currency": "CNY", "expense_type": "视频会议设备及服务器", "payment_method": "银行转账", "payer_name": "星辰科技有限公司", "counterparty": "深圳视联科技有限公司", "memo": "视频会议系统采购—主控主机+摄像头4台+会议终端2台", "confidence": 0.97}',
+    'PENDING_BOSS_DECISION',
+    '2026-03-25 10:00:00'
+);
+
+-- ============================================================
 -- 验证查询
 -- ============================================================
 SELECT '===== 演示数据导入完成 =====' AS info;
