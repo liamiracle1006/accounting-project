@@ -2492,7 +2492,11 @@
 
     try {
       const res  = await fetch(`${API}/api/decisions/${recordId}`);
-      if (!res.ok) { const e = await res.json(); throw new Error(e.detail); }
+      if (!res.ok) {
+        let msg = `HTTP ${res.status}`;
+        try { const e = await res.json(); msg = e.detail || msg; } catch {}
+        throw new Error(msg);
+      }
       const card = await res.json();
       renderDecisionCard(card);
     } catch (err) {

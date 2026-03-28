@@ -23,7 +23,7 @@ import logging
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 
-from sqlalchemy import func, case
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ai.llm_client import LLMClient, LLMClientError
@@ -226,51 +226,63 @@ class DecisionService:
     def _get_financial_snapshot(self) -> dict:
         """
         实时查询当年利润和当前现金余额。
-        收入科目贷方 - 费用科目借方 = 年度利润
-        资产科目 1001+1002+1012 余额 = 当前现金
+        收入科目 6001-6399 贷方 - 费用科目 6400-6899 借方 = 年度利润
+        资产科目 1001+1002+1012 借贷差额 = 当前现金
         """
         current_year = datetime.now().year
 
-        # 年度利润
-        agg = (
-            self._db.query(
-                func.sum(case(
-                    (AccountSubject.subject_type == "收入", VoucherLine.amount),
-                    else_=0,
-                )).label("income"),
-                func.sum(case(
-                    (AccountSubject.subject_type == "费用", VoucherLine.amount),
-                    else_=0,
-                )).label("expense"),
-            )
-            .join(VoucherLine, VoucherLine.subject_code == AccountSubject.subject_code)
+        # 年度收入（科目 6001-6399，贷方）
+        income_total = float(
+            self._db.query(func.sum(VoucherLine.amount))
             .join(VoucherHeader, VoucherHeader.voucher_id == VoucherLine.voucher_id)
-            .filter(func.year(VoucherHeader.voucher_date) == current_year)
-            .first()
+            .filter(
+                VoucherLine.subject_code >= "6001",
+                VoucherLine.subject_code <  "6400",
+                VoucherLine.direction == "CREDIT",
+                func.year(VoucherHeader.voucher_date) == current_year,
+            )
+            .scalar() or 0
         )
-        ytd_profit = float(agg.income or 0) - float(agg.expense or 0)
+
+        # 年度费用（科目 6400-6899，借方）
+        expense_total = float(
+            self._db.query(func.sum(VoucherLine.amount))
+            .join(VoucherHeader, VoucherHeader.voucher_id == VoucherLine.voucher_id)
+            .filter(
+                VoucherLine.subject_code >= "6400",
+                VoucherLine.subject_code <  "6900",
+                VoucherLine.direction == "DEBIT",
+                func.year(VoucherHeader.voucher_date) == current_year,
+            )
+            .scalar() or 0
+        )
+
+        ytd_profit = income_total - expense_total
 
         # 当前现金余额（1001 库存现金 + 1002 银行存款 + 1012 其他货币资金）
-        cash_agg = (
-            self._db.query(
-                func.sum(case(
-                    (VoucherLine.direction == "DEBIT",  VoucherLine.amount),
-                    else_=0,
-                )).label("debit"),
-                func.sum(case(
-                    (VoucherLine.direction == "CREDIT", VoucherLine.amount),
-                    else_=0,
-                )).label("credit"),
-            )
+        cash_debit = float(
+            self._db.query(func.sum(VoucherLine.amount))
             .join(VoucherHeader, VoucherHeader.voucher_id == VoucherLine.voucher_id)
-            .filter(VoucherLine.subject_code.in_(["1001", "1002", "1012"]))
-            .first()
+            .filter(
+                VoucherLine.subject_code.in_(["1001", "1002", "1012"]),
+                VoucherLine.direction == "DEBIT",
+            )
+            .scalar() or 0
         )
-        current_cash = float(cash_agg.debit or 0) - float(cash_agg.credit or 0)
+        cash_credit = float(
+            self._db.query(func.sum(VoucherLine.amount))
+            .join(VoucherHeader, VoucherHeader.voucher_id == VoucherLine.voucher_id)
+            .filter(
+                VoucherLine.subject_code.in_(["1001", "1002", "1012"]),
+                VoucherLine.direction == "CREDIT",
+            )
+            .scalar() or 0
+        )
+        current_cash = cash_debit - cash_credit
 
         return {
-            "ytd_profit":   round(ytd_profit, 2),
-            "current_cash": round(current_cash, 2),
+            "ytd_profit":    round(ytd_profit, 2),
+            "current_cash":  round(current_cash, 2),
             "snapshot_year": current_year,
         }
 
