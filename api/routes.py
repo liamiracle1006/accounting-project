@@ -14,12 +14,12 @@ import logging
 from datetime import datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 from pydantic import BaseModel, field_validator
 from sqlalchemy import func, case
 from sqlalchemy.orm import Session
 
-from database.connection import get_db
+from database.connection import get_db, SessionLocal
 from models.operational_record import OperationalRecord, RecordStatus
 from models.voucher_header import VoucherHeader
 from models.voucher_line import VoucherLine
@@ -95,12 +95,35 @@ def _current_ym() -> tuple[int, int]:
     return now.year, now.month
 
 
+# ── Background: decision card pre-generation ──────────────────────────────────
+
+def _pregenerate_decision_card(record_id: int) -> None:
+    """
+    后台预生成决策卡片。
+    流水进入 PENDING_BOSS_DECISION 后立即调用，确保老板打开决策台时卡片已就绪。
+    使用独立 DB session，与请求的 session 无关。
+    """
+    from services.decision_service import DecisionService
+    db = SessionLocal()
+    try:
+        svc = DecisionService(db)
+        card = svc.get_or_generate_card(record_id)
+        logger.info("Decision card pre-generated: record_id=%s decision_id=%s",
+                    record_id, card.decision_id)
+    except Exception as exc:
+        logger.warning("Decision card pre-generation failed for record_id=%s: %s",
+                       record_id, exc)
+    finally:
+        db.close()
+
+
 # ── Records endpoints ─────────────────────────────────────────────────────────
 
 @router.post("/records", response_model=RecordResponse, status_code=201)
 def create_record(
-    body: CreateRecordRequest,
-    db:   Session = Depends(get_db),
+    body:             CreateRecordRequest,
+    background_tasks: BackgroundTasks,
+    db:               Session = Depends(get_db),
 ) -> Any:
     """接收自然语言业务流水，完整执行 LLM 解析 → 会计映射 → 凭证入库。"""
     service = RecordService(db)
@@ -110,6 +133,10 @@ def create_record(
         logger.warning("Processing failed for raw_text='%s...': %s",
                        body.raw_text[:50], exc)
         raise HTTPException(status_code=422, detail=str(exc))
+
+    # 被拦截的大额/敏感流水：立即在后台预生成决策卡，老板打开时秒显示
+    if record.status == RecordStatus.PENDING_BOSS_DECISION:
+        background_tasks.add_task(_pregenerate_decision_card, record.record_id)
 
     voucher = (
         db.query(VoucherHeader)

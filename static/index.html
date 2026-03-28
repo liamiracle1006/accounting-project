@@ -975,7 +975,7 @@
   <div class="modal" style="max-width:780px;width:95%">
     <div class="modal-header">
       <span class="modal-title" id="decisionModalTitle">税务处理方案</span>
-      <button class="modal-close" onclick="document.getElementById('decisionModal').style.display='none'">✕</button>
+      <button class="modal-close" onclick="document.getElementById('decisionModal').style.display='none';_decisionModalOpen=false;">✕</button>
     </div>
     <div class="modal-body" id="decisionModalBody" style="padding:0"></div>
   </div>
@@ -2485,9 +2485,16 @@
     </div>`;
   }
 
+  let _decisionModalOpen = false;  // 防止重复打开
   async function openDecisionCard(recordId) {
+    if (_decisionModalOpen) return;
+    _decisionModalOpen = true;
+
     document.getElementById('decisionModalTitle').textContent = `流水 #${recordId} — 税务处理方案`;
-    document.getElementById('decisionModalBody').innerHTML = '<div class="empty-state" style="padding:40px"><div class="spinner"></div><p style="margin-top:12px">AI 正在分析，生成方案中…</p></div>';
+    document.getElementById('decisionModalBody').innerHTML =
+      '<div class="empty-state" style="padding:40px"><div class="spinner"></div>' +
+      '<p style="margin-top:12px;color:var(--text-muted)">正在加载决策方案…<br>' +
+      '<span style="font-size:11px">首次生成约需 10-20 秒，后续秒开</span></p></div>';
     document.getElementById('decisionModal').style.display = 'flex';
 
     try {
@@ -2502,6 +2509,8 @@
     } catch (err) {
       document.getElementById('decisionModalBody').innerHTML =
         `<div style="padding:24px;color:var(--error)">❌ ${err.message}</div>`;
+    } finally {
+      _decisionModalOpen = false;
     }
   }
 
@@ -2599,8 +2608,10 @@
   }
 
   function closeDecisionModal(e) {
-    if (e.target === document.getElementById('decisionModal'))
+    if (e.target === document.getElementById('decisionModal')) {
       document.getElementById('decisionModal').style.display = 'none';
+      _decisionModalOpen = false;
+    }
   }
 
   // ── 月末结账 ──
