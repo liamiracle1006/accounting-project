@@ -308,3 +308,22 @@ CREATE TABLE IF NOT EXISTS invoice (
     INDEX idx_invoice_voucher (voucher_id),
     INDEX idx_invoice_type (invoice_type)
 );
+
+-- ------------------------------------------------------------
+-- 15. Tax Annual Plan — AI 年度节税路线图 (S3/Stage 3)
+-- ------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS tax_annual_plan (
+    plan_id      BIGINT      NOT NULL AUTO_INCREMENT,
+    company_id   BIGINT      NOT NULL,                -- FK → enterprise_profile
+    year         INT         NOT NULL,                -- 规划年份，如 2026
+    plan_json    TEXT        NOT NULL,                -- AI 生成的完整年度规划 JSON
+    status       VARCHAR(20) NOT NULL DEFAULT 'ACTIVE',
+                                                      -- ACTIVE / OUTDATED / DRAFT
+    generated_at DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at   DATETIME    NOT NULL DEFAULT CURRENT_TIMESTAMP
+                             ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (plan_id),
+    INDEX idx_tap_company_year (company_id, year),
+    CONSTRAINT fk_tap_company FOREIGN KEY (company_id)
+        REFERENCES enterprise_profile (company_id)
+);
