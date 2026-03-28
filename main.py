@@ -22,6 +22,7 @@ from api.audit_routes import router as audit_router
 from api.invoice_routes import router as invoice_router
 from api.ocr_routes import router as ocr_router
 from api.rag_routes import router as rag_router
+from api.analytics_routes import router as analytics_router
 from services.auth_service import get_current_user
 from services.audit_guard import register_voucher_guard
 
@@ -64,6 +65,7 @@ app.include_router(audit_router,       dependencies=_auth)
 app.include_router(invoice_router,     dependencies=_auth)
 app.include_router(ocr_router,         dependencies=_auth)
 app.include_router(rag_router,         dependencies=_auth)
+app.include_router(analytics_router,   dependencies=_auth)
 
 _STATIC = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=_STATIC), name="static")

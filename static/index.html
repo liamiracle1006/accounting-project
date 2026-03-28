@@ -441,6 +441,44 @@
     .search-hit-sim { font-size:11px;color:var(--primary);font-weight:700; }
     .search-hit-meta { font-size:11px;color:var(--text-muted);margin-top:6px; }
     .search-hit-content { font-size:12px;color:#374151;margin-top:6px;line-height:1.5; }
+
+    /* ── S4: Financial Health & Alerts ── */
+    .s4-section-title { font-size:13px;font-weight:700;color:var(--text-muted);letter-spacing:.5px;text-transform:uppercase;margin:20px 0 10px; }
+    .health-grid { display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:8px; }
+    .health-card { background:#fff;border:1px solid var(--border);border-radius:8px;padding:14px 16px;position:relative;overflow:hidden; }
+    .health-card::before { content:'';position:absolute;left:0;top:0;bottom:0;width:4px;border-radius:8px 0 0 8px; }
+    .health-card.r-GOOD::before { background:#22c55e; }
+    .health-card.r-WARNING::before { background:#f59e0b; }
+    .health-card.r-DANGER::before { background:#ef4444; }
+    .health-card.r-NA::before { background:#cbd5e1; }
+    .hc-name { font-size:11px;color:var(--text-muted);font-weight:600;letter-spacing:.3px; }
+    .hc-value { font-size:22px;font-weight:800;color:var(--text);line-height:1.2;margin:4px 0 2px; }
+    .hc-unit { font-size:12px;color:var(--text-muted);margin-left:2px; }
+    .hc-badge { display:inline-block;font-size:10px;font-weight:700;padding:1px 7px;border-radius:10px;letter-spacing:.3px; }
+    .hc-badge.r-GOOD { background:#dcfce7;color:#16a34a; }
+    .hc-badge.r-WARNING { background:#fef3c7;color:#b45309; }
+    .hc-badge.r-DANGER { background:#fee2e2;color:#dc2626; }
+    .hc-badge.r-NA { background:#f1f5f9;color:#94a3b8; }
+    .hc-bench { font-size:10px;color:var(--text-muted);margin-top:5px;line-height:1.4; }
+    .overall-bar { display:flex;align-items:center;gap:12px;background:#fff;border:1px solid var(--border);border-radius:8px;padding:12px 18px;margin-bottom:12px; }
+    .overall-label { font-size:12px;color:var(--text-muted); }
+    .overall-badge { font-size:13px;font-weight:800;padding:4px 14px;border-radius:20px;letter-spacing:.5px; }
+    .overall-badge.r-GOOD { background:#dcfce7;color:#15803d; }
+    .overall-badge.r-WARNING { background:#fef3c7;color:#92400e; }
+    .overall-badge.r-DANGER { background:#fee2e2;color:#991b1b; }
+    .alert-list { display:flex;flex-direction:column;gap:8px;margin-bottom:8px; }
+    .alert-item { background:#fff;border:1px solid var(--border);border-radius:8px;padding:12px 16px;border-left-width:4px; }
+    .alert-item.al-DANGER { border-left-color:#ef4444; }
+    .alert-item.al-WARNING { border-left-color:#f59e0b; }
+    .alert-item.al-INFO { border-left-color:#60a5fa; }
+    .alert-title { font-size:13px;font-weight:700;color:var(--text); }
+    .alert-detail { font-size:12px;color:#4b5563;margin-top:3px;line-height:1.5; }
+    .alert-action { font-size:11px;color:var(--primary);margin-top:5px;font-style:italic; }
+    .alert-cat { font-size:10px;font-weight:600;padding:1px 6px;border-radius:8px;margin-left:8px;vertical-align:middle; }
+    .alert-cat-DANGER { background:#fee2e2;color:#991b1b; }
+    .alert-cat-WARNING { background:#fef3c7;color:#92400e; }
+    .alert-cat-INFO { background:#eff6ff;color:#1d4ed8; }
+    @media (max-width: 760px) { .health-grid { grid-template-columns:1fr 1fr; } }
   </style>
 </head>
 <body>
@@ -546,6 +584,27 @@
     <p style="font-size:12px;color:var(--text-muted);text-align:center">
       数据仅含已处理凭证 · 如需详细报表请切换至「财务报表」页
     </p>
+
+    <!-- S4-A: Financial Health -->
+    <div class="s4-section-title">财务健康诊断</div>
+    <div id="s4-overall-bar" class="overall-bar" style="display:none">
+      <span class="overall-label">综合健康评级</span>
+      <span id="s4-overall-badge" class="overall-badge">--</span>
+      <span id="s4-overall-snapshot" style="font-size:12px;color:var(--text-muted);margin-left:auto"></span>
+    </div>
+    <div class="health-grid" id="s4-health-grid">
+      <div class="health-card r-NA" style="text-align:center;color:var(--text-muted);font-size:12px;grid-column:1/-1;padding:18px">
+        <span class="spinner"></span>&nbsp; 加载财务健康数据…
+      </div>
+    </div>
+
+    <!-- S4-B: Alerts -->
+    <div class="s4-section-title">智能预警 <span id="s4-alert-counts" style="font-weight:400;font-size:11px;color:var(--text-muted)"></span></div>
+    <div class="alert-list" id="s4-alert-list">
+      <div style="text-align:center;color:var(--text-muted);font-size:12px;padding:12px">
+        <span class="spinner"></span>&nbsp; 加载预警信息…
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1609,6 +1668,88 @@
       else            { badge.style.display = 'none'; }
     } catch (err) {
       showToast('仪表盘加载失败：' + err.message, 'error');
+    }
+    // S4: financial health + alerts (independent, non-blocking)
+    loadFinancialHealth();
+    loadAlertPanel();
+  }
+
+  async function loadFinancialHealth() {
+    try {
+      const res  = await fetch(`${API}/api/analytics/health`);
+      if (!res.ok) return;
+      const data = await res.json();
+      // Overall bar
+      const overallBar   = document.getElementById('s4-overall-bar');
+      const overallBadge = document.getElementById('s4-overall-badge');
+      const overallSnap  = document.getElementById('s4-overall-snapshot');
+      const ratingLabel  = { GOOD: '健康', WARNING: '需关注', DANGER: '高风险' };
+      overallBar.style.display = '';
+      overallBadge.textContent = ratingLabel[data.overall_rating] || data.overall_rating;
+      overallBadge.className   = `overall-badge r-${data.overall_rating}`;
+      const snap = data.snapshot;
+      overallSnap.textContent  = `总资产 ¥${fmtK(snap.total_assets)}  |  总负债 ¥${fmtK(snap.total_liabilities)}  |  YTD净利润 ¥${fmtK(snap.net_profit_ytd)}`;
+      // Ratio cards
+      const grid = document.getElementById('s4-health-grid');
+      grid.innerHTML = '';
+      const ratingCN = { GOOD: '良好', WARNING: '需关注', DANGER: '危险', 'N/A': '暂无数据' };
+      for (const r of data.ratios) {
+        const cls = r.rating === 'N/A' ? 'r-NA' : `r-${r.rating}`;
+        const valStr = r.value !== null ? r.value : '--';
+        grid.innerHTML += `
+          <div class="health-card ${cls}">
+            <div class="hc-name">${r.name}</div>
+            <div style="display:flex;align-items:baseline;gap:4px">
+              <span class="hc-value">${valStr}</span><span class="hc-unit">${r.unit}</span>
+              <span class="hc-badge ${cls}" style="margin-left:auto">${ratingCN[r.rating] || r.rating}</span>
+            </div>
+            <div class="hc-bench">${r.benchmark}</div>
+          </div>`;
+      }
+    } catch(e) {
+      document.getElementById('s4-health-grid').innerHTML =
+        '<div style="grid-column:1/-1;color:var(--text-muted);font-size:12px;padding:10px">财务健康数据加载失败</div>';
+    }
+  }
+
+  function fmtK(v) {
+    if (v === null || v === undefined) return '--';
+    const n = Number(v);
+    if (Math.abs(n) >= 1e8) return (n / 1e8).toFixed(1) + '亿';
+    if (Math.abs(n) >= 1e4) return (n / 1e4).toFixed(1) + '万';
+    return n.toFixed(0);
+  }
+
+  async function loadAlertPanel() {
+    try {
+      const res  = await fetch(`${API}/api/analytics/alerts`);
+      if (!res.ok) return;
+      const data = await res.json();
+      const list = document.getElementById('s4-alert-list');
+      const counts = document.getElementById('s4-alert-counts');
+      const parts = [];
+      if (data.danger_count)  parts.push(`<span style="color:#dc2626;font-weight:700">${data.danger_count} 危险</span>`);
+      if (data.warning_count) parts.push(`<span style="color:#d97706;font-weight:700">${data.warning_count} 警告</span>`);
+      if (data.info_count)    parts.push(`<span style="color:#2563eb">${data.info_count} 提示</span>`);
+      counts.innerHTML = parts.length ? '— ' + parts.join(' · ') : '';
+      if (!data.alerts || data.alerts.length === 0) {
+        list.innerHTML = '<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:14px 18px;font-size:13px;color:#15803d">一切正常，未发现需要关注的财务或税务问题。</div>';
+        return;
+      }
+      list.innerHTML = '';
+      for (const a of data.alerts) {
+        list.innerHTML += `
+          <div class="alert-item al-${a.level}">
+            <div class="alert-title">${a.title}
+              <span class="alert-cat alert-cat-${a.level}">${a.category}</span>
+            </div>
+            <div class="alert-detail">${a.detail}</div>
+            <div class="alert-action">建议：${a.action}</div>
+          </div>`;
+      }
+    } catch(e) {
+      document.getElementById('s4-alert-list').innerHTML =
+        '<div style="color:var(--text-muted);font-size:12px;padding:10px">预警数据加载失败</div>';
     }
   }
 
