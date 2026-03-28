@@ -214,6 +214,34 @@ class AccountingEngineService:
 
     # ── Persistence (inside caller's transaction) ────────────────────────────
 
+    def _effective_voucher_date(self) -> date:
+        """
+        若今日所在期间已结账，返回下一个 OPEN 期间的第1天；否则返回今日。
+        确保结账后新提交的流水不会落入已关闭的期间。
+        """
+        from models.accounting_period import AccountingPeriod, PeriodStatus
+        today = date.today()
+        period = (
+            self._db.query(AccountingPeriod)
+            .filter_by(year=today.year, month=today.month)
+            .first()
+        )
+        if period and period.status == PeriodStatus.CLOSED:
+            next_open = (
+                self._db.query(AccountingPeriod)
+                .filter(AccountingPeriod.status == PeriodStatus.OPEN)
+                .order_by(AccountingPeriod.year, AccountingPeriod.month)
+                .first()
+            )
+            if next_open:
+                effective = date(next_open.year, next_open.month, 1)
+                logger.info(
+                    "Current period %d-%02d is CLOSED, using next open period: %s",
+                    today.year, today.month, effective,
+                )
+                return effective
+        return today
+
     def _persist_voucher(
         self,
         record: OperationalRecord,
@@ -222,7 +250,7 @@ class AccountingEngineService:
     ) -> VoucherHeader:
         header = VoucherHeader(
             record_id     = record.record_id,
-            voucher_date  = date.today(),
+            voucher_date  = self._effective_voucher_date(),
             total_amount  = ext.amount,
             memo          = ext.memo,
             review_status = VoucherReviewStatus.POSTED,
