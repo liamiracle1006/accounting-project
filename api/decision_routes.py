@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 
 from database.connection import get_db
 from models.boss_decision_log import BossDecisionLog, DecisionStatus
+from models.operational_record import OperationalRecord, RecordStatus
 from models.asset_register import AssetRegister
 from services.decision_service import DecisionService, DecisionServiceError
 from services.monthly_depreciation import MonthlyDepreciationService
@@ -144,16 +145,21 @@ def list_pending_decisions(
     列出所有决策记录（老板工作台用）。
     默认返回所有状态，可按 status 过滤。
     """
+    result = []
+
+    # 1. 已有 boss_decision_log 记录的
     q = db.query(BossDecisionLog)
     if status:
         q = q.filter(BossDecisionLog.status == status.upper())
-    records = (
-        q.order_by(BossDecisionLog.decision_id.desc())
-        .offset(skip).limit(limit).all()
-    )
-    # 列表视图只返回摘要，不展开完整 options JSON
-    return [
-        {
+    logged = q.order_by(BossDecisionLog.decision_id.desc()).offset(skip).limit(limit).all()
+    logged_record_ids = set()
+    for d in logged:
+        logged_record_ids.add(d.record_id)
+        try:
+            rec = json.loads(d.ai_options_json).get("recommendation") if d.ai_options_json else None
+        except Exception:
+            rec = None
+        result.append({
             "decision_id":        d.decision_id,
             "record_id":          d.record_id,
             "status":             d.status,
@@ -161,11 +167,30 @@ def list_pending_decisions(
             "chosen_action_code": d.chosen_action_code,
             "expires_at":         str(d.expires_at) if d.expires_at else None,
             "decided_at":         str(d.decided_at) if d.decided_at else None,
-            "recommendation":     json.loads(d.ai_options_json).get("recommendation")
-                                  if d.ai_options_json else None,
-        }
-        for d in records
-    ]
+            "recommendation":     rec,
+        })
+
+    # 2. PENDING_BOSS_DECISION 但尚未生成决策卡的流水
+    if not status or status.upper() == "PENDING_DECISION":
+        exclude_ids = logged_record_ids if logged_record_ids else set()
+        pending_q = db.query(OperationalRecord).filter(
+            OperationalRecord.status == RecordStatus.PENDING_BOSS_DECISION
+        )
+        if exclude_ids:
+            pending_q = pending_q.filter(OperationalRecord.record_id.notin_(exclude_ids))
+        for r in pending_q.order_by(OperationalRecord.record_id.desc()).limit(limit).all():
+            result.append({
+                "decision_id":        None,
+                "record_id":          r.record_id,
+                "status":             "PENDING_DECISION",
+                "boss_choice":        None,
+                "chosen_action_code": None,
+                "expires_at":         None,
+                "decided_at":         None,
+                "recommendation":     None,
+            })
+
+    return result
 
 
 @router.get("/assets")
