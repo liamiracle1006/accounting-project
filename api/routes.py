@@ -201,26 +201,32 @@ def get_summary(
     year  = year  or cur_year
     month = month or cur_month
 
-    agg = (
-        db.query(
-            func.sum(case(
-                (AccountSubject.subject_type == "收入", VoucherLine.amount),
-                else_=0,
-            )).label("total_income"),
-            func.sum(case(
-                (AccountSubject.subject_type == "费用", VoucherLine.amount),
-                else_=0,
-            )).label("total_expense"),
-        )
-        .join(VoucherLine, VoucherLine.subject_code == AccountSubject.subject_code)
+    # 收入：科目代码 6001-6399，贷方增加
+    total_income = float(
+        db.query(func.sum(VoucherLine.amount))
         .join(VoucherHeader, VoucherHeader.voucher_id == VoucherLine.voucher_id)
-        .filter(func.year(VoucherHeader.voucher_date) == year)
-        .filter(func.month(VoucherHeader.voucher_date) == month)
-        .first()
+        .filter(
+            VoucherLine.subject_code >= "6001",
+            VoucherLine.subject_code <  "6400",
+            VoucherLine.direction == "CREDIT",
+            func.year(VoucherHeader.voucher_date)  == year,
+            func.month(VoucherHeader.voucher_date) == month,
+        )
+        .scalar() or 0
     )
-
-    total_income  = float(agg.total_income  or 0) if agg else 0.0
-    total_expense = float(agg.total_expense or 0) if agg else 0.0
+    # 费用/成本：科目代码 6400-6899，借方增加
+    total_expense = float(
+        db.query(func.sum(VoucherLine.amount))
+        .join(VoucherHeader, VoucherHeader.voucher_id == VoucherLine.voucher_id)
+        .filter(
+            VoucherLine.subject_code >= "6400",
+            VoucherLine.subject_code <  "6900",
+            VoucherLine.direction == "DEBIT",
+            func.year(VoucherHeader.voucher_date)  == year,
+            func.month(VoucherHeader.voucher_date) == month,
+        )
+        .scalar() or 0
+    )
 
     total_vouchers = (
         db.query(func.count(VoucherHeader.voucher_id))
