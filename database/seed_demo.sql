@@ -185,6 +185,51 @@ INSERT IGNORE INTO voucher_line (line_id, voucher_id, subject_code, direction, a
 (13062, 1306, '1002', 'CREDIT', 22000.00, '银行存款');
 
 -- ============================================================
+-- 固定资产台账（asset_register）
+-- ============================================================
+
+-- 笔记本电脑4台，2026-01购入，直线法36个月折旧
+-- 月折旧额 = 18000 / 36 = 500 元
+-- 截至2026-03已计提2个月（2月+3月）= 1000 元
+INSERT IGNORE INTO asset_register (
+    asset_id, voucher_id, decision_id,
+    asset_name, asset_category,
+    original_value, net_salvage_value,
+    depreciation_method, useful_life_months, monthly_depreciation,
+    accumulated_depreciation, depreciation_months_elapsed,
+    status, purchase_date, depreciation_start_month, notes
+) VALUES (
+    1001, 1104, NULL,
+    '联想笔记本电脑（4台）', '电子设备',
+    18000.00, 0.00,
+    'STRAIGHT_LINE', 36, 500.00,
+    1000.00, 2,
+    'IN_USE', '2026-01-10', '2026-02', '研发团队用机，资产编号 PC-2026-001至004'
+);
+
+-- 对应折旧凭证：2月计提折旧 ¥500
+INSERT IGNORE INTO operational_record (record_id, raw_text, status, created_at) VALUES
+(1401, '2026年2月计提固定资产折旧—笔记本电脑 500 元', 'PROCESSED', '2026-02-28 23:00:00');
+
+INSERT IGNORE INTO voucher_header (voucher_id, record_id, voucher_date, total_amount, memo, review_status) VALUES
+(1401, 1401, '2026-02-28', 500.00, '2月固定资产折旧', 'POSTED');
+
+INSERT IGNORE INTO voucher_line (line_id, voucher_id, subject_code, direction, amount, memo) VALUES
+(14011, 1401, '6602', 'DEBIT',  500.00, '管理费用—折旧费'),
+(14012, 1401, '1602', 'CREDIT', 500.00, '累计折旧—电子设备');
+
+-- 对应折旧凭证：3月计提折旧 ¥500
+INSERT IGNORE INTO operational_record (record_id, raw_text, status, created_at) VALUES
+(1402, '2026年3月计提固定资产折旧—笔记本电脑 500 元', 'PROCESSED', '2026-03-31 23:00:00');
+
+INSERT IGNORE INTO voucher_header (voucher_id, record_id, voucher_date, total_amount, memo, review_status) VALUES
+(1402, 1402, '2026-03-31', 500.00, '3月固定资产折旧', 'POSTED');
+
+INSERT IGNORE INTO voucher_line (line_id, voucher_id, subject_code, direction, amount, memo) VALUES
+(14021, 1402, '6602', 'DEBIT',  500.00, '管理费用—折旧费'),
+(14022, 1402, '1602', 'CREDIT', 500.00, '累计折旧—电子设备');
+
+-- ============================================================
 -- 验证查询
 -- ============================================================
 SELECT '===== 演示数据导入完成 =====' AS info;
