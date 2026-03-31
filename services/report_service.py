@@ -265,7 +265,18 @@ class ReportService:
         e("4002", "资本公积",               EL("4002"), BL("4002"))
         e("4005", "其他综合收益",           EL("4005"), BL("4005"))
         e("4101", "盈余公积",               EL("4101"), BL("4101"))
-        e("4103", "未分配利润",             EL("4103","4104"), BL("4103","4104"))
+
+        # 未分配利润 = 已结转(4103/4104余额) + 未结转当期净损益(6xxx账户净余额)
+        # 6xxx 借方余额为正（费用），贷方余额为负（收入），取负值后收入>费用=正利润
+        unclosed_pl_end = -sum(
+            v for k, v in end_bal.items() if "6001" <= k <= "6899"
+        )
+        unclosed_pl_beg = -sum(
+            v for k, v in beg_bal.items() if "6001" <= k <= "6899"
+        )
+        e("4103", "未分配利润",
+          EL("4103","4104") + unclosed_pl_end,
+          BL("4103","4104") + unclosed_pl_beg)
 
         te_end = sum(i.end_bal for i in bs.equity)
         te_beg = sum(i.beg_bal for i in bs.equity)
