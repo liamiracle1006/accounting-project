@@ -18,6 +18,7 @@ from sqlalchemy import String, Numeric, DateTime, func, SmallInteger, Integer
 from sqlalchemy.orm import Mapped, mapped_column
 
 from database.connection import Base
+from models.mixins import TenantMixin
 
 
 class CompanyType:
@@ -35,7 +36,7 @@ class AccountingStandard:
     GENERAL   = "GENERAL"     # 企业会计准则
 
 
-class EnterpriseProfile(Base):
+class EnterpriseProfile(TenantMixin, Base):
     __tablename__ = "enterprise_profile"
 
     company_id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -113,7 +114,7 @@ class EnterpriseProfile(Base):
 
     is_active: Mapped[int] = mapped_column(
         SmallInteger, nullable=False, default=1,
-        comment="1=当前激活的企业档案（系统同时只有一条激活记录）"
+        comment="1=当前激活的企业档案（同一账套同时只有一条激活记录）"
     )
 
     created_at = mapped_column(DateTime, server_default=func.now())

@@ -20,6 +20,7 @@ from sqlalchemy import BigInteger, String, Numeric, Date, DateTime, func, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from database.connection import Base
+from models.mixins import TenantMixin
 
 
 class DepreciationMethod:
@@ -34,7 +35,7 @@ class AssetStatus:
     DISPOSED          = "DISPOSED"
 
 
-class AssetRegister(Base):
+class AssetRegister(TenantMixin, Base):
     __tablename__ = "asset_register"
 
     asset_id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)

@@ -2,9 +2,10 @@ from decimal import Decimal
 from sqlalchemy import String, Numeric, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from database.connection import Base
+from models.mixins import TenantMixin
 
 
-class VoucherLine(Base):
+class VoucherLine(TenantMixin, Base):
     __tablename__ = "voucher_line"
 
     line_id:             Mapped[int]     = mapped_column(primary_key=True, autoincrement=True)

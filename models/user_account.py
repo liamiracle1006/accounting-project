@@ -1,5 +1,8 @@
 """
-AgentLedger — UserAccount ORM model (Phase 3)
+AgentLedger V4.0 — UserAccount ORM model
+
+tenant_id added for multi-tenancy.  Users belong to a tenant; they can access
+multiple account sets within that tenant (access control handled at service layer).
 """
 from sqlalchemy import BigInteger, Column, DateTime, SmallInteger, String, func
 
@@ -17,14 +20,15 @@ class UserRole:
 class UserAccount(Base):
     __tablename__ = "user_account"
 
-    user_id       = Column(BigInteger,  primary_key=True, autoincrement=True)
-    username      = Column(String(50),  nullable=False, unique=True)
-    password_hash = Column(String(255), nullable=False)
-    display_name  = Column(String(100), nullable=False)
-    role          = Column(String(20),  nullable=False, default=UserRole.ACCOUNTANT)
-    department_id = Column(BigInteger,  nullable=True)   # FK added in task 3
+    user_id       = Column(BigInteger,   primary_key=True, autoincrement=True)
+    tenant_id     = Column(BigInteger,   nullable=False, index=True)  # FK → tenant
+    username      = Column(String(50),   nullable=False, unique=True)
+    password_hash = Column(String(255),  nullable=False)
+    display_name  = Column(String(100),  nullable=False)
+    role          = Column(String(20),   nullable=False, default=UserRole.ACCOUNTANT)
+    department_id = Column(BigInteger,   nullable=True)   # FK → department
     is_active     = Column(SmallInteger, nullable=False, default=1)
-    last_login_at = Column(DateTime,    nullable=True)
-    created_at    = Column(DateTime,    nullable=False, server_default=func.now())
-    updated_at    = Column(DateTime,    nullable=False, server_default=func.now(),
+    last_login_at = Column(DateTime,     nullable=True)
+    created_at    = Column(DateTime,     nullable=False, server_default=func.now())
+    updated_at    = Column(DateTime,     nullable=False, server_default=func.now(),
                            onupdate=func.now())

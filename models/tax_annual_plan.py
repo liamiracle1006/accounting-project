@@ -2,43 +2,12 @@
 AgentLedger — TaxAnnualPlan model
 
 年度税务规划表。AI 在年初（或首次激活时）根据企业画像生成全年节税路线图。
-决策卡片触发时会关联本年规划，提供「符合/偏离规划」的判断上下文。
-
-plan_json 结构：
-{
-  "year": 2026,
-  "profile_summary": "软件服务业·小规模纳税人·所得税20%",
-  "estimated_annual_revenue": 1800000,
-  "estimated_annual_profit":  600000,
-  "estimated_tax_baseline":   120000,
-  "total_potential_savings":  80000,
-  "quarters": [
-    {
-      "quarter": "Q1",
-      "months": "1-3月",
-      "actions": [
-        {
-          "title": "整理研发支出申报加计扣除",
-          "priority": "HIGH",
-          "potential_saving": 30000,
-          "deadline": "3月31日",
-          "detail": "..."
-        }
-      ]
-    },
-    ...
-  ],
-  "key_thresholds": {
-    "one_time_deduction_limit": 5000000,
-    "small_profit_income_limit": 3000000,
-    "current_income_tax_rate": 0.20
-  }
-}
 """
-from sqlalchemy import String, Text, Integer, DateTime, func, SmallInteger
+from sqlalchemy import String, Text, Integer, DateTime, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from database.connection import Base
+from models.mixins import TenantMixin
 
 
 class PlanStatus:
@@ -47,7 +16,7 @@ class PlanStatus:
     DRAFT    = "DRAFT"     # 草稿（生成中）
 
 
-class TaxAnnualPlan(Base):
+class TaxAnnualPlan(TenantMixin, Base):
     __tablename__ = "tax_annual_plan"
 
     plan_id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)

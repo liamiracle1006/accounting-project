@@ -1,9 +1,10 @@
 """
-AgentLedger — ExpenseRequest ORM model (Phase 3)
+AgentLedger V4.0 — ExpenseRequest ORM model
 """
 from sqlalchemy import BigInteger, Column, DateTime, Numeric, String, Text, func
 
 from database.connection import Base
+from models.mixins import TenantMixin
 
 
 class ExpenseStatus:
@@ -12,7 +13,7 @@ class ExpenseStatus:
     REJECTED = "REJECTED"   # 驳回，申请人需修改重提
 
 
-class ExpenseRequest(Base):
+class ExpenseRequest(TenantMixin, Base):
     __tablename__ = "expense_request"
 
     request_id    = Column(BigInteger,    primary_key=True, autoincrement=True)

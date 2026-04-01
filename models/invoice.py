@@ -2,6 +2,7 @@ from decimal import Decimal
 from sqlalchemy import BigInteger, String, Date, DateTime, Numeric, func
 from sqlalchemy.orm import Mapped, mapped_column
 from database.connection import Base
+from models.mixins import TenantMixin
 
 
 class InvoiceType:
@@ -20,7 +21,7 @@ class InvoiceSource:
     OCR    = "OCR"     # 扫描/图片识别
 
 
-class Invoice(Base):
+class Invoice(TenantMixin, Base):
     __tablename__ = "invoice"
 
     invoice_id:      Mapped[int]          = mapped_column(BigInteger, primary_key=True, autoincrement=True)

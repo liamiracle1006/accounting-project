@@ -3,40 +3,17 @@ AgentLedger — BossDecisionLog model
 
 记录 AI 针对某笔大额/敏感流水生成的多个处理方案，以及老板的最终选择。
 
-ai_options_json 结构（完整示例见 ai/decision_prompts.py）：
-{
-  "asset_category": "通用机械设备",
-  "tax_analysis": "...",
-  "options": [
-    {
-      "id": "ONE_TIME",
-      "label": "方案一",
-      "title": "一次性全额扣除",
-      "action_code": "FIXED_ASSET_ONE_TIME",
-      "useful_life_months": 0,
-      "savings_this_year": 70000,
-      "savings_total": 70000,
-      "plain_text": "...",
-      "suitable_when": "...",
-      "risk": "..."
-    },
-    ...
-  ],
-  "recommendation": "ONE_TIME",
-  "recommendation_reason": "...",
-  "financial_snapshot": { "ytd_profit": 620000, "current_cash": 890000 }
-}
-
 status 流转：
   PENDING_DECISION → DECIDED（老板选择后）
   PENDING_DECISION → EXPIRED（超时未决策）
 """
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from sqlalchemy import BigInteger, Text, String, DateTime, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from database.connection import Base
+from models.mixins import TenantMixin
 
 
 class DecisionStatus:
@@ -45,7 +22,7 @@ class DecisionStatus:
     EXPIRED          = "EXPIRED"
 
 
-class BossDecisionLog(Base):
+class BossDecisionLog(TenantMixin, Base):
     __tablename__ = "boss_decision_log"
 
     decision_id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)

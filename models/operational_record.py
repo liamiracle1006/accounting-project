@@ -1,16 +1,17 @@
 from sqlalchemy import String, Text, DateTime, func
 from sqlalchemy.orm import Mapped, mapped_column
 from database.connection import Base
+from models.mixins import TenantMixin
 
 
 class RecordStatus:
     PENDING                = "PENDING"                 # 刚收到，等待 LLM 处理
     PROCESSED              = "PROCESSED"               # 自动记账完成（小额普通流水）
     PENDING_BOSS_DECISION  = "PENDING_BOSS_DECISION"   # 大额/敏感流水，等待老板决策
-    MANUAL_REVIEW          = "MANUAL_REVIEW"           # AI 解析失败，需人工介入
+    MANUAL_REVIEW          = "MANUAL_REVIEW"           # AI 解析失败或日常分录不平，需人工介入
 
 
-class OperationalRecord(Base):
+class OperationalRecord(TenantMixin, Base):
     __tablename__ = "operational_record"
 
     record_id:      Mapped[int] = mapped_column(primary_key=True, autoincrement=True)

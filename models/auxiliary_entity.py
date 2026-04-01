@@ -1,9 +1,10 @@
 from sqlalchemy import String, DateTime, func
 from sqlalchemy.orm import Mapped, mapped_column
 from database.connection import Base
+from models.mixins import TenantMixin
 
 
-class AuxiliaryEntity(Base):
+class AuxiliaryEntity(TenantMixin, Base):
     __tablename__ = "auxiliary_entity"
 
     entity_id:   Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
