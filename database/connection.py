@@ -76,5 +76,6 @@ def init_db():
         enterprise_profile, asset_register, accounting_period,
         boss_decision_log, tax_annual_plan, invoice,
         expense_request, department, user_account, audit_log,
+        accounting,   # SystemSubject + TenantSubject (Sprint 2.1)
     )
     Base.metadata.create_all(bind=engine)

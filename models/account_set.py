@@ -109,6 +109,15 @@ class AccountSet(Base):
         comment='JSON 功能开关：{"asset_module":true,"fund_module":false,"decimals":2}'
     )
 
+    # ── 科目编码规则 (Subject Code Rule) - Sprint 2.1 ─────────────────────────
+    # 格式："一级位数-二级延伸位数-三级延伸位数-..."
+    # 默认 "4-2-2-2-2"：一级4位(1001)，二级+2位(100101)，三级+2位(10010101)
+    # SubjectService.create_subject() 依赖此字段校验新建科目的编码长度规范
+    subject_code_rule: Mapped[str] = mapped_column(
+        String(30), nullable=False, default="4-2-2-2-2",
+        comment="科目编码分级规则，如 '4-2-2-2-2'，影响子科目编码长度校验"
+    )
+
     # ── 生命周期 & 回收站 (Lifecycle & Recycle Bin) ───────────────────────────
     status: Mapped[str] = mapped_column(
         String(30), nullable=False, default=AccountSetStatus.ONBOARDING,

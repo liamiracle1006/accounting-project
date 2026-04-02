@@ -375,6 +375,28 @@ class AccountSetService:
             "AccountSet created: id=%d tenant=%d period=%s",
             account_set.account_set_id, tenant_id, data.start_period,
         )
+
+        # ── Sprint 2.1：骨架软启动 — 克隆标准科目树 ──────────────────────────
+        # 账套创建成功后同步初始化科目体系，确保账套立即可用
+        try:
+            from services.subject_service import SubjectService
+            svc = SubjectService(self.db)
+            count = svc.init_tenant_subjects(
+                tenant_id        = tenant_id,
+                account_set_id   = account_set.account_set_id,
+                accounting_standard = data.accounting_standard,
+            )
+            logger.info(
+                "AccountSet %d 骨架软启动完成：克隆 %d 条科目",
+                account_set.account_set_id, count,
+            )
+        except Exception as exc:
+            # 科目克隆失败不阻塞账套创建（降级：账套仍可用，科目后续手动初始化）
+            logger.warning(
+                "AccountSet %d 科目骨架初始化失败（不影响账套创建）: %s",
+                account_set.account_set_id, exc,
+            )
+
         return account_set
 
     # ── 3. 更新账套（铁律二守门）─────────────────────────────────────────────
@@ -546,15 +568,22 @@ class AccountSetService:
         self.db.add(new_obj)
         self.db.flush()   # 获取新账套 ID（供科目树克隆使用）
 
-        # ── 'accounting_subjects' 选项：科目树克隆（Sprint 1 预留接口）───────
+        # ── 'accounting_subjects' 选项：科目树克隆（Sprint 2.1 落地）──────────
         if "accounting_subjects" in options.clone_options:
-            # Sprint 2 实现：届时将引入 per-account-set AccountingSubjectCustomization
-            # 表，在此调用 _clone_subjects(src.account_set_id, new_obj.account_set_id)。
-            # 当前 Sprint 仅记录操作意图，不影响主流程。
-            logger.info(
-                "Clone 'accounting_subjects': source=%d → target=%d (Sprint 2 落地)",
-                source_account_set_id, new_obj.account_set_id,
-            )
+            try:
+                from services.subject_service import SubjectService
+                subject_svc = SubjectService(self.db)
+                cloned_count = subject_svc._clone_subjects_from(
+                    src_tenant_id      = tenant_id,
+                    src_account_set_id = source_account_set_id,
+                    dst_account_set_id = new_obj.account_set_id,
+                )
+                logger.info(
+                    "Clone 'accounting_subjects': source=%d → target=%d, %d subjects",
+                    source_account_set_id, new_obj.account_set_id, cloned_count,
+                )
+            except Exception as exc:
+                logger.warning("Clone subjects failed (non-blocking): %s", exc)
 
         self.db.commit()
         self.db.refresh(new_obj)
