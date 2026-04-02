@@ -36,6 +36,13 @@ VISION_API_KEY  = os.getenv("VISION_API_KEY",  os.getenv("LLM_API_KEY", ""))
 VISION_API_BASE = os.getenv("VISION_API_BASE", "https://dashscope.aliyuncs.com/compatible-mode/v1")
 VISION_MODEL    = os.getenv("VISION_MODEL",    "qwen-vl-max")
 
+# ── Field-level Encryption (tax_password 等敏感字段）────────────────────────────
+# 生成命令（Python）：
+#   from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())
+# 将输出的 base64 字符串填写到 .env 的 FIELD_ENCRYPTION_KEY=
+# 若不填写则退化为明文存储，生产环境必须配置。
+FIELD_ENCRYPTION_KEY = os.getenv("FIELD_ENCRYPTION_KEY", "")
+
 # ── Application ───────────────────────────────────────────────────────────────
 APP_HOST  = os.getenv("APP_HOST", "0.0.0.0")
 APP_PORT  = int(os.getenv("APP_PORT", "8000"))
