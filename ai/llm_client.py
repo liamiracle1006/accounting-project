@@ -268,6 +268,56 @@ class LLMClient:
         logger.debug("Header mapping LLM raw response: %s", json_text[:500])
         return json_text
 
+    def tool_call_completion(
+        self,
+        messages: list[dict],
+        tools: list[dict],
+    ) -> dict:
+        """
+        发起支持工具调用（Function Calling）的 Chat Completion 请求。
+
+        与其他方法不同，此方法返回完整的 API 响应 dict（不解包 content），
+        由 AgentRunner 负责检测 finish_reason 并决定是否继续循环。
+
+        参数：
+          messages — 完整的消息历史（含 system / user / assistant / tool 角色）
+          tools    — OpenAI Tool 定义列表，每项格式：
+                     {"type": "function", "function": {"name":..., "description":..., "parameters":...}}
+        返回：
+          完整的 /chat/completions 响应 dict，包含 choices[0].message 和 finish_reason
+        """
+        payload: dict[str, Any] = {
+            "model":       LLM_MODEL,
+            "max_tokens":  LLM_MAX_TOKENS,
+            "temperature": 0,
+            "tools":       tools,
+            "tool_choice": "auto",
+            "messages":    messages,
+        }
+
+        logger.debug("Calling LLM with tool_call: model=%s turns=%d", LLM_MODEL, len(messages))
+
+        try:
+            with httpx.Client(timeout=LLM_TIMEOUT) as client:
+                response = client.post(self._url, headers=self._headers,
+                                       content=json.dumps(payload))
+        except httpx.TimeoutException as exc:
+            raise LLMClientError(f"Tool call LLM timeout after {LLM_TIMEOUT}s") from exc
+        except httpx.RequestError as exc:
+            raise LLMClientError(f"Tool call LLM network error: {exc}") from exc
+
+        if response.status_code != 200:
+            raise LLMClientError(
+                f"Tool call LLM returned HTTP {response.status_code}: {response.text[:300]}"
+            )
+
+        try:
+            return response.json()
+        except ValueError as exc:
+            raise LLMClientError(
+                f"Tool call LLM returned non-JSON body: {response.text[:300]}"
+            ) from exc
+
     def match_subjects(self, matching_json: str) -> str:
         """
         将旧系统科目列表与新系统科目树做语义模糊匹配，返回带置信度的匹配结果 JSON。
