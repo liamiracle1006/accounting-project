@@ -250,3 +250,130 @@ class TenantSubject(TenantMixin, Base):
             f"[{self.category}/{self.balance_direction}] "
             f"tenant={self.tenant_id} as={self.account_set_id}>"
         )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 3. InitialBalance — 期初余额台账（Sprint 2.2）
+# ══════════════════════════════════════════════════════════════════════════════
+
+class InitialBalance(TenantMixin, Base):
+    """
+    期初余额台账。每条记录 = 一个科目（+ 可选辅助核算维度）的期初数据。
+
+    联合唯一约束：(tenant_id, account_set_id, subject_code, auxiliary_hash)
+      auxiliary_hash：辅助核算特征码。
+        - 无辅助核算时 = ""（空字符串）
+        - 有辅助核算时 = MD5(sorted JSON of auxiliary_details)
+      保证同一科目的"无辅助"记录唯一，同一辅助实体的记录唯一。
+
+    年初余额（year_start_balance）防篡改公式（后端只读，禁止前端传入）：
+      借方科目：year_start = initial_balance + ytd_credit - ytd_debit
+      贷方科目：year_start = initial_balance + ytd_debit  - ytd_credit
+      1月开账：ytd_debit = ytd_credit = 0 → year_start = initial_balance
+
+    海绵标记（is_ai_sponge）：
+      自动生成的 1901 配平记录打此标记，供前端高亮提示。
+    """
+    __tablename__ = "initial_balance"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id", "account_set_id", "subject_code", "auxiliary_hash",
+            name="uq_ib_tenant_as_code_aux",
+        ),
+        Index("idx_ib_tenant_as",   "tenant_id", "account_set_id"),
+        Index("idx_ib_subject",     "tenant_id", "account_set_id", "subject_code"),
+    )
+
+    # ── 主键 ────────────────────────────────────────────────────────────────
+    id: Mapped[int] = mapped_column(
+        BigInteger, primary_key=True, autoincrement=True,
+    )
+
+    # ── 科目定位 ─────────────────────────────────────────────────────────
+    subject_code: Mapped[str] = mapped_column(
+        String(20), nullable=False,
+        comment="科目编码（对应 TenantSubject.subject_code）"
+    )
+    subject_name: Mapped[str] = mapped_column(
+        String(100), nullable=False,
+        comment="科目名称（冗余存储，避免联查）"
+    )
+    balance_direction: Mapped[str] = mapped_column(
+        String(2), nullable=False,
+        comment="余额方向：借/贷（来自 TenantSubject，冗余存储防止更新不一致）"
+    )
+
+    # ── 本位币核心金额 ────────────────────────────────────────────────────
+    initial_balance: Mapped[float] = mapped_column(
+        default=0.0,
+        comment="期初余额（start_period 月初，本位币）"
+    )
+    ytd_debit: Mapped[float] = mapped_column(
+        default=0.0,
+        comment="本年累计借方发生额（1月～start_period前月，1月开账时强制为0）"
+    )
+    ytd_credit: Mapped[float] = mapped_column(
+        default=0.0,
+        comment="本年累计贷方发生额（1月～start_period前月，1月开账时强制为0）"
+    )
+    year_start_balance: Mapped[float] = mapped_column(
+        default=0.0,
+        comment="年初余额（系统推导，禁止前端直接写入）"
+    )
+
+    # ── 外币维度（补齐）──────────────────────────────────────────────────
+    currency_code: Mapped[str | None] = mapped_column(
+        String(10), nullable=True,
+        comment="外币币种代码，如 USD / EUR / HKD（本位币记录为 NULL）"
+    )
+    foreign_currency_amount: Mapped[float | None] = mapped_column(
+        default=None, nullable=True,
+        comment="期初原币金额（外币核算时填写）"
+    )
+    exchange_rate: Mapped[float | None] = mapped_column(
+        default=None, nullable=True,
+        comment="记账汇率（原币→本位币）"
+    )
+
+    # ── 数量维度（补齐）──────────────────────────────────────────────────
+    quantity: Mapped[float | None] = mapped_column(
+        default=None, nullable=True,
+        comment="数量（数量核算科目填写）"
+    )
+    unit_price: Mapped[float | None] = mapped_column(
+        default=None, nullable=True,
+        comment="单价（数量 × 单价 ≈ initial_balance，系统做一致性警告）"
+    )
+
+    # ── 辅助核算维度（补齐）──────────────────────────────────────────────
+    auxiliary_hash: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="",
+        comment="辅助核算特征哈希（MD5），无辅助时为空字符串"
+    )
+    auxiliary_details: Mapped[str | None] = mapped_column(
+        Text, nullable=True,
+        comment=(
+            "辅助核算明细 JSON，如 "
+            '[{"type":"customer","id":1,"name":"客户A"}]'
+        )
+    )
+
+    # ── 海绵标记 ─────────────────────────────────────────────────────────
+    is_ai_sponge: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False,
+        comment="True = 海绵建账自动生成的配平记录（1901 待处理财产损溢）"
+    )
+
+    # ── 时间戳 ──────────────────────────────────────────────────────────
+    created_at = mapped_column(DateTime, server_default=func.now())
+    updated_at = mapped_column(
+        DateTime, server_default=func.now(), onupdate=func.now()
+    )
+
+    def __repr__(self) -> str:
+        return (
+            f"<InitialBalance {self.subject_code} "
+            f"初={self.initial_balance} 年初={self.year_start_balance} "
+            f"sponge={self.is_ai_sponge}>"
+        )
