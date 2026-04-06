@@ -26,6 +26,7 @@ from api.analytics_routes import router as analytics_router
 from api.account_set_routes import router as account_set_router
 from api.subject_routes import router as subject_router
 from api.initial_balance_routes import router as initial_balance_router
+from api.import_routes import router as import_router
 from services.auth_service import get_current_user
 from services.audit_guard import register_voucher_guard
 
@@ -72,6 +73,7 @@ app.include_router(analytics_router,   dependencies=_auth)
 app.include_router(account_set_router, dependencies=_auth)
 app.include_router(subject_router,          dependencies=_auth)
 app.include_router(initial_balance_router,  dependencies=_auth)
+app.include_router(import_router,           dependencies=_auth)
 
 _STATIC = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=_STATIC), name="static")

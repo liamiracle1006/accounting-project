@@ -11,6 +11,7 @@ from models.user_account import UserAccount
 from models.department import Department
 from models.expense_request import ExpenseRequest
 from models.accounting_period import AccountingPeriod
+from models.import_session import ImportSession, ImportStaging
 
 __all__ = [
     "AccountSubject",
@@ -26,4 +27,6 @@ __all__ = [
     "Department",
     "ExpenseRequest",
     "AccountingPeriod",
+    "ImportSession",
+    "ImportStaging",
 ]

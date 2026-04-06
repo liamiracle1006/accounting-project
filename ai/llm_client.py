@@ -14,6 +14,7 @@ from ai.prompts import SYSTEM_PROMPT
 from ai.decision_prompts import DECISION_SYSTEM_PROMPT
 from ai.annual_plan_prompts import ANNUAL_PLAN_SYSTEM_PROMPT
 from ai.advisor_prompts import ADVISOR_SYSTEM_PROMPT
+from ai.import_prompts import HEADER_MAPPING_SYSTEM_PROMPT, SUBJECT_MATCHING_SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 
@@ -221,3 +222,94 @@ class LLMClient:
 
         logger.debug("Advisor LLM answer length: %d chars", len(answer))
         return answer
+
+    def map_excel_headers(self, preview_json: str) -> str:
+        """
+        分析旧 Excel 的列名和前 N 行预览数据，返回标准字段 → 实际列名 的映射 JSON。
+        preview_json 格式：
+          {"source_system": "金蝶", "columns": [...], "preview": [{...}, ...]}
+        返回 JSON string，由调用方 json.loads() 解析。
+        """
+        payload: dict[str, Any] = {
+            "model":           LLM_MODEL,
+            "max_tokens":      512,
+            "temperature":     0,
+            "response_format": {"type": "json_object"},
+            "messages": [
+                {"role": "system", "content": HEADER_MAPPING_SYSTEM_PROMPT},
+                {"role": "user",   "content": preview_json},
+            ],
+        }
+
+        logger.debug("Calling LLM for Excel header mapping: model=%s", LLM_MODEL)
+
+        try:
+            with httpx.Client(timeout=LLM_TIMEOUT) as client:
+                response = client.post(self._url, headers=self._headers,
+                                       content=json.dumps(payload))
+        except httpx.TimeoutException as exc:
+            raise LLMClientError(f"Header mapping LLM timeout after {LLM_TIMEOUT}s") from exc
+        except httpx.RequestError as exc:
+            raise LLMClientError(f"Header mapping LLM network error: {exc}") from exc
+
+        if response.status_code != 200:
+            raise LLMClientError(
+                f"Header mapping LLM returned HTTP {response.status_code}: {response.text[:300]}"
+            )
+
+        try:
+            body      = response.json()
+            json_text = body["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, ValueError) as exc:
+            raise LLMClientError(
+                f"Unexpected header mapping LLM response structure: {response.text[:300]}"
+            ) from exc
+
+        logger.debug("Header mapping LLM raw response: %s", json_text[:500])
+        return json_text
+
+    def match_subjects(self, matching_json: str) -> str:
+        """
+        将旧系统科目列表与新系统科目树做语义模糊匹配，返回带置信度的匹配结果 JSON。
+        matching_json 格式：
+          {"to_match": [{staging_id, raw_code, raw_name},...],
+           "system_subjects": [{subject_code, subject_name, balance_direction, category},...]}
+        返回 JSON string，由调用方 json.loads() 解析。
+        """
+        payload: dict[str, Any] = {
+            "model":           LLM_MODEL,
+            "max_tokens":      2048,
+            "temperature":     0,
+            "response_format": {"type": "json_object"},
+            "messages": [
+                {"role": "system", "content": SUBJECT_MATCHING_SYSTEM_PROMPT},
+                {"role": "user",   "content": matching_json},
+            ],
+        }
+
+        logger.debug("Calling LLM for subject matching: model=%s", LLM_MODEL)
+
+        try:
+            with httpx.Client(timeout=LLM_TIMEOUT) as client:
+                response = client.post(self._url, headers=self._headers,
+                                       content=json.dumps(payload))
+        except httpx.TimeoutException as exc:
+            raise LLMClientError(f"Subject matching LLM timeout after {LLM_TIMEOUT}s") from exc
+        except httpx.RequestError as exc:
+            raise LLMClientError(f"Subject matching LLM network error: {exc}") from exc
+
+        if response.status_code != 200:
+            raise LLMClientError(
+                f"Subject matching LLM returned HTTP {response.status_code}: {response.text[:300]}"
+            )
+
+        try:
+            body      = response.json()
+            json_text = body["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, ValueError) as exc:
+            raise LLMClientError(
+                f"Unexpected subject matching LLM response structure: {response.text[:300]}"
+            ) from exc
+
+        logger.debug("Subject matching LLM raw response: %s", json_text[:500])
+        return json_text
