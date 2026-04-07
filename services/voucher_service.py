@@ -146,6 +146,38 @@ class VoucherService:
             raise VoucherNotFoundError(f"凭证 {voucher_id} 不存在或无权访问")
         return vh
 
+    # ── 私有：期间结账锁（CLOSED 期间禁止所有写操作）────────────────────────
+
+    def _check_period_open(
+        self,
+        voucher_date,
+        tenant_id: int,
+        account_set_id: int,
+    ) -> None:
+        """
+        校验凭证日期所属期间的状态。
+        若 status == CLOSED，抛出 VoucherLockedError（HTTP 403）。
+        若期间不存在，默认允许（尚未建期间的账套不受限）。
+        """
+        from models.accounting_period import AccountingPeriod, PeriodStatus
+        year  = voucher_date.year
+        month = voucher_date.month
+        period = (
+            self._db.query(AccountingPeriod)
+            .filter_by(
+                tenant_id      = tenant_id,
+                account_set_id = account_set_id,
+                year           = year,
+                month          = month,
+            )
+            .first()
+        )
+        if period is not None and period.status == PeriodStatus.CLOSED:
+            raise VoucherLockedError(
+                f"期间 {year}-{month:02d} 已结账(CLOSED)，禁止新增或修改凭证。"
+                "如需修改，请先通过【反结账】接口重新开启该期间。"
+            )
+
     # ── 私有：POSTED 写保护检查 ──────────────────────────────────────────────
 
     @staticmethod
@@ -343,6 +375,7 @@ class VoucherService:
         body: VoucherCreateInput,
         creator_id: int | None = None,
     ) -> VoucherHeader:
+        self._check_period_open(body.voucher_date, tenant_id, account_set_id)
         rec = self._create_operational_record(
             body.memo or "手工凭证", tenant_id, account_set_id
         )
@@ -378,6 +411,7 @@ class VoucherService:
         body: VoucherUpdateInput,
     ) -> VoucherHeader:
         vh = self._get_or_404(voucher_id, tenant_id, account_set_id)
+        self._check_period_open(vh.voucher_date, tenant_id, account_set_id)
         self._check_editable(vh)
 
         if vh.is_deleted:
@@ -415,6 +449,7 @@ class VoucherService:
         account_set_id: int,
     ) -> VoucherHeader:
         vh = self._get_or_404(voucher_id, tenant_id, account_set_id)
+        self._check_period_open(vh.voucher_date, tenant_id, account_set_id)
         self._check_editable(vh)   # POSTED → 403
 
         if vh.review_status == VoucherReviewStatus.PENDING_REVIEW:
@@ -477,6 +512,7 @@ class VoucherService:
         review_note: str | None = None,
     ) -> VoucherHeader:
         vh = self._get_or_404(voucher_id, tenant_id, account_set_id)
+        self._check_period_open(vh.voucher_date, tenant_id, account_set_id)
 
         if vh.is_deleted:
             raise ValueError(f"凭证 {voucher_id} 已软删除，无法审核")
@@ -505,6 +541,7 @@ class VoucherService:
         account_set_id: int,
     ) -> VoucherHeader:
         vh = self._get_or_404(voucher_id, tenant_id, account_set_id)
+        self._check_period_open(vh.voucher_date, tenant_id, account_set_id)
 
         if vh.review_status != VoucherReviewStatus.POSTED:
             raise VoucherStateError(
@@ -584,6 +621,8 @@ class VoucherService:
           3. 逐行解析 auxiliary_data → auxiliary_entity_id（查找或自动创建实体）
           4. 创建 VoucherLine 列表
         """
+        self._check_period_open(body.voucher_date, tenant_id, account_set_id)
+
         # 1. OperationalRecord
         rec = self._create_operational_record(
             body.description, tenant_id, account_set_id
