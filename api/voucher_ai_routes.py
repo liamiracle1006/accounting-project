@@ -1,8 +1,9 @@
 """
-AgentLedger V4.0 — AI 凭证生成 API Routes (Sprint 3.1)
+AgentLedger V4.0 — AI 凭证生成 API Routes (Sprint 3.1 / 3.2)
 
 端点一览：
   POST   /api/voucher-ai/generate                       — AI 生成凭证草稿（双层 Pipeline）
+  POST   /api/voucher-ai/confirm                        — 将 AI 草稿确认入账（写入数据库）
   GET    /api/voucher-ai/habit-rules                    — 列出所有业务习惯规则
   POST   /api/voucher-ai/habit-rules                    — 创建业务习惯规则（DAG 模板）
   PUT    /api/voucher-ai/habit-rules/{rule_id}          — 更新业务习惯规则
@@ -22,17 +23,22 @@ from sqlalchemy.orm import Session
 
 from database.connection import get_db
 from schemas.voucher_ai_schemas import (
+    ConfirmVoucherInput,
     GenerateVoucherInput,
     HabitRuleCreateInput,
     HabitRuleUpdateInput,
     HabitRuleOut,
     VoucherDraftOut,
 )
+from schemas.voucher_schemas import VoucherOut
 from services.ai_voucher_service import (
     AIVoucherService,
     HabitRuleNotFoundError,
     VoucherGenerationError,
 )
+from services.voucher_service import VoucherService
+from services.auth_service import get_current_user
+from models.user_account import UserAccount
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/voucher-ai", tags=["voucher-ai"])
@@ -88,6 +94,51 @@ def generate_voucher(
     try:
         return svc.generate_voucher(body, tenant_id, account_set_id)
     except Exception as exc:
+        raise _svc_error(exc)
+
+
+# ── AI 草稿确认入账 ───────────────────────────────────────────────────────────
+
+@router.post(
+    "/confirm",
+    response_model=VoucherOut,
+    status_code=201,
+    summary="确认 AI 草稿入账（写入数据库）",
+)
+def confirm_voucher(
+    body:         ConfirmVoucherInput,
+    ctx:          tuple       = Depends(_get_ctx),
+    db:           Session     = Depends(get_db),
+    current_user: UserAccount = Depends(get_current_user),
+) -> Any:
+    """
+    将 /generate 返回的凭证草稿持久化到数据库。
+
+    前端工作流：
+      1. POST /api/voucher-ai/generate   → 获得草稿 JSON
+      2. 财务人员确认草稿内容
+      3. POST /api/voucher-ai/confirm    → 写入数据库，返回 VoucherOut
+
+    入库后凭证处于 DRAFT 状态，财务人员可通过 POST /api/vouchers/{id}/review 正式过账。
+
+    字段说明：
+      description  — 原始业务描述，写入 OperationalRecord.raw_text（建立业务→凭证可追溯链路）
+      voucher_date — 凭证日期（通常与生成时的 voucher_date 一致，允许手动调整）
+      voucher_word — 凭证字（默认"记"）
+      memo         — 凭证摘要（来自草稿的 memo 字段）
+      lines        — 分录行（来自草稿的 lines，auxiliary_data 由后端自动转换为 entity_id）
+    """
+    tenant_id, account_set_id = ctx
+    svc = VoucherService(db)
+    try:
+        vh = svc.confirm_ai_draft(
+            tenant_id, account_set_id, body, creator_id=current_user.id
+        )
+        db.commit()
+        db.refresh(vh)
+        return svc.get_voucher(vh.voucher_id, tenant_id, account_set_id)
+    except Exception as exc:
+        db.rollback()
         raise _svc_error(exc)
 
 

@@ -76,29 +76,55 @@ print('Sprint 3.1 imports OK')
 
 ---
 
+### Sprint 3.2 — 凭证管理 CRUD（柠檬云凭证管理复刻）✅
+
+#### 新建文件
+
+| 文件 | 作用 |
+|---|---|
+| `schemas/voucher_schemas.py` | 凭证 CRUD 全量 Schema（输入/输出/查询参数/分页/断号整理） |
+| `services/voucher_service.py` | 凭证完整生命周期：列表、新建、更新、软删除、还原、状态机、断号整理、确认入账 |
+| `api/voucher_routes.py` | 12 个 REST 端点（见下） |
+
+#### 修改文件
+- `models/voucher_header.py`：新增 `voucher_number`、`voucher_word`、`is_deleted`、`creator_id`
+- `services/audit_guard.py`：开放 POSTED → PENDING_REVIEW 通道（反审核），其余 POSTED 降级仍阻断
+- `schemas/voucher_ai_schemas.py`：新增 `ConfirmLineIn`、`ConfirmVoucherInput`（Sprint 3.1→3.2 桥梁）
+- `api/voucher_ai_routes.py`：新增 `POST /api/voucher-ai/confirm`
+- `main.py`：注册 voucher_router
+
+#### API 端点（`/api/vouchers`）
+
+```
+GET    /                        — 凭证列表（多维过滤 + 分页）
+GET    /trash                   — 回收站列表
+GET    /{id}                    — 凭证详情（含分录行）
+POST   /                        — 手工新建凭证
+PUT    /{id}                    — 更新凭证（DRAFT/REJECTED 状态）
+POST   /{id}/review             — 审核（→ POSTED）
+POST   /{id}/unreview           — 反审核（POSTED → PENDING_REVIEW）
+DELETE /{id}                    — 软删除（DRAFT 状态移入回收站）
+POST   /{id}/restore            — 从回收站还原
+POST   /reorganize              — 断号整理（指定期间重新顺序编号）
+POST   /api/voucher-ai/confirm  — AI 草稿确认入账（3.1→3.2 桥梁）
+```
+
+#### 架构要点
+- `record_id` FK 由 Service 内部自动创建 `OperationalRecord`（raw_text=业务描述或摘要），对调用方透明
+- `auxiliary_data` dict（AI 草稿格式）→ `auxiliary_entity_id` FK，通过 upsert `AuxiliaryEntity` 实现
+- 状态机：DRAFT ↔ PENDING_REVIEW ↔ POSTED（AuditGuard 保护），REJECTED 可重新提交
+- 软删除不触发 AuditGuard `before_delete` 事件（仅标记 `is_deleted=True`）
+- 断号整理在单事务内完成，失败自动回滚
+
+---
+
 ## 待做
 
-### Sprint 3.2 — 凭证管理 CRUD（柠檬云凭证管理复刻）
+### Sprint 3.2 — 凭证管理 CRUD（已完成，见上）
 
 **目标：** 为 VoucherHeader + VoucherLine 实现完整的后台管理接口。
 
-**需新建：**
-- `services/voucher_service.py` — 凭证 CRUD + 审核/反审核/过账流程
-- `schemas/voucher_schemas.py` — 凭证相关 Schema
-- `api/voucher_routes.py` — 凭证端点
-
-**需扩展：**
-- `api/voucher_ai_routes.py` — 新增 `POST /confirm`（将 3.1 草稿写入 DB）
-
-**柠檬云功能参考：**
-- 凭证列表（按期间/科目/状态筛选）
-- 手工新建凭证（非 AI 路径）
-- 审核（PENDING_REVIEW → POSTED）
-- 反审核（POSTED → PENDING_REVIEW，需检查结账状态）
-- 过账（写入总账余额）
-- 作废（POSTED 凭证禁止删除）
-
-**注意：** VoucherHeader 的 `record_id` 是必填 FK → `operational_record`，落库时需处理。
+**已完成，见 Sprint 3.2 章节。**
 
 ---
 

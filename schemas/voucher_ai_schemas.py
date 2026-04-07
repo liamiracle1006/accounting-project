@@ -1,5 +1,5 @@
 """
-AgentLedger V4.0 — AI 凭证生成 Schemas (Sprint 3.1)
+AgentLedger V4.0 — AI 凭证生成 Schemas (Sprint 3.1 / 3.2)
 
 输入/输出结构定义：
   GenerateVoucherInput  — 前端调用"生成凭证"接口的请求体
@@ -162,3 +162,46 @@ class HabitRuleOut(BaseModel):
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# 确认入账：将 AI 草稿写入数据库（Sprint 3.2 新增）
+# ══════════════════════════════════════════════════════════════════════════════
+
+class ConfirmLineIn(BaseModel):
+    """
+    确认入账时的单条凭证行。
+    直接复用 AI 草稿的 lines 字段，前端透传即可。
+    """
+
+    subject_code: str = Field(..., description="科目编码")
+    direction: Literal["DEBIT", "CREDIT"]
+    amount: float = Field(..., gt=0, description="金额（正数）")
+    memo: Optional[str] = None
+    auxiliary_data: Optional[Dict[str, str]] = Field(
+        None,
+        description=(
+            "辅助核算数据，由后端转换为 auxiliary_entity_id。"
+            "合法 key：customer / supplier / employee / project / dept"
+        ),
+    )
+
+
+class ConfirmVoucherInput(BaseModel):
+    """
+    POST /api/voucher-ai/confirm 请求体。
+
+    前端收到 /generate 的草稿后，让用户确认，
+    连同原始业务描述（用于创建 OperationalRecord）一起提交。
+    """
+
+    description: str = Field(
+        ...,
+        min_length=2,
+        max_length=500,
+        description="原始业务描述，写入 OperationalRecord.raw_text",
+    )
+    voucher_date: date = Field(..., description="凭证日期")
+    voucher_word: str = Field("记", max_length=10, description="凭证字（记/收/付/转）")
+    memo: str = Field(..., max_length=500, description="凭证摘要（来自草稿的 memo）")
+    lines: list[ConfirmLineIn] = Field(..., min_length=2, description="凭证分录行")

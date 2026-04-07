@@ -28,6 +28,7 @@ from api.subject_routes import router as subject_router
 from api.initial_balance_routes import router as initial_balance_router
 from api.import_routes import router as import_router
 from api.voucher_ai_routes import router as voucher_ai_router
+from api.voucher_routes import router as voucher_router
 from services.auth_service import get_current_user
 from services.audit_guard import register_voucher_guard
 
@@ -76,6 +77,7 @@ app.include_router(subject_router,          dependencies=_auth)
 app.include_router(initial_balance_router,  dependencies=_auth)
 app.include_router(import_router,           dependencies=_auth)
 app.include_router(voucher_ai_router,       dependencies=_auth)
+app.include_router(voucher_router,          dependencies=_auth)
 
 _STATIC = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=_STATIC), name="static")

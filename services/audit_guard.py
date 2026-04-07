@@ -56,10 +56,16 @@ def register_voucher_guard() -> None:
         if status_hist.deleted:
             old_status = status_hist.deleted[0]
             new_status = status_hist.added[0] if status_hist.added else target.review_status
-            if old_status == VoucherReviewStatus.POSTED and new_status != VoucherReviewStatus.POSTED:
+            # 允许 POSTED → PENDING_REVIEW（反审核，由 VoucherService.unreview() 发起）
+            # 其余 POSTED 降级（如 POSTED → DRAFT、POSTED → REJECTED）一律拒绝
+            _allowed_posted_downgrades = {VoucherReviewStatus.PENDING_REVIEW}
+            if (old_status == VoucherReviewStatus.POSTED
+                    and new_status != VoucherReviewStatus.POSTED
+                    and new_status not in _allowed_posted_downgrades):
                 raise PermissionError(
                     f"凭证 {target.voucher_id} 已过账(POSTED)，"
                     f"禁止将状态从 POSTED 改为 {new_status}。"
+                    "如需反审核，请通过「反审核」接口操作（POSTED → PENDING_REVIEW）。"
                 )
 
         # 防止修改已过账凭证的金额或日期
