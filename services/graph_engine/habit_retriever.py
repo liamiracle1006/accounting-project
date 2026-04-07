@@ -99,6 +99,7 @@ class HabitRetriever:
                 continue
 
             matched.append({
+                "rule_id":   rule.id,       # Sprint 3.4: 学习溯源用
                 "rule_name": rule.rule_name,
                 "dag":       dag,
             })

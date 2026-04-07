@@ -1,34 +1,31 @@
 """
-AgentLedger V4.0 — AI 凭证生成 API Routes (Sprint 3.1 / 3.2)
+AgentLedger V4.0 — AI 凭证生成 API Routes (Sprint 3.1 / 3.2 / 3.4)
 
 端点一览：
-  POST   /api/voucher-ai/generate                       — AI 生成凭证草稿（双层 Pipeline）
-  POST   /api/voucher-ai/confirm                        — 将 AI 草稿确认入账（写入数据库）
-  GET    /api/voucher-ai/habit-rules                    — 列出所有业务习惯规则
-  POST   /api/voucher-ai/habit-rules                    — 创建业务习惯规则（DAG 模板）
-  PUT    /api/voucher-ai/habit-rules/{rule_id}          — 更新业务习惯规则
-  DELETE /api/voucher-ai/habit-rules/{rule_id}          — 删除业务习惯规则
+  POST   /api/voucher-ai/generate                — AI 双轨推荐（Sprint 3.4 新格式）
+  POST   /api/voucher-ai/confirm                 — 确认草稿入账 + 触发学习钩子
+  GET    /api/voucher-ai/habit-rules             — 列出所有业务习惯规则
+  POST   /api/voucher-ai/habit-rules             — 创建业务习惯规则
+  PUT    /api/voucher-ai/habit-rules/{rule_id}   — 更新业务习惯规则
+  DELETE /api/voucher-ai/habit-rules/{rule_id}   — 删除业务习惯规则
 
-Context 注入：同 import_routes 的 _get_ctx() 模式。
-异常映射：
-  HabitRuleNotFoundError  → 404
-  VoucherGenerationError  → 500
-  ValueError              → 422
+Sprint 3.4 变更：
+  /generate：返回体从 VoucherDraftOut → DualTrackResponse
+  /confirm ：请求体新增 habit_rule_id（Optional），确认后异步触发学习循环
+  Habit CRUD schema 从 voucher_ai_schemas 迁移至 habit_schemas
 """
 import logging
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from database.connection import get_db
+from schemas.habit_schemas import HabitRuleCreateInput, HabitRuleUpdateInput, HabitRuleOut
 from schemas.voucher_ai_schemas import (
     ConfirmVoucherInput,
+    DualTrackResponse,
     GenerateVoucherInput,
-    HabitRuleCreateInput,
-    HabitRuleUpdateInput,
-    HabitRuleOut,
-    VoucherDraftOut,
 )
 from schemas.voucher_schemas import VoucherOut
 from services.ai_voucher_service import (
@@ -36,6 +33,7 @@ from services.ai_voucher_service import (
     HabitRuleNotFoundError,
     VoucherGenerationError,
 )
+from services.habit_service import learn_from_voucher_async
 from services.voucher_service import VoucherService
 from services.auth_service import get_current_user
 from models.user_account import UserAccount
@@ -66,13 +64,13 @@ def _svc_error(exc: Exception) -> HTTPException:
     return HTTPException(status_code=500, detail=str(exc))
 
 
-# ── AI 凭证生成 ───────────────────────────────────────────────────────────────
+# ── AI 双轨推荐 ───────────────────────────────────────────────────────────────
 
 @router.post(
     "/generate",
-    response_model=VoucherDraftOut,
+    response_model=DualTrackResponse,
     status_code=200,
-    summary="AI 生成凭证草稿（双层 Pipeline）",
+    summary="AI 双轨推荐（历史习惯 + AI准则）",
 )
 def generate_voucher(
     body: GenerateVoucherInput,
@@ -80,14 +78,16 @@ def generate_voucher(
     db:   Session = Depends(get_db),
 ) -> Any:
     """
-    输入业务描述 → AI 生成标准借贷凭证草稿。
+    双轨制凭证生成。
 
-    Pipeline：
-    1. 上层：关键词匹配 DAG 习惯规则 + SQL 嗅探进行中余额（State Slice）
-    2. 下层：LLM 多轮 Tool Calling，通过 drill_down_subject 下钻科目树
-    3. 断路器：Sum(借) != Sum(贷) 时挂入待查明科目，锁定 DRAFT_PENDING_REVIEW
+    返回 recommendations 数组（1-2 条）：
+    - Track A（HABIT）：基于历史习惯重建，冷启动时不存在
+    - Track B（AI_RULE）：LLM 零样本推理，永远存在
 
-    Sprint 3.1 只返回 JSON 草稿，不写入数据库。
+    置信度说明：
+    - HIGH   → weight>3 且金额在历史区间，可进入批量处理（Sprint 3.5）
+    - MEDIUM → 有历史路径但样本少或金额突变，需人工确认
+    - LOW    → 纯 AI 推断，绝不允许静默入库
     """
     tenant_id, account_set_id = ctx
     svc = AIVoucherService(db)
@@ -103,30 +103,28 @@ def generate_voucher(
     "/confirm",
     response_model=VoucherOut,
     status_code=201,
-    summary="确认 AI 草稿入账（写入数据库）",
+    summary="确认 AI 草稿入账 + 触发学习循环",
 )
 def confirm_voucher(
-    body:         ConfirmVoucherInput,
-    ctx:          tuple       = Depends(_get_ctx),
-    db:           Session     = Depends(get_db),
-    current_user: UserAccount = Depends(get_current_user),
+    body:             ConfirmVoucherInput,
+    background_tasks: BackgroundTasks,
+    ctx:              tuple       = Depends(_get_ctx),
+    db:               Session     = Depends(get_db),
+    current_user:     UserAccount = Depends(get_current_user),
 ) -> Any:
     """
-    将 /generate 返回的凭证草稿持久化到数据库。
+    将选定的凭证草稿持久化到数据库，并异步触发习惯学习循环。
 
     前端工作流：
-      1. POST /api/voucher-ai/generate   → 获得草稿 JSON
-      2. 财务人员确认草稿内容
-      3. POST /api/voucher-ai/confirm    → 写入数据库，返回 VoucherOut
+      1. POST /generate → 获得 DualTrackResponse
+      2. 财务人员选择 Track A 或 Track B
+      3. POST /confirm，带上选定 draft 的内容 + habit_rule_id
 
-    入库后凭证处于 DRAFT 状态，财务人员可通过 POST /api/vouchers/{id}/review 正式过账。
+    habit_rule_id 说明：
+      - 选了 Track A → 传对应的 habit_rule_id（后端精准 weight++）
+      - 选了 Track B → 不传（None），后端自动创建或更新匹配的规则
 
-    字段说明：
-      description  — 原始业务描述，写入 OperationalRecord.raw_text（建立业务→凭证可追溯链路）
-      voucher_date — 凭证日期（通常与生成时的 voucher_date 一致，允许手动调整）
-      voucher_word — 凭证字（默认"记"）
-      memo         — 凭证摘要（来自草稿的 memo 字段）
-      lines        — 分录行（来自草稿的 lines，auxiliary_data 由后端自动转换为 entity_id）
+    学习循环在后台异步执行，使用独立 DB Session，任何报错均不影响本次入账。
     """
     tenant_id, account_set_id = ctx
     svc = VoucherService(db)
@@ -136,6 +134,15 @@ def confirm_voucher(
         )
         db.commit()
         db.refresh(vh)
+
+        # ── 异步学习钩子（独立 Session，不复用此处的 db）────────────────────
+        background_tasks.add_task(
+            learn_from_voucher_async,
+            voucher_id    = vh.voucher_id,
+            habit_rule_id = body.habit_rule_id,
+            description   = body.description,
+        )
+
         return svc.get_voucher(vh.voucher_id, tenant_id, account_set_id)
     except Exception as exc:
         db.rollback()
@@ -154,10 +161,6 @@ def list_habit_rules(
     ctx: tuple = Depends(_get_ctx),
     db:  Session = Depends(get_db),
 ) -> Any:
-    """
-    返回当前账套下所有业务习惯规则（含停用规则）。
-    规则按 id 升序排列。
-    """
     tenant_id, account_set_id = ctx
     svc = AIVoucherService(db)
     try:
@@ -177,20 +180,6 @@ def create_habit_rule(
     ctx:  tuple = Depends(_get_ctx),
     db:   Session = Depends(get_db),
 ) -> Any:
-    """
-    创建一条 DAG 业务习惯规则。
-
-    rule_json 必须符合以下格式：
-    {
-      "nodes": [
-        {"id": "N1", "label": "首付挂长期待摊", "subject_hint": "1801", "action": "首次付款时执行"},
-        {"id": "N2", "label": "次月起每月摊销", "subject_hint": "6602", "action": "次月1日起每月执行"}
-      ],
-      "edges": [
-        {"from": "N1", "to": "N2", "condition": "次月1日起按月摊销，至金额归零"}
-      ]
-    }
-    """
     tenant_id, account_set_id = ctx
     svc = AIVoucherService(db)
     try:
@@ -214,10 +203,6 @@ def update_habit_rule(
     ctx:     tuple = Depends(_get_ctx),
     db:      Session = Depends(get_db),
 ) -> Any:
-    """
-    部分更新习惯规则。所有字段均为可选，未提供的字段保持不变。
-    常用场景：临时停用规则（is_active=false），或调整关键词范围。
-    """
     tenant_id, account_set_id = ctx
     svc = AIVoucherService(db)
     try:
@@ -239,10 +224,6 @@ def delete_habit_rule(
     ctx:     tuple = Depends(_get_ctx),
     db:      Session = Depends(get_db),
 ) -> None:
-    """
-    永久删除习惯规则。
-    注意：删除规则不影响已生成的凭证（规则只在生成时使用，不存在外键依赖）。
-    """
     tenant_id, account_set_id = ctx
     svc = AIVoucherService(db)
     try:

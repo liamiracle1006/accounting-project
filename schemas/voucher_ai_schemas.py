@@ -1,14 +1,16 @@
 """
-AgentLedger V4.0 — AI 凭证生成 Schemas (Sprint 3.1 / 3.2)
+AgentLedger V4.0 — AI 凭证生成 Schemas (Sprint 3.1 / 3.2 / 3.4)
 
 输入/输出结构定义：
   GenerateVoucherInput  — 前端调用"生成凭证"接口的请求体
   VoucherLineOut        — 单条凭证行（借或贷）
   VoucherDraftOut       — AI 生成的凭证草稿（含断路器状态）
 
-  HabitRuleCreateInput  — 创建业务习惯规则（DAG 模板）
-  HabitRuleUpdateInput  — 更新业务习惯规则
-  HabitRuleOut          — 规则返回体
+  RecommendationItem    — 双轨制单条推荐（Sprint 3.4 新增）
+  DualTrackResponse     — /generate 返回体，含 Track A + Track B（Sprint 3.4 新增）
+
+  HabitRuleCreateInput / HabitRuleUpdateInput / HabitRuleOut
+    → 已迁移至 schemas/habit_schemas.py（Sprint 3.4 拆分）
 """
 from datetime import date, datetime
 from typing import Dict, Literal, Optional
@@ -90,78 +92,52 @@ class VoucherDraftOut(BaseModel):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 业务习惯规则（DAG 模板）：CRUD Schemas
+# 双轨制推荐（Sprint 3.4 新增）
 # ══════════════════════════════════════════════════════════════════════════════
 
-class HabitRuleCreateInput(BaseModel):
-    """创建 DAG 业务习惯规则。"""
+class RecommendationItem(BaseModel):
+    """
+    双轨制单条推荐。
 
-    rule_name: str = Field(
-        ..., min_length=2, max_length=100,
-        description="规则名称，如'阿里云服务器年费摊销'",
-    )
-    description: Optional[str] = Field(
-        None, max_length=500,
-        description="规则说明（帮助用户理解规则用途）",
-    )
-    keywords: list[str] = Field(
-        ..., min_length=1,
-        description="触发关键词列表，如 ['阿里云', '服务器', 'ECS']",
-    )
-    rule_json: dict = Field(
+    Track A（HABIT）：基于历史习惯 DAG 重建的草稿，附带确定性置信度。
+    Track B（AI_RULE）：LLM 零样本推理生成的草稿，兜底方案。
+
+    前端工作流：
+      1. 展示 recommendations 数组（最多 2 条：A + B，或仅 B）
+      2. 用户选择其中一条
+      3. POST /confirm 时带上该条的 habit_rule_id（Track A 非 None，Track B 为 None）
+    """
+
+    track: Literal["A", "B"] = Field(..., description="推荐轨道：A=历史习惯，B=AI准则")
+    source: Literal["HABIT", "AI_RULE"] = Field(..., description="来源标识")
+    confidence: Literal["HIGH", "MEDIUM", "LOW"] = Field(
         ...,
         description=(
-            "DAG 规则 JSON，格式：\n"
-            "{\n"
-            "  'nodes': [{'id':'N1','label':'...','subject_hint':'1801','action':'...'}],\n"
-            "  'edges': [{'from':'N1','to':'N2','condition':'...'}]\n"
-            "}"
+            "置信度：\n"
+            "  HIGH   — weight>3 且金额在历史区间，可进入批量自动处理\n"
+            "  MEDIUM — 有历史路径但金额突变或样本少，需人工扫一眼\n"
+            "  LOW    — 纯新业务/Track B，绝不允许静默入库"
         ),
     )
-    is_active: bool = Field(True, description="是否立即启用")
-
-    @field_validator("keywords")
-    @classmethod
-    def keywords_not_empty(cls, v: list[str]) -> list[str]:
-        cleaned = [kw.strip() for kw in v if kw.strip()]
-        if not cleaned:
-            raise ValueError("keywords 列表中至少需要一个非空关键词")
-        return cleaned
+    habit_rule_id: Optional[int] = Field(
+        None,
+        description="Track A 的规则 ID，/confirm 时原样传回用于学习溯源；Track B 为 None",
+    )
+    draft: VoucherDraftOut = Field(..., description="凭证草稿")
 
 
-class HabitRuleUpdateInput(BaseModel):
-    """更新 DAG 业务习惯规则（所有字段可选）。"""
+class DualTrackResponse(BaseModel):
+    """
+    POST /api/voucher-ai/generate 的返回体（Sprint 3.4 新格式）。
 
-    rule_name: Optional[str] = Field(None, min_length=2, max_length=100)
-    description: Optional[str] = Field(None, max_length=500)
-    keywords: Optional[list[str]] = None
-    rule_json: Optional[dict] = None
-    is_active: Optional[bool] = None
+    冷启动（无历史习惯）：recommendations 只含 Track B（1 条）。
+    有历史习惯：recommendations 含 Track A + Track B（2 条），Track A 排在前面。
+    """
 
-    @field_validator("keywords")
-    @classmethod
-    def keywords_not_empty(cls, v: Optional[list[str]]) -> Optional[list[str]]:
-        if v is None:
-            return v
-        cleaned = [kw.strip() for kw in v if kw.strip()]
-        if not cleaned:
-            raise ValueError("keywords 列表中至少需要一个非空关键词")
-        return cleaned
-
-
-class HabitRuleOut(BaseModel):
-    """业务习惯规则返回体。"""
-
-    id: int
-    rule_name: str
-    description: Optional[str]
-    keywords: list[str]
-    rule_json: dict
-    is_active: bool
-    created_at: datetime
-    updated_at: datetime
-
-    model_config = {"from_attributes": True}
+    recommendations: list[RecommendationItem] = Field(
+        ...,
+        description="推荐列表（1-2 条），前端按顺序展示给财务人员选择",
+    )
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -205,3 +181,10 @@ class ConfirmVoucherInput(BaseModel):
     voucher_word: str = Field("记", max_length=10, description="凭证字（记/收/付/转）")
     memo: str = Field(..., max_length=500, description="凭证摘要（来自草稿的 memo）")
     lines: list[ConfirmLineIn] = Field(..., min_length=2, description="凭证分录行")
+    habit_rule_id: Optional[int] = Field(
+        None,
+        description=(
+            "用户选择了 Track A（历史习惯）时，传入对应的 habit_rule_id。\n"
+            "Track B（AI 准则）确认时留 None，后端将自动创建新习惯规则。"
+        ),
+    )
