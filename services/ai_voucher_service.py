@@ -328,12 +328,22 @@ class AIVoucherService:
                 logger.warning("断路器: 无效 amount '%s'，跳过此行: %s", raw.get("amount"), exc)
                 continue
 
+            # auxiliary_data: 只保留合法 key，防止 LLM 注入非法维度
+            raw_aux = raw.get("auxiliary_data")
+            auxiliary_data = None
+            if isinstance(raw_aux, dict):
+                valid_keys = {"customer", "supplier", "employee", "project", "dept"}
+                auxiliary_data = {
+                    k: str(v) for k, v in raw_aux.items() if k in valid_keys
+                } or None
+
             lines.append({
-                "subject_code": str(raw.get("subject_code", "")),
-                "subject_name": raw.get("subject_name"),
-                "direction":    direction,
-                "amount":       amount,
-                "memo":         raw.get("memo"),
+                "subject_code":  str(raw.get("subject_code", "")),
+                "subject_name":  raw.get("subject_name"),
+                "direction":     direction,
+                "amount":        amount,
+                "memo":          raw.get("memo"),
+                "auxiliary_data": auxiliary_data,
             })
 
         total_debit  = sum(l["amount"] for l in lines if l["direction"] == "DEBIT")

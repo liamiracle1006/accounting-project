@@ -11,7 +11,7 @@ AgentLedger V4.0 — AI 凭证生成 Schemas (Sprint 3.1)
   HabitRuleOut          — 规则返回体
 """
 from datetime import date, datetime
-from typing import Literal, Optional
+from typing import Dict, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -49,6 +49,15 @@ class VoucherLineOut(BaseModel):
     )
     amount: float = Field(..., gt=0, description="金额（正数）")
     memo: Optional[str] = Field(None, description="行备注")
+    auxiliary_data: Optional[Dict[str, str]] = Field(
+        None,
+        description=(
+            "辅助核算数据。仅当该科目开启了辅助核算维度时才需填写。"
+            "例：应收账款挂客户 → {\"customer\": \"腾讯科技\"}；"
+            "应付账款挂供应商 → {\"supplier\": \"阿里巴巴\"}；"
+            "费用挂部门 → {\"dept\": \"技术部\"}。"
+        ),
+    )
 
 
 class VoucherDraftOut(BaseModel):

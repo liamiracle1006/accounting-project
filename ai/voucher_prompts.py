@@ -35,12 +35,24 @@ VOUCHER_GENERATION_SYSTEM_PROMPT = """\
          "subject_name": "银行存款",
          "direction": "DEBIT",
          "amount": 3600.00,
-         "memo": "行备注（可选，留空则省略此字段）"
+         "memo": "行备注（可选，留空则省略此字段）",
+         "auxiliary_data": {"customer": "腾讯科技"}
        }
      ]
    }
    direction 只能是 "DEBIT"（借方）或 "CREDIT"（贷方）。
    amount 必须是正数浮点数，精确到两位小数。
+   auxiliary_data 仅当该科目有辅助核算维度时才输出（如应收账款→客户，应付账款→供应商），
+   否则省略此字段。合法 key：customer / supplier / employee / project / dept。
+
+4. 【系统字段禁区 — 绝对红线】
+   以下字段由 Python 后端自动生成，LLM 严禁输出：
+   ❌ voucher_number  （凭证号：系统按期间自动编号）
+   ❌ creator         （制单人：从登录 Token 取）
+   ❌ total_amount    （合计：后端对 lines 求和）
+   ❌ voucher_date    （凭证日期：由调用方传入，非 LLM 职责）
+   ❌ review_status   （审核状态：后端状态机管理）
+   输出这些字段不会被采用，只会制造噪声，请将 token 用在真正的业务逻辑上。
 
 ════════════════════════════════════════
 【工作流程】
