@@ -77,5 +77,6 @@ def init_db():
         boss_decision_log, tax_annual_plan, invoice,
         expense_request, department, user_account, audit_log,
         accounting,   # SystemSubject + TenantSubject (Sprint 2.1)
+        batch_task,   # BatchImportTask + BatchImportRecord (Sprint 3.5)
     )
     Base.metadata.create_all(bind=engine)

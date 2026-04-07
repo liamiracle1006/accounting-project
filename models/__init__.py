@@ -13,6 +13,7 @@ from models.expense_request import ExpenseRequest
 from models.accounting_period import AccountingPeriod
 from models.import_session import ImportSession, ImportStaging
 from models.tenant_habit_rule import TenantHabitRule
+from models.batch_task import BatchImportTask, BatchImportRecord
 
 __all__ = [
     "AccountSubject",
@@ -31,4 +32,6 @@ __all__ = [
     "ImportSession",
     "ImportStaging",
     "TenantHabitRule",
+    "BatchImportTask",
+    "BatchImportRecord",
 ]

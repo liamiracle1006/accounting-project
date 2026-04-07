@@ -71,27 +71,31 @@ class BankTransaction:
 # 占位 Vision LLM 调用（待接入真实 API）
 # ---------------------------------------------------------------------------
 
-def _call_vision_llm(image_bytes: bytes, mime_type: str) -> str:
+# 默认发票识别 Prompt（保持原有行为）
+_DEFAULT_INVOICE_PROMPT = (
+    "请识别这张增值税发票，提取所有字段，"
+    "以 JSON 格式返回，字段名使用英文，"
+    "金额为数字类型，日期格式为 YYYY-MM-DD，税率为小数（如0.13）。"
+    "只返回 JSON，不要任何说明文字。"
+)
+
+
+def _call_vision_llm(
+    image_bytes: bytes,
+    mime_type:   str,
+    prompt:      str | None = None,
+) -> str:
     """
     ★ 占位实现 — 接入真实视觉 LLM 时替换此函数 ★
 
-    期望此函数调用视觉大模型（如 Qwen-VL-Max / GPT-4V）识别发票图片，
-    返回一个 JSON 字符串，格式如下：
+    参数：
+      image_bytes — 图片/PDF 的原始字节
+      mime_type   — MIME 类型（image/jpeg / image/png / application/pdf 等）
+      prompt      — 自定义 Prompt；为 None 时使用默认发票识别 Prompt
 
-    {
-      "invoice_code":    "044002400111",
-      "invoice_number":  "12345678",
-      "invoice_date":    "2025-03-15",
-      "seller_name":     "北京某科技有限公司",
-      "seller_tax_id":   "91110108MA01XXXXX",
-      "buyer_name":      "上海某贸易有限公司",
-      "buyer_tax_id":    "91310115MA1BXXXXX",
-      "subtotal_amount": 10000.00,
-      "tax_rate":        0.13,
-      "tax_amount":      1300.00,
-      "total_amount":    11300.00,
-      "items_summary":   "电子元器件"
-    }
+    默认（prompt=None）：识别增值税发票，返回发票结构化 JSON（保持原有行为）。
+    自定义（prompt 非 None）：由调用方（如 vision_service）注入批量票据提取 Prompt，
+                              API key 未配置时返回空 JSON 数组 "[]"。
 
     ------ 接入参考（通义千问 Qwen-VL-Max）------
     import openai, base64
@@ -124,9 +128,13 @@ def _call_vision_llm(image_bytes: bytes, mime_type: str) -> str:
     return resp.choices[0].message.content
     ------------------------------------------------
     """
+    effective_prompt = prompt if prompt is not None else _DEFAULT_INVOICE_PROMPT
+
     if not VISION_API_KEY:
         logger.warning("VISION_API_KEY not set — OCR returning empty result. "
                        "Set VISION_API_KEY in .env to enable.")
+        if prompt is not None:
+            return "[]"    # 自定义 Prompt → 返回空数组，上层按无数据处理
         return json.dumps({
             "invoice_code": None, "invoice_number": "",
             "invoice_date": str(date.today()),
@@ -140,6 +148,8 @@ def _call_vision_llm(image_bytes: bytes, mime_type: str) -> str:
     import openai
     b64    = base64.b64encode(image_bytes).decode()
     client = openai.OpenAI(api_key=VISION_API_KEY, base_url=VISION_API_BASE)
+    # 自定义 Prompt（批量票据）可能返回多条，给足 token
+    max_tokens = 1024 if prompt is not None else 512
     resp   = client.chat.completions.create(
         model=VISION_MODEL,
         messages=[{
@@ -147,16 +157,10 @@ def _call_vision_llm(image_bytes: bytes, mime_type: str) -> str:
             "content": [
                 {"type": "image_url",
                  "image_url": {"url": f"data:{mime_type};base64,{b64}"}},
-                {"type": "text",
-                 "text": (
-                     "请识别这张增值税发票，提取所有字段，"
-                     "以 JSON 格式返回，字段名使用英文，"
-                     "金额为数字类型，日期格式为 YYYY-MM-DD，税率为小数（如0.13）。"
-                     "只返回 JSON，不要任何说明文字。"
-                 )},
+                {"type": "text", "text": effective_prompt},
             ],
         }],
-        max_tokens=512,
+        max_tokens=max_tokens,
     )
     return resp.choices[0].message.content
 
