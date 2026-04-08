@@ -529,6 +529,7 @@
     <a href="#" data-page="auditlog" onclick="navTo('auditlog',this);return false;" class="finance-only">审计日志</a>
     <a href="#" data-page="advisor"  onclick="navTo('advisor',this);return false;">AI 顾问</a>
     <a href="#" data-page="ragmgmt" onclick="navTo('ragmgmt',this);return false;" class="finance-only">知识库</a>
+    <a href="#" data-page="setup"    onclick="navTo('setup',this);return false;"    class="finance-only">建账向导</a>
     <a href="#" data-page="settings" onclick="navTo('settings',this);return false;">企业设置</a>
     <a href="/docs" target="_blank">API 文档</a>
   </nav>
@@ -1499,6 +1500,135 @@
   </div>
 </div>
 
+<!-- ══ 建账向导 (Sprint 2.2 + 2.3) ══ -->
+<div id="page-setup" class="page">
+  <div style="padding:24px;max-width:1100px;margin:0 auto">
+    <div style="margin-bottom:20px">
+      <h2 style="font-size:18px;font-weight:700">建账向导</h2>
+      <p style="color:var(--text-muted);font-size:13px;margin-top:4px">新公司入驻时录入期初余额，或从旧系统导入历史数据</p>
+    </div>
+
+    <div class="tabs" style="margin-bottom:20px">
+      <div class="tab active" id="setup-tab-balance" onclick="switchSetupTab('balance',this)">手工录入期初余额</div>
+      <div class="tab" id="setup-tab-import" onclick="switchSetupTab('import',this)">旧账文件导入</div>
+    </div>
+
+    <!-- ── Tab A: 期初余额 ── -->
+    <div id="setup-panel-balance">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;flex-wrap:wrap;gap:8px">
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-outline" onclick="downloadBalanceTemplate()">📥 下载模板</button>
+          <label class="btn btn-outline" style="cursor:pointer">
+            📤 导入Excel
+            <input type="file" accept=".xlsx" style="display:none" onchange="importBalanceExcelFile(this)">
+          </label>
+          <button class="btn btn-outline" onclick="loadBalanceTree()">刷新</button>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-outline" id="save-balance-btn" onclick="saveAllBalances()">保存余额</button>
+          <button class="btn btn-primary" id="complete-setup-btn" onclick="completeAccountSetup()">完成建账 →</button>
+        </div>
+      </div>
+
+      <div class="card" style="margin-bottom:16px">
+        <div class="table-wrap">
+          <table style="width:100%;border-collapse:collapse">
+            <thead>
+              <tr>
+                <th style="padding:10px;background:var(--bg);font-size:12px;font-weight:600;text-align:left;border:1px solid var(--border);width:120px">科目代码</th>
+                <th style="padding:10px;background:var(--bg);font-size:12px;font-weight:600;text-align:left;border:1px solid var(--border)">科目名称</th>
+                <th style="padding:10px;background:var(--bg);font-size:12px;font-weight:600;text-align:center;border:1px solid var(--border);width:60px">方向</th>
+                <th style="padding:10px;background:var(--bg);font-size:12px;font-weight:600;text-align:right;border:1px solid var(--border);width:150px">期初余额</th>
+                <th style="padding:10px;background:var(--bg);font-size:12px;font-weight:600;text-align:right;border:1px solid var(--border);width:150px">本年借方</th>
+                <th style="padding:10px;background:var(--bg);font-size:12px;font-weight:600;text-align:right;border:1px solid var(--border);width:150px">本年贷方</th>
+              </tr>
+            </thead>
+            <tbody id="balance-tbody">
+              <tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-muted)"><div class="spinner" style="margin:0 auto"></div></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card" id="trial-balance-card">
+        <div class="card-header">
+          <span class="card-title">试算平衡</span>
+          <button class="btn btn-outline" style="margin-left:auto;padding:4px 10px;font-size:12px" onclick="loadTrialBalance()">刷新</button>
+        </div>
+        <div class="card-body" id="trial-balance-body">
+          <p style="color:var(--text-muted);font-size:13px">保存余额后查看试算平衡结果</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Tab B: 旧账导入向导 ── -->
+    <div id="setup-panel-import" style="display:none">
+      <div style="display:flex;align-items:center;gap:0;margin-bottom:28px" id="import-steps"></div>
+
+      <!-- 步骤1 -->
+      <div id="import-step-1" class="card" style="margin-bottom:16px">
+        <div class="card-header"><span class="card-title">① 选择旧系统</span></div>
+        <div class="card-body" style="display:flex;flex-direction:column;gap:16px;max-width:420px">
+          <div>
+            <label class="field-label">旧系统类型 *</label>
+            <select id="import-source-system" class="field-input" style="width:100%">
+              <option value="">请选择...</option>
+              <option value="金蝶">金蝶</option>
+              <option value="用友">用友</option>
+              <option value="管家婆">管家婆</option>
+              <option value="其他Excel">其他Excel</option>
+            </select>
+          </div>
+          <div>
+            <label class="field-label">原始文件名（选填）</label>
+            <input id="import-filename" type="text" class="field-input" style="width:100%" placeholder="例：2024年账套导出.xlsx">
+          </div>
+          <button class="btn btn-primary" onclick="createImportSession()" style="align-self:flex-start">开始 →</button>
+        </div>
+      </div>
+
+      <!-- 步骤2 -->
+      <div id="import-step-2" class="card" style="display:none;margin-bottom:16px">
+        <div class="card-header"><span class="card-title">② 上传数据文件</span></div>
+        <div class="card-body">
+          <div id="import-guide" style="background:#f0f9ff;border:1px solid #bae6fd;border-radius:6px;padding:12px;margin-bottom:16px;font-size:13px;line-height:1.7;display:none"></div>
+          <div style="border:2px dashed var(--border);border-radius:8px;padding:36px;text-align:center;margin-bottom:16px">
+            <div style="font-size:32px;margin-bottom:8px">📂</div>
+            <div style="font-size:14px;font-weight:600;margin-bottom:4px">拖拽文件到此处，或点击选择</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-bottom:16px">支持 .xlsx / .xls 格式</div>
+            <label class="btn btn-outline" style="cursor:pointer">
+              选择文件
+              <input type="file" accept=".xlsx,.xls" style="display:none" onchange="uploadImportFile(this)">
+            </label>
+          </div>
+          <div id="import-upload-result" style="display:none"></div>
+          <button id="run-mapping-btn" class="btn btn-primary" onclick="runSubjectMapping()" style="display:none;margin-top:12px">运行 AI 科目匹配 →</button>
+        </div>
+      </div>
+
+      <!-- 步骤3 -->
+      <div id="import-step-3" class="card" style="display:none;margin-bottom:16px">
+        <div class="card-header">
+          <span class="card-title">③ 人工复核</span>
+          <span id="import-pending-count" style="margin-left:8px;font-size:12px;color:var(--text-muted)"></span>
+        </div>
+        <div class="card-body">
+          <p style="font-size:13px;color:var(--text-muted);margin-bottom:12px">AI 无法自动确认以下科目，请手动选择或跳过：</p>
+          <div id="import-abnormal-list"></div>
+          <button id="execute-import-btn" class="btn btn-primary" onclick="executeImport()" style="margin-top:16px;display:none">执行导入 →</button>
+        </div>
+      </div>
+
+      <!-- 步骤4 -->
+      <div id="import-step-4" class="card" style="display:none;margin-bottom:16px">
+        <div class="card-header"><span class="card-title">④ 导入完成</span></div>
+        <div class="card-body" id="import-result-body"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
 <!-- ── 凭证详情 Modal ── -->
 <div class="modal-overlay" id="voucherModal" onclick="closeModalOnOverlay(event)">
   <div class="modal">
@@ -1625,6 +1755,7 @@
     if (page === 'invoices')  loadInvoices();
     if (page === 'auditlog')  loadAuditLogs();
     if (page === 'ragmgmt')   loadRagStats();
+    if (page === 'setup')     loadSetupPage();
   }
 
   // ── 仪表盘 ──
@@ -3807,6 +3938,461 @@
         </div>`).join('');
     } catch (err) {
       el.innerHTML = `<p style="color:var(--error)">检索出错：${err.message}</p>`;
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════════
+  //  建账向导 — Sprint 2.2 期初余额 + Sprint 2.3 旧账导入
+  // ══════════════════════════════════════════════════════════════════
+
+  function loadSetupPage() {
+    // Default: balance tab
+    loadBalanceTree();
+  }
+
+  function switchSetupTab(tab, el) {
+    document.querySelectorAll('#page-setup .tab').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
+    document.getElementById('setup-panel-balance').style.display = tab === 'balance' ? '' : 'none';
+    document.getElementById('setup-panel-import').style.display  = tab === 'import'  ? '' : 'none';
+    if (tab === 'balance') loadBalanceTree();
+    if (tab === 'import')  loadImportTab();
+  }
+
+  // ── Tab A: 期初余额 ─────────────────────────────────────────────
+
+  async function loadBalanceTree() {
+    const tbody = document.getElementById('balance-tbody');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:40px"><div class="spinner" style="margin:0 auto"></div></td></tr>';
+    try {
+      const res  = await fetch(`${API}/api/initial-balances/with-subjects`);
+      const data = await res.json();
+      if (!res.ok) { tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--error)">${escHtml(data.detail||'加载失败')}</td></tr>`; return; }
+      if (!data.length) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--text-muted)">暂无科目数据，请先完成账套科目初始化</td></tr>';
+        return;
+      }
+      tbody.innerHTML = data.map(n => _renderBalanceRow(n, 0)).join('');
+      loadTrialBalance();
+    } catch (e) {
+      tbody.innerHTML = `<tr><td colspan="6" style="text-align:center;padding:40px;color:var(--error)">${e.message}</td></tr>`;
+    }
+  }
+
+  function _renderBalanceRow(node, depth) {
+    const isParent = node.has_children;
+    const isSponge = node.is_ai_sponge;
+    const indent   = depth * 20;
+    const bg       = isParent ? 'background:#f8fafc;' : '';
+    const sponge   = isSponge ? '<span style="font-size:10px;background:#fed7aa;color:#92400e;border-radius:3px;padding:1px 5px;margin-left:4px">AI配平</span>' : '';
+    const dir      = node.balance_direction === '借'
+      ? '<span style="font-size:11px;background:#e0f2fe;color:#075985;border-radius:3px;padding:1px 5px">借</span>'
+      : '<span style="font-size:11px;background:#fce7f3;color:#9d174d;border-radius:3px;padding:1px 5px">贷</span>';
+
+    const cell = (field) => isParent
+      ? `<td style="padding:8px 12px;border:1px solid var(--border);text-align:right;${bg}color:var(--text-muted);font-size:12px">${fmt(node[field]||0)}</td>`
+      : `<td style="padding:4px 8px;border:1px solid var(--border);text-align:right;${bg}"><input type="number" step="0.01" min="0" class="balance-input" data-code="${escHtml(node.subject_code)}" data-field="${field}" value="${(node[field]||0).toFixed(2)}" style="width:126px;text-align:right;border:1px solid var(--border);border-radius:4px;padding:4px 6px;font-size:13px;font-family:monospace"></td>`;
+
+    let rows = `<tr>
+      <td style="padding:8px 12px;border:1px solid var(--border);${bg}padding-left:${8+indent}px;font-family:monospace;font-size:13px">${escHtml(node.subject_code)}</td>
+      <td style="padding:8px 12px;border:1px solid var(--border);${bg}padding-left:${8+indent}px;font-size:13px">${escHtml(node.subject_name)}${sponge}</td>
+      <td style="padding:8px 12px;border:1px solid var(--border);text-align:center;${bg}">${dir}</td>
+      ${cell('initial_balance')}${cell('ytd_debit')}${cell('ytd_credit')}
+    </tr>`;
+
+    if (node.children && node.children.length)
+      rows += node.children.map(c => _renderBalanceRow(c, depth + 1)).join('');
+    return rows;
+  }
+
+  async function saveAllBalances() {
+    const inputs = document.querySelectorAll('.balance-input');
+    if (!inputs.length) { showToast('没有可保存的余额数据', 'error'); return; }
+
+    const map = {};
+    inputs.forEach(inp => {
+      const code  = inp.dataset.code;
+      const field = inp.dataset.field;
+      if (!map[code]) map[code] = { subject_code: code, initial_balance: 0, ytd_debit: 0, ytd_credit: 0 };
+      map[code][field] = parseFloat(inp.value) || 0;
+    });
+    const rows = Object.values(map).filter(r => r.initial_balance !== 0 || r.ytd_debit !== 0 || r.ytd_credit !== 0);
+    if (!rows.length) { showToast('所有余额均为零，无需保存', 'error'); return; }
+
+    const btn = document.getElementById('save-balance-btn');
+    btn.disabled = true; btn.textContent = '保存中…';
+    try {
+      const res  = await fetch(`${API}/api/initial-balances/batch-save`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ rows }),
+      });
+      const data = await res.json();
+      if (!res.ok) { showToast(data.detail || '保存失败', 'error'); return; }
+      const warn = data.warnings?.length ? `，${data.warnings[0]}` : '';
+      showToast(`✅ 已保存 ${data.saved} 条余额${warn}`, 'success');
+      loadTrialBalance();
+    } catch (e) {
+      showToast('保存失败：' + e.message, 'error');
+    } finally {
+      btn.disabled = false; btn.textContent = '保存余额';
+    }
+  }
+
+  async function loadTrialBalance() {
+    const el = document.getElementById('trial-balance-body');
+    if (!el) return;
+    el.innerHTML = '<div class="spinner" style="margin:8px auto"></div>';
+    try {
+      const res  = await fetch(`${API}/api/initial-balances/trial-balance`);
+      const data = await res.json();
+      if (!res.ok) { el.innerHTML = `<p style="color:var(--error);font-size:13px">${escHtml(data.detail||'加载失败')}</p>`; return; }
+      const lines = data.lines || [];
+      const ok    = data.is_balanced;
+      el.innerHTML = `
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 70px;gap:8px;font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:6px;padding:0 4px">
+          <span>维度</span><span style="text-align:right">借方合计</span><span style="text-align:right">贷方合计</span><span style="text-align:right">差额</span><span style="text-align:center">状态</span>
+        </div>
+        ${lines.map(l => `
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 70px;gap:8px;font-size:13px;padding:8px 4px;border-top:1px solid var(--border)">
+          <span style="color:var(--text-muted)">${escHtml(l.dimension)}</span>
+          <span style="text-align:right;font-family:monospace">¥${fmt(l.total_debit)}</span>
+          <span style="text-align:right;font-family:monospace">¥${fmt(l.total_credit)}</span>
+          <span style="text-align:right;font-family:monospace;color:${l.is_balanced?'var(--success)':'var(--error)'}">¥${fmt(Math.abs(l.difference))}</span>
+          <span style="text-align:center">${l.is_balanced ? '✅' : '❌'}</span>
+        </div>`).join('')}
+        <div style="margin-top:12px;padding:10px 14px;border-radius:6px;background:${ok?'#f0fff4':'#fff5f5'};border:1px solid ${ok?'#9ae6b4':'#feb2b2'};font-size:13px;font-weight:600;color:${ok?'#276749':'#c53030'}">
+          ${ok ? '✅ 试算平衡通过，可以完成建账' : `❌ 试算不平衡，差额 ¥${fmt(Math.abs(data.sponge_amount||0))}（完成建账时 AI 将自动用 1901 科目配平）`}
+        </div>`;
+    } catch (e) {
+      el.innerHTML = `<p style="color:var(--error);font-size:13px">${e.message}</p>`;
+    }
+  }
+
+  function downloadBalanceTemplate() {
+    window.open(`${API}/api/initial-balances/export-template`, '_blank');
+  }
+
+  async function importBalanceExcelFile(input) {
+    const file = input.files[0];
+    if (!file) return;
+    input.value = '';
+    const fd = new FormData();
+    fd.append('file', file);
+    try {
+      showToast('导入中…', 'success');
+      const res  = await fetch(`${API}/api/initial-balances/import`, { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) { showToast(data.detail || '导入失败', 'error'); return; }
+      const errs = data.errors?.length ? `，${data.errors.length} 行错误` : '';
+      showToast(`✅ 导入 ${data.imported} 条${errs}`, 'success');
+      loadBalanceTree();
+    } catch (e) {
+      showToast('导入失败：' + e.message, 'error');
+    }
+  }
+
+  async function completeAccountSetup() {
+    const btn = document.getElementById('complete-setup-btn');
+    try {
+      const tbRes  = await fetch(`${API}/api/initial-balances/trial-balance`);
+      const tbData = await tbRes.json();
+      if (!tbRes.ok) { showToast(tbData.detail || '试算失败', 'error'); return; }
+      const msg = tbData.is_balanced
+        ? '确认完成建账？账套状态将变为 ACTIVE。'
+        : `试算不平衡，差额 ¥${fmt(Math.abs(tbData.sponge_amount||0))}。\nAI 将自动用「1901 待处理财产损溢」配平，然后完成建账。\n是否继续？`;
+      if (!confirm(msg)) return;
+
+      btn.disabled = true; btn.textContent = '建账中…';
+      const res  = await fetch(`${API}/api/initial-balances/complete`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) { showToast(data.detail || '建账失败', 'error'); return; }
+      const sponge = data.sponge_amount ? `（AI 配平 ¥${fmt(Math.abs(data.sponge_amount))}）` : '';
+      showToast(`✅ 建账完成！账套已激活${sponge}`, 'success');
+      loadBalanceTree();
+    } catch (e) {
+      showToast('建账失败：' + e.message, 'error');
+    } finally {
+      btn.disabled = false; btn.textContent = '完成建账 →';
+    }
+  }
+
+  // ── Tab B: 旧账导入向导 ─────────────────────────────────────────
+
+  let _importSessionId   = null;
+  let _importCurrentStep = 1;
+  let _importPendingCount = 0;
+
+  function loadImportTab() {
+    _importSessionId   = null;
+    _importCurrentStep = 1;
+    _importPendingCount = 0;
+    _renderImportSteps(1);
+    [1,2,3,4].forEach(n => {
+      const el = document.getElementById(`import-step-${n}`);
+      if (el) el.style.display = n === 1 ? '' : 'none';
+    });
+    document.getElementById('import-source-system').value = '';
+    document.getElementById('import-filename').value = '';
+  }
+
+  function _renderImportSteps(active) {
+    const steps = ['创建会话','上传文件','科目复核','完成导入'];
+    const el    = document.getElementById('import-steps');
+    if (!el) return;
+    el.innerHTML = steps.map((s, i) => {
+      const n    = i + 1;
+      const done = n < active;
+      const cur  = n === active;
+      const bg   = done ? 'var(--success)' : cur ? 'var(--primary)' : '#e2e8f0';
+      const fg   = (done || cur) ? '#fff' : 'var(--text-muted)';
+      const line = i < steps.length - 1
+        ? `<div style="flex:1;height:2px;background:${done?'var(--success)':'var(--border)'};margin:0 2px;align-self:flex-start;margin-top:14px"></div>` : '';
+      return `
+        <div style="display:flex;align-items:flex-start;flex:1">
+          <div style="display:flex;flex-direction:column;align-items:center;gap:4px;min-width:72px">
+            <div style="width:28px;height:28px;border-radius:50%;background:${bg};color:${fg};display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0">${done?'✓':n}</div>
+            <span style="font-size:11px;color:${cur?'var(--primary)':'var(--text-muted)'};font-weight:${cur?700:400};white-space:nowrap;text-align:center">${s}</span>
+          </div>
+          ${line}
+        </div>`;
+    }).join('');
+  }
+
+  function _goImportStep(n) {
+    _importCurrentStep = n;
+    _renderImportSteps(n);
+    [1,2,3,4].forEach(i => {
+      const el = document.getElementById(`import-step-${i}`);
+      if (el) el.style.display = i <= n ? '' : 'none';
+    });
+    document.getElementById(`import-step-${n}`)?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  async function createImportSession() {
+    const system   = document.getElementById('import-source-system').value;
+    const filename = document.getElementById('import-filename').value.trim();
+    if (!system) { showToast('请选择旧系统类型', 'error'); return; }
+    try {
+      const res  = await fetch(`${API}/api/imports/sessions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source_system: system, original_filename: filename || null }),
+      });
+      const data = await res.json();
+      if (!res.ok) { showToast(data.detail || '创建失败', 'error'); return; }
+      _importSessionId = data.session_id;
+      showToast(`✅ 会话已创建（ID: ${_importSessionId}）`, 'success');
+      _goImportStep(2);
+      _loadExportGuide(system);
+    } catch (e) {
+      showToast('创建失败：' + e.message, 'error');
+    }
+  }
+
+  async function _loadExportGuide(system) {
+    const el = document.getElementById('import-guide');
+    try {
+      const res  = await fetch(`${API}/api/imports/export-guide/${encodeURIComponent(system)}`);
+      if (!res.ok) { el.style.display = 'none'; return; }
+      const data = await res.json();
+      if (!data) { el.style.display = 'none'; return; }
+      const steps = (data.steps || []).map((s,i) => `<div style="margin-bottom:3px">${i+1}. ${escHtml(s)}</div>`).join('');
+      const cols  = data.typical_columns?.length
+        ? `<div style="margin-top:8px;font-size:12px;color:#0369a1">常见列名：${data.typical_columns.map(c=>`<code style="background:#e0f2fe;padding:1px 5px;border-radius:3px;font-size:11px">${escHtml(c)}</code>`).join(' ')}</div>` : '';
+      el.innerHTML = `<strong style="display:block;margin-bottom:6px">📋 如何从「${escHtml(system)}」导出数据：</strong>${steps}${cols}`;
+      el.style.display = '';
+    } catch(_) { el.style.display = 'none'; }
+  }
+
+  async function uploadImportFile(input) {
+    const file = input.files[0];
+    if (!file || !_importSessionId) return;
+    input.value = '';
+    const resultEl   = document.getElementById('import-upload-result');
+    const mappingBtn = document.getElementById('run-mapping-btn');
+    resultEl.style.display = 'none';
+    mappingBtn.style.display = 'none';
+    const fd = new FormData();
+    fd.append('file', file);
+    try {
+      showToast('上传并解析中…', 'success');
+      const res  = await fetch(`${API}/api/imports/${_importSessionId}/upload-raw-data`, { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) { showToast(data.detail || '上传失败', 'error'); return; }
+      const mapping    = data.header_mapping || {};
+      const mappingHtml = Object.entries(mapping).map(([k,v]) =>
+        `<div style="display:flex;gap:8px;font-size:12px;padding:2px 0"><span style="color:var(--text-muted);min-width:90px">${escHtml(k)}</span><span style="color:var(--text-muted)">→</span><span style="font-family:monospace;color:var(--primary)">${escHtml(v)}</span></div>`
+      ).join('');
+      const warns = (data.warnings||[]).map(w => `<div style="font-size:12px;color:#92400e;margin-top:4px">⚠️ ${escHtml(w)}</div>`).join('');
+      resultEl.innerHTML = `
+        <div style="background:#f0fff4;border:1px solid #9ae6b4;border-radius:6px;padding:12px">
+          <div style="font-size:13px;font-weight:600;margin-bottom:8px">✅ 文件解析成功</div>
+          <div style="font-size:13px;margin-bottom:8px">识别到 <strong>${data.rows_loaded}</strong> 行数据，<strong>${data.columns_found}</strong> 列</div>
+          ${mappingHtml ? `<div style="margin-top:8px"><div style="font-size:12px;font-weight:600;color:var(--text-muted);margin-bottom:4px">AI 表头映射：</div>${mappingHtml}</div>` : ''}
+          ${warns}
+        </div>`;
+      resultEl.style.display = '';
+      mappingBtn.style.display = '';
+    } catch (e) {
+      showToast('上传失败：' + e.message, 'error');
+    }
+  }
+
+  async function runSubjectMapping() {
+    const btn = document.getElementById('run-mapping-btn');
+    btn.disabled = true; btn.textContent = 'AI 匹配中…';
+    try {
+      const res  = await fetch(`${API}/api/imports/${_importSessionId}/map-subjects`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) { showToast(data.detail || '匹配失败', 'error'); return; }
+      _importPendingCount = data.pending_review || 0;
+      showToast(`✅ 自动确认 ${data.confirmed} 条，待复核 ${_importPendingCount} 条`, 'success');
+      _goImportStep(3);
+      document.getElementById('import-pending-count').textContent =
+        _importPendingCount > 0 ? `（${_importPendingCount} 条待确认）` : '';
+      if (_importPendingCount > 0) {
+        _loadAbnormalSubjects();
+      } else {
+        document.getElementById('import-abnormal-list').innerHTML =
+          '<p style="color:var(--success);font-size:13px">✅ 所有科目已自动确认，无需人工复核</p>';
+        document.getElementById('execute-import-btn').style.display = '';
+      }
+    } catch (e) {
+      showToast('匹配失败：' + e.message, 'error');
+    } finally {
+      btn.disabled = false; btn.textContent = '运行 AI 科目匹配 →';
+    }
+  }
+
+  async function _loadAbnormalSubjects() {
+    const el = document.getElementById('import-abnormal-list');
+    el.innerHTML = '<div class="spinner" style="margin:12px auto"></div>';
+    try {
+      const res  = await fetch(`${API}/api/imports/${_importSessionId}/abnormal-subjects`);
+      const data = await res.json();
+      if (!res.ok) { el.innerHTML = `<p style="color:var(--error)">${escHtml(data.detail||'加载失败')}</p>`; return; }
+      if (!data.length) {
+        el.innerHTML = '<p style="color:var(--success);font-size:13px">✅ 所有待复核科目已处理</p>';
+        document.getElementById('execute-import-btn').style.display = '';
+        return;
+      }
+      el.innerHTML = `
+        <div class="table-wrap">
+          <table style="width:100%;border-collapse:collapse">
+            <thead>
+              <tr>
+                <th style="padding:8px 10px;background:var(--bg);font-size:12px;font-weight:600;border:1px solid var(--border);width:110px">原始代码</th>
+                <th style="padding:8px 10px;background:var(--bg);font-size:12px;font-weight:600;border:1px solid var(--border)">原始名称</th>
+                <th style="padding:8px 10px;background:var(--bg);font-size:12px;font-weight:600;border:1px solid var(--border)">AI 建议（点击确认）</th>
+                <th style="padding:8px 10px;background:var(--bg);font-size:12px;font-weight:600;border:1px solid var(--border);width:70px">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${data.map(row => `
+              <tr id="import-row-${row.staging_id}" style="transition:background 0.2s">
+                <td style="padding:8px 10px;border:1px solid var(--border);font-family:monospace;font-size:13px">${escHtml(row.raw_code||'')}</td>
+                <td style="padding:8px 10px;border:1px solid var(--border);font-size:13px">${escHtml(row.raw_name||'')}</td>
+                <td style="padding:8px 10px;border:1px solid var(--border)">
+                  <div style="display:flex;flex-wrap:wrap;gap:4px">
+                    ${(row.ai_suggestions||[]).map(s => {
+                      const code = s.subject_code || s;
+                      const name = s.subject_name ? ' · ' + s.subject_name : '';
+                      return `<button onclick="confirmImportSubject(${row.staging_id},'${escHtml(code)}')" style="font-size:11px;padding:3px 8px;border:1px solid #93c5fd;border-radius:4px;background:#eff6ff;color:#1d4ed8;cursor:pointer">${escHtml(code)}${escHtml(name)}</button>`;
+                    }).join('')}
+                    ${!(row.ai_suggestions||[]).length ? '<span style="color:var(--text-muted);font-size:12px">无建议</span>' : ''}
+                  </div>
+                </td>
+                <td style="padding:8px 10px;border:1px solid var(--border)">
+                  <button onclick="skipImportSubject(${row.staging_id})" class="btn btn-outline" style="padding:3px 10px;font-size:12px">跳过</button>
+                </td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>`;
+    } catch (e) {
+      el.innerHTML = `<p style="color:var(--error)">${e.message}</p>`;
+    }
+  }
+
+  async function confirmImportSubject(stagingId, subjectCode) {
+    try {
+      const res  = await fetch(`${API}/api/imports/${_importSessionId}/confirm-subject/${stagingId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ subject_code: subjectCode }),
+      });
+      const data = await res.json();
+      if (!res.ok) { showToast(data.detail || '确认失败', 'error'); return; }
+      const row = document.getElementById(`import-row-${stagingId}`);
+      if (row) { row.style.background = '#f0fff4'; row.style.opacity = '0.7'; }
+      _importPendingCount--;
+      document.getElementById('import-pending-count').textContent =
+        _importPendingCount > 0 ? `（${_importPendingCount} 条待确认）` : '（已全部处理）';
+      if (_importPendingCount <= 0) {
+        document.getElementById('execute-import-btn').style.display = '';
+        showToast('✅ 所有科目已确认，可以执行导入', 'success');
+      }
+    } catch (e) { showToast('确认失败：' + e.message, 'error'); }
+  }
+
+  async function skipImportSubject(stagingId) {
+    try {
+      const res  = await fetch(`${API}/api/imports/${_importSessionId}/skip-subject/${stagingId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: '用户手动跳过' }),
+      });
+      const data = await res.json();
+      if (!res.ok) { showToast(data.detail || '操作失败', 'error'); return; }
+      const row = document.getElementById(`import-row-${stagingId}`);
+      if (row) { row.style.background = '#fafafa'; row.style.opacity = '0.4'; }
+      _importPendingCount--;
+      document.getElementById('import-pending-count').textContent =
+        _importPendingCount > 0 ? `（${_importPendingCount} 条待确认）` : '（已全部处理）';
+      if (_importPendingCount <= 0) {
+        document.getElementById('execute-import-btn').style.display = '';
+      }
+    } catch (e) { showToast('操作失败：' + e.message, 'error'); }
+  }
+
+  async function executeImport() {
+    if (!confirm('确认执行导入？这将把所有已确认的科目余额写入账套，并触发完成建账（不可撤销）。')) return;
+    const btn = document.getElementById('execute-import-btn');
+    btn.disabled = true; btn.textContent = '导入中…';
+    try {
+      const res  = await fetch(`${API}/api/imports/${_importSessionId}/execute-import`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) { showToast(data.detail || '导入失败', 'error'); return; }
+      _goImportStep(4);
+      const spongeHtml = data.sponge_amount
+        ? `<div style="margin-top:10px;font-size:13px;color:#92400e;background:#fffbeb;border:1px solid #fcd34d;border-radius:6px;padding:10px 14px">⚠️ 试算不平衡，AI 已用「1901 待处理财产损溢」配平差额 ¥${fmt(Math.abs(data.sponge_amount))}</div>` : '';
+      const errHtml  = (data.errors||[]).length
+        ? `<div style="margin-top:10px"><div style="font-size:12px;font-weight:600;color:var(--error);margin-bottom:4px">错误行：</div>${data.errors.map(e=>`<div style="font-size:12px;color:var(--error)">第 ${e.row} 行：${escHtml(e.reason)}</div>`).join('')}</div>` : '';
+      document.getElementById('import-result-body').innerHTML = `
+        <div style="text-align:center;font-size:28px;margin-bottom:12px">🎉</div>
+        <div style="text-align:center;font-size:16px;font-weight:700;color:var(--success);margin-bottom:20px">旧账导入完成！账套已激活</div>
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px">
+          <div style="text-align:center;padding:14px;background:var(--bg);border-radius:8px">
+            <div style="font-size:24px;font-weight:700;color:var(--primary)">${data.imported||0}</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-top:4px">导入成功</div>
+          </div>
+          <div style="text-align:center;padding:14px;background:var(--bg);border-radius:8px">
+            <div style="font-size:24px;font-weight:700;color:var(--text-muted)">${data.skipped||0}</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-top:4px">已跳过</div>
+          </div>
+          <div style="text-align:center;padding:14px;background:var(--bg);border-radius:8px">
+            <div style="font-size:24px;font-weight:700;color:${data.was_balanced?'var(--success)':'var(--warning)'}">${data.was_balanced?'✅':'⚠️'}</div>
+            <div style="font-size:12px;color:var(--text-muted);margin-top:4px">${data.was_balanced?'试算平衡':'AI已配平'}</div>
+          </div>
+        </div>
+        ${spongeHtml}${errHtml}`;
+      showToast('✅ 导入完成，账套已激活', 'success');
+    } catch (e) {
+      showToast('导入失败：' + e.message, 'error');
+    } finally {
+      btn.disabled = false; btn.textContent = '执行导入 →';
     }
   }
 
