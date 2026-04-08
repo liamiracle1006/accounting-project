@@ -3270,7 +3270,9 @@
         <button class="btn btn-primary" onclick="wbReview('post')">✅ 审核通过（入账）</button>
         <button class="btn btn-outline" style="border-color:#dc2626;color:#dc2626" onclick="wbReview('reject')">❌ 驳回</button>`;
     } else if (v.review_status === 'DRAFT') {
-      actEl.innerHTML = `<button class="btn btn-primary" onclick="wbSubmit()">提交审核</button>`;
+      actEl.innerHTML = `
+        <button class="btn btn-primary" onclick="wbSubmit()">提交审核</button>
+        <button class="btn btn-outline" onclick="document.getElementById('wbModal').style.display='none';openVoucherEditModal(${v.voucher_id})">编辑</button>`;
     } else {
       actEl.innerHTML = '';
     }
