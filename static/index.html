@@ -529,6 +529,8 @@
     <a href="#" data-page="auditlog" onclick="navTo('auditlog',this);return false;" class="finance-only">审计日志</a>
     <a href="#" data-page="advisor"  onclick="navTo('advisor',this);return false;">AI 顾问</a>
     <a href="#" data-page="ragmgmt" onclick="navTo('ragmgmt',this);return false;" class="finance-only">知识库</a>
+    <a href="#" data-page="ai-voucher" onclick="navTo('ai-voucher',this);return false;" class="finance-only">AI 记账</a>
+    <a href="#" data-page="batch"     onclick="navTo('batch',this);return false;"     class="finance-only">批量导入</a>
     <a href="#" data-page="setup"    onclick="navTo('setup',this);return false;"    class="finance-only">建账向导</a>
     <a href="#" data-page="settings" onclick="navTo('settings',this);return false;">企业设置</a>
     <a href="/docs" target="_blank">API 文档</a>
@@ -684,6 +686,9 @@
         <span>🗂️</span>
         <span class="card-title">财务工作台 — 凭证审核</span>
         <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+          <button class="btn btn-primary" style="font-size:12px;padding:5px 12px" onclick="openVoucherCreateModal()">+ 手工录入</button>
+          <button class="btn btn-outline" style="font-size:12px;padding:5px 12px" onclick="openTrashModal()">🗑 回收站</button>
+          <button class="btn btn-outline" style="font-size:12px;padding:5px 12px" onclick="openReorganizeDialog()">🔢 断号整理</button>
           <select id="wb-status-filter" class="field-input" style="width:150px" onchange="loadWorkbench()">
             <option value="PENDING_REVIEW">待审核</option>
             <option value="POSTED">已入账</option>
@@ -801,6 +806,7 @@
               <option value="10">10月</option><option value="11">11月</option><option value="12">12月</option>
             </select>
           </div>
+          <button class="btn btn-outline" id="btn-transfer-pnl" onclick="transferPnL()" style="border-color:#7c3aed;color:#7c3aed">结转本期损益</button>
           <button class="btn btn-primary" id="btn-close-period" onclick="closePeriod()">执行月末结账</button>
         </div>
         <div id="close-result" style="display:none;margin-top:12px;padding:12px 14px;border-radius:6px;font-size:13px"></div>
@@ -1629,6 +1635,312 @@
   </div>
 </div>
 
+<!-- ══ AI 记账页 (Sprint 3.1 + 3.4) ══ -->
+<div id="page-ai-voucher" class="page">
+  <div class="container" style="max-width:900px">
+    <div class="card" style="margin-bottom:16px">
+      <div class="tabs">
+        <div class="tab active" id="ai-tab-generate" onclick="switchAiTab('generate',this)">✨ AI 生成凭证</div>
+        <div class="tab" id="ai-tab-habits" onclick="switchAiTab('habits',this)">📚 业务习惯规则</div>
+      </div>
+    </div>
+
+    <!-- Tab A: AI 生成 -->
+    <div id="ai-panel-generate">
+      <!-- 输入卡片 -->
+      <div class="card" style="margin-bottom:16px">
+        <div class="card-header"><span>🧠</span><span class="card-title">描述业务，AI 自动生成凭证</span></div>
+        <div class="card-body">
+          <div style="margin-bottom:12px">
+            <label class="field-label">业务描述 <span style="color:var(--error)">*</span></label>
+            <textarea id="ai-description" class="field-input" rows="2" style="resize:vertical" placeholder="如：阿里云服务器费用 3600元、报销星巴克咖啡 50元、收到客户货款 28000元…" maxlength="500"></textarea>
+          </div>
+          <div style="display:flex;gap:12px;flex-wrap:wrap">
+            <div>
+              <label class="field-label">凭证日期 <span style="color:var(--error)">*</span></label>
+              <input id="ai-voucher-date" type="date" class="field-input" style="width:160px">
+            </div>
+            <div>
+              <label class="field-label">凭证字</label>
+              <select id="ai-voucher-word" class="field-input" style="width:100px">
+                <option value="记">记</option><option value="收">收</option>
+                <option value="付">付</option><option value="转">转</option>
+              </select>
+            </div>
+            <div style="display:flex;align-items:flex-end">
+              <button id="btn-ai-generate" class="btn btn-primary" onclick="generateVoucher()">✨ AI 生成凭证</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 双轨推荐区（生成后显示） -->
+      <div id="ai-recommendations" style="display:none;margin-bottom:16px">
+        <div style="font-size:13px;font-weight:600;color:var(--text-muted);margin-bottom:10px">AI 推荐方案，请选择一种：</div>
+        <div id="ai-track-cards" style="display:flex;gap:12px;flex-wrap:wrap"></div>
+      </div>
+
+      <!-- 草稿预览区（选轨后显示） -->
+      <div id="ai-draft-preview" style="display:none">
+        <div class="card">
+          <div class="card-header"><span>📋</span><span class="card-title">凭证草稿预览（可编辑）</span></div>
+          <div class="card-body">
+            <div style="display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap">
+              <div style="flex:1;min-width:200px">
+                <label class="field-label">摘要</label>
+                <input id="draft-memo" type="text" class="field-input" maxlength="500">
+              </div>
+            </div>
+            <div id="ai-cb-warning" style="display:none;background:#fffbeb;border:1px solid #f59e0b;border-radius:6px;padding:10px 14px;font-size:12px;color:#92400e;margin-bottom:12px"></div>
+            <table style="width:100%;border-collapse:collapse;font-size:13px" id="draft-lines-table">
+              <thead><tr style="background:var(--bg)">
+                <th style="padding:8px 10px;text-align:left;font-weight:600">科目编码</th>
+                <th style="padding:8px 10px;text-align:left;font-weight:600">科目名称</th>
+                <th style="padding:8px 10px;text-align:center;font-weight:600">借/贷</th>
+                <th style="padding:8px 10px;text-align:right;font-weight:600">金额</th>
+                <th style="padding:8px 10px;text-align:left;font-weight:600">备注</th>
+                <th style="padding:8px 10px;width:36px"></th>
+              </tr></thead>
+              <tbody id="draft-lines-body"></tbody>
+            </table>
+            <button class="link-btn" style="margin-top:8px;font-size:12px" onclick="addDraftLine()">+ 添加行</button>
+            <div style="display:flex;gap:16px;margin-top:12px;font-size:13px;font-weight:600" id="draft-balance-summary">
+              <span id="draft-debit-total" style="color:#2563eb">借方: ¥0.00</span>
+              <span id="draft-credit-total" style="color:#059669">贷方: ¥0.00</span>
+              <span id="draft-balance-status"></span>
+            </div>
+            <div style="margin-top:16px;border-top:1px solid var(--border);padding-top:14px;display:flex;gap:8px">
+              <button id="btn-confirm-voucher" class="btn btn-primary" onclick="confirmVoucher()">确认入账</button>
+              <button class="btn btn-outline" onclick="document.getElementById('ai-draft-preview').style.display='none'">取消</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab B: 业务习惯规则 -->
+    <div id="ai-panel-habits" style="display:none">
+      <div class="card">
+        <div class="card-header">
+          <span>📚</span><span class="card-title">业务习惯规则</span>
+          <button class="btn btn-primary" style="margin-left:auto;font-size:12px;padding:5px 12px" onclick="openHabitModal()">+ 新增规则</button>
+        </div>
+        <div id="habit-rules-list" class="card-body"><div class="empty-state"><div class="spinner"></div></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ 批量导入页 (Sprint 3.5) ══ -->
+<div id="page-batch" class="page">
+  <div class="container" style="max-width:1000px">
+
+    <!-- 步骤1: 上传文件 -->
+    <div class="card" style="margin-bottom:16px" id="batch-step1">
+      <div class="card-header"><span>📎</span><span class="card-title">① 上传票据文件</span></div>
+      <div class="card-body">
+        <p style="font-size:13px;color:var(--text-muted);margin-bottom:14px">支持格式：Excel (.xlsx/.xls/.csv) · 图片 (.jpg/.png/.webp) · PDF（可一次选多个文件，Excel 与图片可混合上传）</p>
+        <div id="batch-drop-zone" style="border:2px dashed var(--border);border-radius:8px;padding:32px;text-align:center;cursor:pointer;transition:border-color .2s"
+          onclick="document.getElementById('batch-file-input').click()"
+          ondragover="event.preventDefault();this.style.borderColor='var(--primary)'"
+          ondragleave="this.style.borderColor='var(--border)'"
+          ondrop="event.preventDefault();this.style.borderColor='var(--border)';handleBatchDrop(event)">
+          <div style="font-size:32px;margin-bottom:8px">📂</div>
+          <div style="font-weight:600;margin-bottom:4px">点击选择文件 或 拖放到此处</div>
+          <div style="font-size:12px;color:var(--text-muted)">可一次选多个文件</div>
+          <input type="file" id="batch-file-input" multiple accept=".xlsx,.xls,.csv,.jpg,.jpeg,.png,.webp,.pdf" style="display:none" onchange="onBatchFileSelect(this)">
+        </div>
+        <div id="batch-file-list" style="margin-top:12px"></div>
+        <div style="margin-top:14px">
+          <button id="btn-parse-preview" class="btn btn-primary" onclick="parseBatchPreview()" disabled>解析预览</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 步骤2: 核对网格（解析后显示） -->
+    <div class="card" style="display:none;margin-bottom:16px" id="batch-step2">
+      <div class="card-header">
+        <span>✅</span><span class="card-title">② 核对票据数据</span>
+        <span id="batch-item-count" style="margin-left:8px;font-size:12px;color:var(--text-muted)"></span>
+        <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
+          <label class="field-label" style="margin:0">凭证字</label>
+          <select id="batch-voucher-word" class="field-input" style="width:80px">
+            <option value="记">记</option><option value="收">收</option>
+            <option value="付">付</option><option value="转">转</option>
+          </select>
+          <button class="btn btn-outline" style="font-size:12px;padding:5px 12px" onclick="resetBatchPage()">重新上传</button>
+          <button id="btn-submit-batch" class="btn btn-primary" onclick="submitBatch()">提交批量入账 →</button>
+        </div>
+      </div>
+      <div style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;font-size:13px" id="batch-grid-table">
+          <thead><tr style="background:var(--bg)">
+            <th style="padding:8px 10px;text-align:center;width:40px">#</th>
+            <th style="padding:8px 10px;text-align:left">日期</th>
+            <th style="padding:8px 10px;text-align:right">金额</th>
+            <th style="padding:8px 10px;text-align:left">对方单位</th>
+            <th style="padding:8px 10px;text-align:left">摘要</th>
+            <th style="padding:8px 10px;width:40px"></th>
+          </tr></thead>
+          <tbody id="batch-grid-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- 步骤3: 进度条（提交后显示） -->
+    <div class="card" style="display:none;margin-bottom:16px" id="batch-step3">
+      <div class="card-header"><span>⚙️</span><span class="card-title">③ 批量入账处理中</span></div>
+      <div class="card-body">
+        <div style="margin-bottom:12px">
+          <span id="batch-task-info" style="font-size:13px;color:var(--text-muted)"></span>
+        </div>
+        <div style="background:var(--bg);border-radius:8px;height:14px;overflow:hidden;margin-bottom:10px">
+          <div id="batch-progress-bar" style="height:100%;background:var(--primary);width:0%;transition:width .4s"></div>
+        </div>
+        <div style="display:flex;gap:20px;font-size:13px">
+          <span id="batch-success-count" style="color:#16a34a">✅ 成功: 0</span>
+          <span id="batch-review-count" style="color:#d97706">⚠️ 待复核: 0</span>
+          <span id="batch-error-count" style="color:#dc2626">❌ 失败: 0</span>
+          <span id="batch-status-text" style="color:var(--text-muted);margin-left:auto"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 步骤4: 三色报告（完成后显示） -->
+    <div id="batch-step4" style="display:none"></div>
+
+  </div>
+</div>
+
+<!-- ══ 手工录入/编辑凭证 Modal (Sprint 3.2) ══ -->
+<div id="voucherFormModal" onclick="if(event.target===this)closeVoucherFormModal()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:10px;width:680px;max-height:85vh;overflow-y:auto;box-shadow:0 20px 40px rgba(0,0,0,0.2)">
+    <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px">
+      <span id="vf-modal-title" style="font-weight:700;font-size:15px">手工录入凭证</span>
+      <button onclick="closeVoucherFormModal()" style="margin-left:auto;background:none;border:none;font-size:18px;cursor:pointer;color:var(--text-muted)">×</button>
+    </div>
+    <div style="padding:20px">
+      <div style="display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap">
+        <div>
+          <label class="field-label">凭证日期 <span style="color:var(--error)">*</span></label>
+          <input id="vf-date" type="date" class="field-input" style="width:160px">
+        </div>
+        <div>
+          <label class="field-label">凭证字</label>
+          <select id="vf-word" class="field-input" style="width:90px">
+            <option value="记">记</option><option value="收">收</option>
+            <option value="付">付</option><option value="转">转</option>
+          </select>
+        </div>
+        <div style="flex:1;min-width:180px">
+          <label class="field-label">摘要</label>
+          <input id="vf-memo" type="text" class="field-input" maxlength="500" placeholder="凭证摘要…">
+        </div>
+      </div>
+      <!-- 分录行 -->
+      <div style="font-size:13px;font-weight:600;margin-bottom:8px">分录行</div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr style="background:var(--bg)">
+          <th style="padding:7px 8px;text-align:left">科目编码</th>
+          <th style="padding:7px 8px;text-align:center">借/贷</th>
+          <th style="padding:7px 8px;text-align:right">金额</th>
+          <th style="padding:7px 8px;text-align:left">备注</th>
+          <th style="padding:7px 8px;width:32px"></th>
+        </tr></thead>
+        <tbody id="vf-lines-body"></tbody>
+      </table>
+      <button class="link-btn" style="margin-top:8px;font-size:12px" onclick="addVoucherLine()">+ 添加行</button>
+      <div style="display:flex;gap:16px;margin-top:10px;font-size:13px;font-weight:600;padding-top:10px;border-top:1px solid var(--border)">
+        <span id="vf-debit-total" style="color:#2563eb">借方: ¥0.00</span>
+        <span id="vf-credit-total" style="color:#059669">贷方: ¥0.00</span>
+        <span id="vf-balance-status"></span>
+      </div>
+    </div>
+    <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-outline" onclick="closeVoucherFormModal()">取消</button>
+      <button id="btn-vf-submit" class="btn btn-primary" onclick="submitVoucherForm()">提交凭证</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ 回收站 Modal (Sprint 3.2) ══ -->
+<div id="trashModal" onclick="if(event.target===this)closeTrashModal()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:10px;width:680px;max-height:80vh;overflow-y:auto;box-shadow:0 20px 40px rgba(0,0,0,0.2)">
+    <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center">
+      <span style="font-weight:700;font-size:15px">🗑 凭证回收站</span>
+      <button onclick="closeTrashModal()" style="margin-left:auto;background:none;border:none;font-size:18px;cursor:pointer;color:var(--text-muted)">×</button>
+    </div>
+    <div id="trash-modal-body" style="padding:20px"><div class="empty-state"><div class="spinner"></div></div></div>
+  </div>
+</div>
+
+<!-- ══ 断号整理 Dialog (Sprint 3.2) ══ -->
+<div id="reorganizeDialog" onclick="if(event.target===this)document.getElementById('reorganizeDialog').style.display='none'" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:10px;width:380px;box-shadow:0 20px 40px rgba(0,0,0,0.2)">
+    <div style="padding:16px 20px;border-bottom:1px solid var(--border)">
+      <span style="font-weight:700;font-size:15px">🔢 断号整理</span>
+    </div>
+    <div style="padding:20px">
+      <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px">对指定期间内所有凭证按日期重新连续编号（删除中间凭证后产生的断号将被修复）。</p>
+      <div style="display:flex;gap:10px">
+        <div>
+          <label class="field-label">年份</label>
+          <input id="reorg-year" type="number" class="field-input" style="width:90px" min="2020" max="2035">
+        </div>
+        <div>
+          <label class="field-label">月份</label>
+          <select id="reorg-month" class="field-input" style="width:80px">
+            <option value="1">1月</option><option value="2">2月</option><option value="3">3月</option>
+            <option value="4">4月</option><option value="5">5月</option><option value="6">6月</option>
+            <option value="7">7月</option><option value="8">8月</option><option value="9">9月</option>
+            <option value="10">10月</option><option value="11">11月</option><option value="12">12月</option>
+          </select>
+        </div>
+      </div>
+    </div>
+    <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-outline" onclick="document.getElementById('reorganizeDialog').style.display='none'">取消</button>
+      <button class="btn btn-primary" onclick="submitReorganize()">确认整理</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ 业务习惯规则 Modal (Sprint 3.4) ══ -->
+<div id="habitModal" onclick="if(event.target===this)closeHabitModal()" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:10px;width:560px;max-height:80vh;overflow-y:auto;box-shadow:0 20px 40px rgba(0,0,0,0.2)">
+    <div style="padding:16px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center">
+      <span id="habit-modal-title" style="font-weight:700;font-size:15px">新增业务习惯规则</span>
+      <button onclick="closeHabitModal()" style="margin-left:auto;background:none;border:none;font-size:18px;cursor:pointer;color:var(--text-muted)">×</button>
+    </div>
+    <div style="padding:20px">
+      <div style="margin-bottom:12px">
+        <label class="field-label">规则名称 <span style="color:var(--error)">*</span></label>
+        <input id="habit-name" type="text" class="field-input" maxlength="100" placeholder="如：阿里云服务器年费摊销">
+      </div>
+      <div style="margin-bottom:12px">
+        <label class="field-label">描述（可选）</label>
+        <input id="habit-desc" type="text" class="field-input" maxlength="500" placeholder="规则用途说明…">
+      </div>
+      <div style="margin-bottom:12px">
+        <label class="field-label">触发关键词 <span style="color:var(--error)">*</span></label>
+        <input id="habit-keywords" type="text" class="field-input" placeholder="多个关键词用逗号分隔，如：阿里云,服务器,云服务">
+      </div>
+      <div style="margin-bottom:12px">
+        <label class="field-label">DAG 规则 JSON <span style="color:var(--error)">*</span></label>
+        <textarea id="habit-json" class="field-input" rows="5" style="font-family:monospace;font-size:12px" placeholder='{"nodes":[...],"edges":[]}'></textarea>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <input type="checkbox" id="habit-active" checked style="width:16px;height:16px">
+        <label for="habit-active" style="font-size:13px">启用此规则</label>
+      </div>
+    </div>
+    <div style="padding:12px 20px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-outline" onclick="closeHabitModal()">取消</button>
+      <button class="btn btn-primary" onclick="saveHabitRule()">保存</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── 凭证详情 Modal ── -->
 <div class="modal-overlay" id="voucherModal" onclick="closeModalOnOverlay(event)">
   <div class="modal">
@@ -1753,9 +2065,11 @@
     if (page === 'expenses')  loadExpenses();
     if (page === 'settings')  loadSettings();
     if (page === 'invoices')  loadInvoices();
-    if (page === 'auditlog')  loadAuditLogs();
-    if (page === 'ragmgmt')   loadRagStats();
-    if (page === 'setup')     loadSetupPage();
+    if (page === 'auditlog')   loadAuditLogs();
+    if (page === 'ragmgmt')    loadRagStats();
+    if (page === 'setup')      loadSetupPage();
+    if (page === 'ai-voucher') loadAiVoucherPage();
+    if (page === 'batch')      loadBatchPage();
   }
 
   // ── 仪表盘 ──
@@ -2756,30 +3070,38 @@
     const listEl = document.getElementById('period-list');
     if (!listEl) return;
     try {
-      const res  = await fetch(`${API}/api/reports/periods`);
+      const res  = await fetch(`${API}/api/period`);
       const data = await res.json();
       if (!res.ok) { listEl.innerHTML = `<p style="color:var(--error)">${data.detail||'加载失败'}</p>`; return; }
       if (!data.length) {
         listEl.innerHTML = '<p style="color:var(--text-muted);font-size:13px">暂无期间记录，执行第一次结账后自动创建。</p>';
         return;
       }
+      // 找出最新的 CLOSED 期间（用于显示反结账按钮）
+      const latestClosedIdx = data.findIndex(p => p.status === 'CLOSED');
       listEl.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:13px">
         <thead><tr style="background:var(--bg)">
           <th style="padding:9px 12px;text-align:left">期间</th>
           <th style="padding:9px 12px;text-align:center">状态</th>
           <th style="padding:9px 12px;text-align:left">结账时间</th>
           <th style="padding:9px 12px;text-align:left">结账凭证</th>
+          <th style="padding:9px 12px"></th>
         </tr></thead><tbody>
-        ${data.map(p => {
-          const isOpen   = p.status === 'OPEN';
+        ${data.map((p, i) => {
+          const isOpen = p.status === 'OPEN';
           const statusHtml = isOpen
-            ? '<span style="font-size:11px;font-weight:600;color:#16a34a;background:#f0fff4;padding:2px 8px;border-radius:4px">开放</span>'
-            : '<span style="font-size:11px;font-weight:600;color:#6b7280;background:#f3f4f6;padding:2px 8px;border-radius:4px">已结账</span>';
+            ? '<span style="font-size:11px;font-weight:600;color:#16a34a;background:#f0fff4;padding:2px 8px;border-radius:4px">● 开放中</span>'
+            : '<span style="font-size:11px;font-weight:600;color:#6b7280;background:#f3f4f6;padding:2px 8px;border-radius:4px">● 已结账</span>';
+          const actionsHtml = (!isOpen && i === latestClosedIdx)
+            ? `<button class="link-btn" style="color:#dc2626" onclick="unclosePeriod(${p.year},${p.month})">反结账</button>`
+            : '';
+          const label = `${p.year}年${p.month}月`;
           return `<tr style="border-top:1px solid var(--border)">
-            <td style="padding:9px 12px;font-weight:600">${p.label}</td>
+            <td style="padding:9px 12px;font-weight:600">${label}</td>
             <td style="padding:9px 12px;text-align:center">${statusHtml}</td>
-            <td style="padding:9px 12px;color:var(--text-muted);font-size:12px">${p.closed_at ? p.closed_at.slice(0,16) : '—'}</td>
+            <td style="padding:9px 12px;color:var(--text-muted);font-size:12px">${p.closed_at ? p.closed_at.slice(0,16).replace('T',' ') : '—'}</td>
             <td style="padding:9px 12px;color:var(--text-muted);font-size:12px">${p.closing_voucher_id ? `#${p.closing_voucher_id}` : '—'}</td>
+            <td style="padding:9px 12px;text-align:right">${actionsHtml}</td>
           </tr>`;
         }).join('')}
         </tbody></table>`;
@@ -2797,7 +3119,7 @@
     btn.disabled = true; btn.textContent = '结账中…';
     res2.style.display = 'none';
     try {
-      const res = await fetch(`${API}/api/reports/periods/${year}/${month}/close`, { method: 'POST' });
+      const res = await fetch(`${API}/api/period/${year}/${month}/close`, { method: 'POST' });
       const d   = await res.json();
       res2.style.display = 'block';
       if (!res.ok) {
@@ -2805,13 +3127,49 @@
         res2.textContent = '❌ ' + (d.detail || '结账失败');
       } else {
         res2.style.cssText = 'display:block;padding:12px 14px;border-radius:6px;font-size:13px;background:#f0fff4;color:#276749;border:1px solid #9ae6b4';
-        res2.innerHTML = `✅ ${d.message}<br><span style="font-size:12px;opacity:.8">结账凭证：#${d.voucher_id} &nbsp;·&nbsp; 净利润：¥${fmt(d.net_profit)}</span>`;
+        res2.innerHTML = `✅ ${d.message}<br><span style="font-size:12px;opacity:.8">下期已自动创建：${d.next_period_year}-${String(d.next_period_month).padStart(2,'0')} &nbsp;·&nbsp; 整理凭证：${d.reorganized_count} 张</span>`;
         loadPeriods();
       }
     } catch (e) {
       res2.style.cssText = 'display:block;padding:12px 14px;border-radius:6px;font-size:13px;background:#fff5f5;color:#c53030;border:1px solid #feb2b2';
       res2.textContent = '❌ 请求失败：' + e.message;
     } finally { btn.disabled = false; btn.textContent = '执行月末结账'; }
+  }
+
+  async function transferPnL() {
+    const year  = parseInt(document.getElementById('close-year').value);
+    const month = parseInt(document.getElementById('close-month').value);
+    const btn   = document.getElementById('btn-transfer-pnl');
+    const res2  = document.getElementById('close-result');
+    if (!year || !month) { showToast('请填写年份和月份', 'error'); return; }
+    btn.disabled = true; btn.textContent = '结转中…';
+    res2.style.display = 'none';
+    try {
+      const res = await fetch(`${API}/api/period/${year}/${month}/transfer-pnl`, { method: 'POST' });
+      const d   = await res.json();
+      res2.style.display = 'block';
+      if (!res.ok) {
+        res2.style.cssText = 'display:block;padding:12px 14px;border-radius:6px;font-size:13px;background:#fff5f5;color:#c53030;border:1px solid #feb2b2';
+        res2.textContent = '❌ ' + (d.detail || '结转失败');
+      } else {
+        res2.style.cssText = 'display:block;padding:12px 14px;border-radius:6px;font-size:13px;background:#faf5ff;color:#6d28d9;border:1px solid #ddd6fe';
+        res2.innerHTML = `✅ 损益结转完成：本期净利润 <strong>¥${fmt(d.net_profit)}</strong><br><span style="font-size:12px;opacity:.8">已生成结转凭证 #${d.voucher_id}</span>`;
+      }
+    } catch (e) {
+      res2.style.cssText = 'display:block;padding:12px 14px;border-radius:6px;font-size:13px;background:#fff5f5;color:#c53030;border:1px solid #feb2b2';
+      res2.textContent = '❌ 请求失败：' + e.message;
+    } finally { btn.disabled = false; btn.textContent = '结转本期损益'; }
+  }
+
+  async function unclosePeriod(year, month) {
+    if (!confirm(`确定要反结账 ${year}年${month}月 吗？\n此操作将删除结转凭证并重新开放该期间。`)) return;
+    try {
+      const res = await fetch(`${API}/api/period/${year}/${month}/unclose`, { method: 'POST' });
+      const d   = await res.json();
+      if (!res.ok) { showToast(d.detail || '反结账失败', 'error'); return; }
+      showToast(d.message || '反结账成功', 'success');
+      loadPeriods();
+    } catch (e) { showToast('请求失败：' + e.message, 'error'); }
   }
 
   // ── 财务工作台 ──
@@ -4394,6 +4752,699 @@
     } finally {
       btn.disabled = false; btn.textContent = '执行导入 →';
     }
+  }
+
+  // ══════════════════════════════════════════════════════════════════
+  // Sprint 3.1 + 3.4 — AI 记账页
+  // ══════════════════════════════════════════════════════════════════
+
+  let _aiRecommendations = [];
+  let _selectedTrackIndex = null;
+  let _selectedHabitRuleId = null;
+  let _editingHabitRuleId  = null;
+
+  function loadAiVoucherPage() {
+    // 初始化日期默认值
+    const d = new Date();
+    document.getElementById('ai-voucher-date').value =
+      `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+  }
+
+  function switchAiTab(tab, el) {
+    document.querySelectorAll('#page-ai-voucher .tab').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
+    document.getElementById('ai-panel-generate').style.display = tab === 'generate' ? '' : 'none';
+    document.getElementById('ai-panel-habits').style.display   = tab === 'habits'   ? '' : 'none';
+    if (tab === 'habits') loadHabitRules();
+  }
+
+  async function generateVoucher() {
+    const desc = document.getElementById('ai-description').value.trim();
+    const dt   = document.getElementById('ai-voucher-date').value;
+    if (!desc) { showToast('请填写业务描述', 'error'); return; }
+    if (!dt)   { showToast('请选择凭证日期', 'error'); return; }
+    const btn = document.getElementById('btn-ai-generate');
+    btn.disabled = true; btn.textContent = 'AI 生成中…';
+    document.getElementById('ai-recommendations').style.display = 'none';
+    document.getElementById('ai-draft-preview').style.display   = 'none';
+    try {
+      const res  = await fetch(`${API}/api/voucher-ai/generate`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description: desc, voucher_date: dt }),
+      });
+      const data = await res.json();
+      if (!res.ok) { showToast(data.detail || '生成失败', 'error'); return; }
+      _aiRecommendations = data.recommendations || [];
+      renderDualTrack(_aiRecommendations);
+    } catch (e) { showToast('请求失败：' + e.message, 'error');
+    } finally { btn.disabled = false; btn.textContent = '✨ AI 生成凭证'; }
+  }
+
+  function renderDualTrack(items) {
+    const confColor = { HIGH: '#16a34a', MEDIUM: '#d97706', LOW: '#6b7280' };
+    const confLabel = { HIGH: '● 高置信', MEDIUM: '● 中置信', LOW: '● 低置信' };
+    const srcLabel  = { HABIT: '历史习惯推荐', AI_RULE: 'AI 智能推断' };
+    const srcIcon   = { HABIT: '📖', AI_RULE: '🤖' };
+
+    document.getElementById('ai-track-cards').innerHTML = items.map((item, i) => `
+      <div id="track-card-${i}" onclick="selectTrack(${i})" style="
+        flex:1;min-width:240px;max-width:380px;border:2px solid var(--border);border-radius:8px;
+        padding:14px 16px;cursor:pointer;transition:border-color .2s,box-shadow .2s">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <span style="font-size:18px">${srcIcon[item.source]}</span>
+          <span style="font-weight:600;font-size:13px">${srcLabel[item.source]||item.source}</span>
+          <span style="margin-left:auto;font-size:11px;font-weight:600;color:${confColor[item.confidence]}">${confLabel[item.confidence]||item.confidence}</span>
+        </div>
+        <div style="font-size:12px;color:var(--text-muted)">
+          ${item.draft ? `摘要：${escHtml(item.draft.memo||'')}` : ''}
+          ${item.habit_rule_id ? `<br>规则 ID：#${item.habit_rule_id}` : ''}
+        </div>
+        <div style="margin-top:10px;font-size:12px;color:var(--primary);font-weight:600">点击选择此方案 →</div>
+      </div>`).join('');
+
+    document.getElementById('ai-recommendations').style.display = '';
+    _selectedTrackIndex = null;
+  }
+
+  function selectTrack(idx) {
+    _selectedTrackIndex  = idx;
+    _selectedHabitRuleId = _aiRecommendations[idx].habit_rule_id || null;
+    // 高亮选中
+    document.querySelectorAll('[id^="track-card-"]').forEach((el, i) => {
+      el.style.borderColor  = i === idx ? 'var(--primary)' : 'var(--border)';
+      el.style.boxShadow    = i === idx ? '0 0 0 3px rgba(79,70,229,0.12)' : '';
+    });
+    renderDraftPreview(_aiRecommendations[idx].draft);
+    document.getElementById('ai-draft-preview').style.display = '';
+    document.getElementById('ai-draft-preview').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  function renderDraftPreview(draft) {
+    document.getElementById('draft-memo').value = draft.memo || '';
+    // 断路器警告
+    const cbWarn = document.getElementById('ai-cb-warning');
+    if (draft.circuit_breaker_triggered) {
+      cbWarn.style.display = '';
+      cbWarn.textContent   = '⚠️ 断路器已触发：' + (draft.pending_review_reason || '借贷不平，已挂入待查明科目，请人工复核。');
+    } else { cbWarn.style.display = 'none'; }
+
+    const tbody = document.getElementById('draft-lines-body');
+    tbody.innerHTML = (draft.lines || []).map(l => _draftLineHtml(l)).join('');
+    recalcDraftBalance();
+  }
+
+  function _draftLineHtml(l) {
+    return `<tr style="border-top:1px solid var(--border)">
+      <td style="padding:6px 8px">
+        <input type="text" value="${escHtml(l.subject_code||'')}" placeholder="科目编码"
+          class="field-input" style="width:90px;padding:4px 6px;font-size:12px" oninput="recalcDraftBalance()">
+      </td>
+      <td style="padding:6px 8px;color:var(--text-muted);font-size:12px">${escHtml(l.subject_name||'')}</td>
+      <td style="padding:6px 8px;text-align:center">
+        <select class="field-input" style="width:70px;padding:4px 6px;font-size:12px" onchange="recalcDraftBalance()">
+          <option value="DEBIT"  ${l.direction==='DEBIT' ?'selected':''}>借</option>
+          <option value="CREDIT" ${l.direction==='CREDIT'?'selected':''}>贷</option>
+        </select>
+      </td>
+      <td style="padding:6px 8px">
+        <input type="number" value="${l.amount||0}" step="0.01" min="0.01"
+          class="field-input" style="width:100px;padding:4px 6px;font-size:12px;text-align:right" oninput="recalcDraftBalance()">
+      </td>
+      <td style="padding:6px 8px">
+        <input type="text" value="${escHtml(l.memo||'')}" placeholder="备注"
+          class="field-input" style="width:100px;padding:4px 6px;font-size:12px">
+      </td>
+      <td style="padding:6px 8px;text-align:center">
+        <button onclick="removeDraftLine(this)" style="background:none;border:none;cursor:pointer;color:var(--error);font-size:14px">×</button>
+      </td>
+    </tr>`;
+  }
+
+  function addDraftLine() {
+    document.getElementById('draft-lines-body').insertAdjacentHTML('beforeend',
+      _draftLineHtml({ subject_code:'', direction:'DEBIT', amount:0, memo:'' }));
+    recalcDraftBalance();
+  }
+
+  function removeDraftLine(btn) {
+    const rows = document.getElementById('draft-lines-body').querySelectorAll('tr');
+    if (rows.length <= 2) { showToast('至少保留 2 行', 'error'); return; }
+    btn.closest('tr').remove();
+    recalcDraftBalance();
+  }
+
+  function recalcDraftBalance() {
+    let debit = 0, credit = 0;
+    document.getElementById('draft-lines-body').querySelectorAll('tr').forEach(row => {
+      const amt = parseFloat(row.querySelectorAll('input[type=number]')[0]?.value) || 0;
+      const dir = row.querySelector('select')?.value;
+      if (dir === 'DEBIT')  debit  += amt;
+      if (dir === 'CREDIT') credit += amt;
+    });
+    document.getElementById('draft-debit-total').textContent  = `借方: ¥${fmt(debit)}`;
+    document.getElementById('draft-credit-total').textContent = `贷方: ¥${fmt(credit)}`;
+    const balanced = Math.abs(debit - credit) < 0.005;
+    const statusEl = document.getElementById('draft-balance-status');
+    statusEl.textContent = balanced ? '✅ 借贷平衡' : '❌ 借贷不平';
+    statusEl.style.color = balanced ? '#16a34a' : '#dc2626';
+    document.getElementById('btn-confirm-voucher').disabled = !balanced;
+  }
+
+  async function confirmVoucher() {
+    const desc  = document.getElementById('ai-description').value.trim();
+    const dt    = document.getElementById('ai-voucher-date').value;
+    const word  = document.getElementById('ai-voucher-word').value;
+    const memo  = document.getElementById('draft-memo').value.trim();
+    const btn   = document.getElementById('btn-confirm-voucher');
+
+    const lines = [];
+    let valid = true;
+    document.getElementById('draft-lines-body').querySelectorAll('tr').forEach(row => {
+      const inputs  = row.querySelectorAll('input');
+      const code    = inputs[0].value.trim();
+      const amt     = parseFloat(inputs[1].value);
+      const dir     = row.querySelector('select').value;
+      const noteTxt = inputs[2]?.value.trim() || null;
+      if (!code || !amt) { valid = false; return; }
+      lines.push({ subject_code: code, direction: dir, amount: amt, memo: noteTxt, auxiliary_data: null });
+    });
+    if (!valid || lines.length < 2) { showToast('请填写完整的科目编码和金额', 'error'); return; }
+
+    btn.disabled = true; btn.textContent = '入账中…';
+    try {
+      const res = await fetch(`${API}/api/voucher-ai/confirm`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ description: desc, voucher_date: dt, voucher_word: word, memo, lines, habit_rule_id: _selectedHabitRuleId }),
+      });
+      const d = await res.json();
+      if (!res.ok) { showToast(d.detail || '入账失败', 'error'); return; }
+      showToast(`✅ 凭证 #${d.voucher_id} 已入账`, 'success');
+      document.getElementById('ai-description').value = '';
+      document.getElementById('ai-recommendations').style.display = 'none';
+      document.getElementById('ai-draft-preview').style.display   = 'none';
+      _aiRecommendations = []; _selectedTrackIndex = null; _selectedHabitRuleId = null;
+    } catch (e) { showToast('请求失败：' + e.message, 'error');
+    } finally { btn.disabled = false; btn.textContent = '确认入账'; }
+  }
+
+  // ── 业务习惯规则 ──
+  async function loadHabitRules() {
+    const listEl = document.getElementById('habit-rules-list');
+    listEl.innerHTML = '<div class="empty-state"><div class="spinner"></div></div>';
+    try {
+      const res  = await fetch(`${API}/api/voucher-ai/habit-rules`);
+      const data = await res.json();
+      if (!res.ok) { listEl.innerHTML = `<p style="color:var(--error)">${data.detail||'加载失败'}</p>`; return; }
+      if (!data.length) { listEl.innerHTML = '<div class="empty-state"><p>暂无习惯规则，点击右上角新增</p></div>'; return; }
+      listEl.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr style="background:var(--bg)">
+          <th style="padding:9px 10px;text-align:left">规则名称</th>
+          <th style="padding:9px 10px;text-align:left">关键词</th>
+          <th style="padding:9px 10px;text-align:center">状态</th>
+          <th style="padding:9px 10px;text-align:left">创建时间</th>
+          <th style="padding:9px 10px"></th>
+        </tr></thead><tbody>
+        ${data.map(r => `<tr style="border-top:1px solid var(--border)">
+          <td style="padding:9px 10px;font-weight:600">${escHtml(r.rule_name)}</td>
+          <td style="padding:9px 10px">${(r.keywords||[]).map(k=>`<span style="background:#eff6ff;color:#2563eb;border-radius:3px;padding:1px 6px;font-size:11px;margin-right:3px">${escHtml(k)}</span>`).join('')}</td>
+          <td style="padding:9px 10px;text-align:center">
+            <span style="font-size:11px;font-weight:600;color:${r.is_active?'#16a34a':'#6b7280'}">${r.is_active?'启用':'停用'}</span>
+          </td>
+          <td style="padding:9px 10px;font-size:12px;color:var(--text-muted)">${(r.created_at||'').slice(0,10)}</td>
+          <td style="padding:9px 10px;text-align:right;white-space:nowrap">
+            <button class="link-btn" onclick="toggleHabitRule(${r.id},${!r.is_active})">${r.is_active?'停用':'启用'}</button>
+            <button class="link-btn" style="color:var(--error);margin-left:8px" onclick="deleteHabitRule(${r.id})">删除</button>
+          </td>
+        </tr>`).join('')}
+        </tbody></table>`;
+    } catch (e) { listEl.innerHTML = `<p style="color:var(--error);font-size:13px">加载失败：${e.message}</p>`; }
+  }
+
+  function openHabitModal(id) {
+    _editingHabitRuleId = id || null;
+    document.getElementById('habit-modal-title').textContent = id ? '编辑业务习惯规则' : '新增业务习惯规则';
+    document.getElementById('habit-name').value     = '';
+    document.getElementById('habit-desc').value     = '';
+    document.getElementById('habit-keywords').value = '';
+    document.getElementById('habit-json').value     = '{"nodes":[],"edges":[]}';
+    document.getElementById('habit-active').checked = true;
+    document.getElementById('habitModal').style.display = 'flex';
+  }
+
+  function closeHabitModal() { document.getElementById('habitModal').style.display = 'none'; }
+
+  async function saveHabitRule() {
+    const name = document.getElementById('habit-name').value.trim();
+    const kw   = document.getElementById('habit-keywords').value.split(',').map(s=>s.trim()).filter(Boolean);
+    const jsonStr = document.getElementById('habit-json').value.trim();
+    if (!name)      { showToast('请填写规则名称', 'error'); return; }
+    if (!kw.length) { showToast('请填写至少一个关键词', 'error'); return; }
+    let rule_json;
+    try { rule_json = JSON.parse(jsonStr); } catch { showToast('DAG JSON 格式不正确', 'error'); return; }
+    const body = { rule_name: name, description: document.getElementById('habit-desc').value.trim()||null, keywords: kw, rule_json, is_active: document.getElementById('habit-active').checked };
+    try {
+      const res = await fetch(`${API}/api/voucher-ai/habit-rules`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      });
+      const d = await res.json();
+      if (!res.ok) { showToast(d.detail || '保存失败', 'error'); return; }
+      showToast('规则已保存', 'success');
+      closeHabitModal();
+      loadHabitRules();
+    } catch (e) { showToast('请求失败：' + e.message, 'error'); }
+  }
+
+  async function toggleHabitRule(id, active) {
+    try {
+      const res = await fetch(`${API}/api/voucher-ai/habit-rules/${id}`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ is_active: active }),
+      });
+      if (!res.ok) { const d = await res.json(); showToast(d.detail||'操作失败','error'); return; }
+      loadHabitRules();
+    } catch (e) { showToast('请求失败：' + e.message, 'error'); }
+  }
+
+  async function deleteHabitRule(id) {
+    if (!confirm('确定删除这条习惯规则吗？')) return;
+    try {
+      const res = await fetch(`${API}/api/voucher-ai/habit-rules/${id}`, { method: 'DELETE' });
+      if (res.status !== 204 && !res.ok) { const d = await res.json(); showToast(d.detail||'删除失败','error'); return; }
+      showToast('规则已删除', 'success');
+      loadHabitRules();
+    } catch (e) { showToast('请求失败：' + e.message, 'error'); }
+  }
+
+  // ══════════════════════════════════════════════════════════════════
+  // Sprint 3.2 — 凭证 CRUD（手工录入 / 回收站 / 断号整理）
+  // ══════════════════════════════════════════════════════════════════
+
+  let _vfEditingId = null;  // null = 新建，number = 编辑
+
+  function _vfLineHtml(code, dir, amount, memo) {
+    return `<tr style="border-top:1px solid var(--border)">
+      <td style="padding:5px 6px">
+        <input type="text" value="${escHtml(code||'')}" placeholder="科目编码" class="field-input"
+          style="width:90px;padding:4px 6px;font-size:12px" oninput="recalcVoucherBalance()">
+      </td>
+      <td style="padding:5px 6px;text-align:center">
+        <select class="field-input" style="width:70px;padding:4px 6px;font-size:12px" onchange="recalcVoucherBalance()">
+          <option value="DEBIT"  ${dir==='DEBIT' ?'selected':''}>借</option>
+          <option value="CREDIT" ${dir==='CREDIT'?'selected':''}>贷</option>
+        </select>
+      </td>
+      <td style="padding:5px 6px">
+        <input type="number" value="${amount||''}" step="0.01" min="0.01" placeholder="0.00"
+          class="field-input" style="width:100px;padding:4px 6px;font-size:12px;text-align:right" oninput="recalcVoucherBalance()">
+      </td>
+      <td style="padding:5px 6px">
+        <input type="text" value="${escHtml(memo||'')}" placeholder="备注"
+          class="field-input" style="width:100px;padding:4px 6px;font-size:12px">
+      </td>
+      <td style="padding:5px 6px;text-align:center">
+        <button onclick="removeVoucherLine(this)" style="background:none;border:none;cursor:pointer;color:var(--error);font-size:14px">×</button>
+      </td>
+    </tr>`;
+  }
+
+  function openVoucherCreateModal() {
+    _vfEditingId = null;
+    document.getElementById('vf-modal-title').textContent = '手工录入凭证';
+    const d = new Date();
+    document.getElementById('vf-date').value = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    document.getElementById('vf-word').value = '记';
+    document.getElementById('vf-memo').value = '';
+    document.getElementById('vf-lines-body').innerHTML =
+      _vfLineHtml('','DEBIT','','') + _vfLineHtml('','CREDIT','','');
+    recalcVoucherBalance();
+    document.getElementById('voucherFormModal').style.display = 'flex';
+  }
+
+  async function openVoucherEditModal(id) {
+    _vfEditingId = id;
+    document.getElementById('vf-modal-title').textContent = '编辑凭证';
+    try {
+      const res = await fetch(`${API}/api/vouchers/${id}`);
+      const v   = await res.json();
+      if (!res.ok) { showToast(v.detail||'加载失败','error'); return; }
+      document.getElementById('vf-date').value = v.voucher_date;
+      document.getElementById('vf-word').value = v.voucher_word || '记';
+      document.getElementById('vf-memo').value = v.memo || '';
+      document.getElementById('vf-lines-body').innerHTML =
+        (v.lines||[]).map(l => _vfLineHtml(l.subject_code, l.direction, l.amount, l.memo)).join('');
+      recalcVoucherBalance();
+      document.getElementById('voucherFormModal').style.display = 'flex';
+    } catch (e) { showToast('请求失败：' + e.message, 'error'); }
+  }
+
+  function closeVoucherFormModal() { document.getElementById('voucherFormModal').style.display = 'none'; }
+
+  function addVoucherLine() {
+    document.getElementById('vf-lines-body').insertAdjacentHTML('beforeend', _vfLineHtml('','DEBIT','',''));
+    recalcVoucherBalance();
+  }
+
+  function removeVoucherLine(btn) {
+    const rows = document.getElementById('vf-lines-body').querySelectorAll('tr');
+    if (rows.length <= 2) { showToast('至少保留 2 行', 'error'); return; }
+    btn.closest('tr').remove();
+    recalcVoucherBalance();
+  }
+
+  function recalcVoucherBalance() {
+    let debit = 0, credit = 0;
+    document.getElementById('vf-lines-body').querySelectorAll('tr').forEach(row => {
+      const amt = parseFloat(row.querySelectorAll('input[type=number]')[0]?.value) || 0;
+      const dir = row.querySelector('select')?.value;
+      if (dir === 'DEBIT')  debit  += amt;
+      if (dir === 'CREDIT') credit += amt;
+    });
+    document.getElementById('vf-debit-total').textContent  = `借方: ¥${fmt(debit)}`;
+    document.getElementById('vf-credit-total').textContent = `贷方: ¥${fmt(credit)}`;
+    const balanced = Math.abs(debit - credit) < 0.005 && debit > 0;
+    const statusEl = document.getElementById('vf-balance-status');
+    statusEl.textContent = debit === 0 ? '' : (balanced ? '✅ 借贷平衡' : '❌ 借贷不平');
+    statusEl.style.color = balanced ? '#16a34a' : '#dc2626';
+    document.getElementById('btn-vf-submit').disabled = !balanced;
+  }
+
+  async function submitVoucherForm() {
+    const dt   = document.getElementById('vf-date').value;
+    const word = document.getElementById('vf-word').value;
+    const memo = document.getElementById('vf-memo').value.trim() || null;
+    if (!dt) { showToast('请选择凭证日期', 'error'); return; }
+    const lines = [];
+    let valid = true;
+    document.getElementById('vf-lines-body').querySelectorAll('tr').forEach(row => {
+      const inputs  = row.querySelectorAll('input');
+      const code    = inputs[0].value.trim();
+      const amt     = parseFloat(inputs[1].value);
+      const dir     = row.querySelector('select').value;
+      const noteTxt = inputs[2]?.value.trim() || null;
+      if (!code || !amt) { valid = false; return; }
+      lines.push({ subject_code: code, direction: dir, amount: amt, memo: noteTxt });
+    });
+    if (!valid || lines.length < 2) { showToast('请填写完整的科目编码和金额', 'error'); return; }
+    const body = { voucher_date: dt, voucher_word: word, memo, lines };
+    const btn  = document.getElementById('btn-vf-submit');
+    btn.disabled = true; btn.textContent = '提交中…';
+    try {
+      const url    = _vfEditingId ? `${API}/api/vouchers/${_vfEditingId}` : `${API}/api/vouchers`;
+      const method = _vfEditingId ? 'PUT' : 'POST';
+      const res    = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const d      = await res.json();
+      if (!res.ok) { showToast(d.detail || '提交失败', 'error'); return; }
+      showToast(_vfEditingId ? '凭证已更新' : `凭证 #${d.voucher_id} 已创建`, 'success');
+      closeVoucherFormModal();
+      loadWorkbench();
+    } catch (e) { showToast('请求失败：' + e.message, 'error');
+    } finally { btn.disabled = false; btn.textContent = '提交凭证'; }
+  }
+
+  // ── 回收站 ──
+  async function openTrashModal() {
+    document.getElementById('trashModal').style.display = 'flex';
+    const bodyEl = document.getElementById('trash-modal-body');
+    bodyEl.innerHTML = '<div class="empty-state"><div class="spinner"></div></div>';
+    try {
+      const res  = await fetch(`${API}/api/vouchers/trash`);
+      const data = await res.json();
+      if (!res.ok) { bodyEl.innerHTML = `<p style="color:var(--error)">${data.detail||'加载失败'}</p>`; return; }
+      if (!data.length) { bodyEl.innerHTML = '<div class="empty-state"><p>回收站为空</p></div>'; return; }
+      bodyEl.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr style="background:var(--bg)">
+          <th style="padding:8px 10px;text-align:left">凭证号</th>
+          <th style="padding:8px 10px;text-align:left">日期</th>
+          <th style="padding:8px 10px;text-align:right">金额</th>
+          <th style="padding:8px 10px;text-align:left">摘要</th>
+          <th style="padding:8px 10px"></th>
+        </tr></thead><tbody>
+        ${data.map(v => `<tr id="trash-row-${v.voucher_id}" style="border-top:1px solid var(--border)">
+          <td style="padding:8px 10px;font-family:monospace">#${v.voucher_id}</td>
+          <td style="padding:8px 10px">${v.voucher_date}</td>
+          <td style="padding:8px 10px;text-align:right">¥${fmt(v.total_amount)}</td>
+          <td style="padding:8px 10px;color:var(--text-muted);max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escHtml(v.memo||'')}</td>
+          <td style="padding:8px 10px;text-align:right">
+            <button class="link-btn" onclick="restoreVoucher(${v.voucher_id})">还原</button>
+          </td>
+        </tr>`).join('')}
+        </tbody></table>`;
+    } catch (e) { bodyEl.innerHTML = `<p style="color:var(--error);font-size:13px">加载失败：${e.message}</p>`; }
+  }
+
+  function closeTrashModal() { document.getElementById('trashModal').style.display = 'none'; }
+
+  async function restoreVoucher(id) {
+    try {
+      const res = await fetch(`${API}/api/vouchers/${id}/restore`, { method: 'POST' });
+      const d   = await res.json();
+      if (!res.ok) { showToast(d.detail||'还原失败','error'); return; }
+      showToast('凭证已还原', 'success');
+      const row = document.getElementById(`trash-row-${id}`);
+      if (row) { row.style.background = '#f0fff4'; setTimeout(() => row.remove(), 600); }
+      loadWorkbench();
+    } catch (e) { showToast('请求失败：' + e.message, 'error'); }
+  }
+
+  // ── 断号整理 ──
+  function openReorganizeDialog() {
+    const d = new Date();
+    document.getElementById('reorg-year').value  = d.getFullYear();
+    document.getElementById('reorg-month').value = d.getMonth() + 1;
+    document.getElementById('reorganizeDialog').style.display = 'flex';
+  }
+
+  async function submitReorganize() {
+    const year  = parseInt(document.getElementById('reorg-year').value);
+    const month = parseInt(document.getElementById('reorg-month').value);
+    if (!year || !month) { showToast('请填写年份和月份', 'error'); return; }
+    try {
+      const res = await fetch(`${API}/api/vouchers/reorganize`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ period_year: year, period_month: month }),
+      });
+      const d = await res.json();
+      if (!res.ok) { showToast(d.detail || '整理失败', 'error'); return; }
+      showToast(d.message || `已整理 ${d.updated_count} 张凭证`, 'success');
+      document.getElementById('reorganizeDialog').style.display = 'none';
+      loadWorkbench();
+    } catch (e) { showToast('请求失败：' + e.message, 'error'); }
+  }
+
+  // ══════════════════════════════════════════════════════════════════
+  // Sprint 3.5 — 批量导入流水线
+  // ══════════════════════════════════════════════════════════════════
+
+  let _batchFiles   = [];
+  let _batchItems   = [];
+  let _batchTaskId  = null;
+  let _batchPollTimer = null;
+
+  function loadBatchPage() { resetBatchPage(); }
+
+  function resetBatchPage() {
+    _batchFiles = []; _batchItems = []; _batchTaskId = null;
+    if (_batchPollTimer) { clearInterval(_batchPollTimer); _batchPollTimer = null; }
+    document.getElementById('batch-step1').style.display = '';
+    document.getElementById('batch-step2').style.display = 'none';
+    document.getElementById('batch-step3').style.display = 'none';
+    document.getElementById('batch-step4').style.display = 'none';
+    document.getElementById('batch-step4').innerHTML     = '';
+    document.getElementById('batch-file-list').innerHTML = '';
+    document.getElementById('batch-file-input').value   = '';
+    document.getElementById('btn-parse-preview').disabled = true;
+  }
+
+  function onBatchFileSelect(input) {
+    Array.from(input.files).forEach(f => _batchFiles.push(f));
+    renderBatchFileList();
+  }
+
+  function handleBatchDrop(e) {
+    Array.from(e.dataTransfer.files).forEach(f => _batchFiles.push(f));
+    renderBatchFileList();
+  }
+
+  function renderBatchFileList() {
+    document.getElementById('batch-file-list').innerHTML = _batchFiles.length
+      ? _batchFiles.map((f,i) => `<div style="display:flex;align-items:center;gap:8px;font-size:13px;margin-bottom:4px">
+          <span>📄 ${escHtml(f.name)}</span>
+          <span style="color:var(--text-muted);font-size:11px">(${(f.size/1024).toFixed(0)} KB)</span>
+          <button onclick="removeBatchFile(${i})" style="background:none;border:none;cursor:pointer;color:var(--error);font-size:13px">×</button>
+        </div>`).join('')
+      : '';
+    document.getElementById('btn-parse-preview').disabled = _batchFiles.length === 0;
+  }
+
+  function removeBatchFile(i) {
+    _batchFiles.splice(i, 1);
+    renderBatchFileList();
+  }
+
+  async function parseBatchPreview() {
+    const btn = document.getElementById('btn-parse-preview');
+    btn.disabled = true; btn.textContent = '解析中…';
+    try {
+      const fd = new FormData();
+      _batchFiles.forEach(f => fd.append('files', f));
+      const res  = await fetch(`${API}/api/batch/parse-preview`, { method: 'POST', body: fd });
+      const data = await res.json();
+      if (!res.ok) { showToast(data.detail || '解析失败', 'error'); return; }
+      _batchItems = data.items || [];
+      renderBatchGrid(_batchItems);
+      document.getElementById('batch-item-count').textContent = `共 ${_batchItems.length} 条（${data.parse_engine} 引擎解析）`;
+      document.getElementById('batch-step2').style.display = '';
+      document.getElementById('batch-step2').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (e) { showToast('请求失败：' + e.message, 'error');
+    } finally { btn.disabled = _batchFiles.length === 0; btn.textContent = '解析预览'; }
+  }
+
+  function renderBatchGrid(items) {
+    document.getElementById('batch-grid-body').innerHTML = items.map((item, i) => `
+      <tr id="batch-row-${i}" style="border-top:1px solid var(--border)">
+        <td style="padding:6px 10px;text-align:center;color:var(--text-muted);font-size:12px">${i+1}</td>
+        <td style="padding:6px 8px">
+          <input type="date" value="${item.date||''}" class="field-input" style="padding:3px 6px;font-size:12px;width:130px" onchange="_batchItems[${i}].date=this.value">
+        </td>
+        <td style="padding:6px 8px">
+          <input type="number" value="${item.amount||''}" step="0.01" min="0.01" class="field-input" style="padding:3px 6px;font-size:12px;width:100px;text-align:right" onchange="_batchItems[${i}].amount=parseFloat(this.value)">
+        </td>
+        <td style="padding:6px 8px">
+          <input type="text" value="${escHtml(item.counterparty||'')}" class="field-input" style="padding:3px 6px;font-size:12px;width:120px" oninput="_batchItems[${i}].counterparty=this.value">
+        </td>
+        <td style="padding:6px 8px">
+          <input type="text" value="${escHtml(item.summary||'')}" class="field-input" style="padding:3px 6px;font-size:12px;width:180px" oninput="_batchItems[${i}].summary=this.value">
+        </td>
+        <td style="padding:6px 8px;text-align:center">
+          <button onclick="deleteBatchRow(${i})" style="background:none;border:none;cursor:pointer;color:var(--error);font-size:14px">×</button>
+        </td>
+      </tr>`).join('');
+    document.getElementById('btn-submit-batch').disabled = items.length === 0;
+  }
+
+  function deleteBatchRow(i) {
+    _batchItems.splice(i, 1);
+    renderBatchGrid(_batchItems);
+    document.getElementById('batch-item-count').textContent = `共 ${_batchItems.length} 条`;
+  }
+
+  async function submitBatch() {
+    if (!_batchItems.length) { showToast('没有可提交的数据', 'error'); return; }
+    const word = document.getElementById('batch-voucher-word').value;
+    const btn  = document.getElementById('btn-submit-batch');
+    btn.disabled = true; btn.textContent = '提交中…';
+    try {
+      const res  = await fetch(`${API}/api/batch/execute`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: _batchItems, voucher_word: word }),
+      });
+      const data = await res.json();
+      if (!res.ok) { showToast(data.detail || '提交失败', 'error'); btn.disabled = false; btn.textContent = '提交批量入账 →'; return; }
+      _batchTaskId = data.task_id;
+      document.getElementById('batch-task-info').textContent = `任务 #${data.task_id} · 共 ${data.total_count} 条`;
+      document.getElementById('batch-step3').style.display = '';
+      document.getElementById('batch-step3').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      startBatchPolling(data.task_id, data.total_count);
+    } catch (e) { showToast('请求失败：' + e.message, 'error'); btn.disabled = false; btn.textContent = '提交批量入账 →'; }
+  }
+
+  function startBatchPolling(taskId, total) {
+    if (_batchPollTimer) clearInterval(_batchPollTimer);
+    _batchPollTimer = setInterval(async () => {
+      try {
+        const res  = await fetch(`${API}/api/batch/task/${taskId}/progress`);
+        const data = await res.json();
+        if (!res.ok) return;
+        updateBatchProgress(data, total);
+        if (data.status === 'COMPLETED' || data.status === 'FAILED') {
+          stopBatchPolling();
+          if (data.status === 'COMPLETED') loadBatchResults(taskId);
+          else showToast('批量处理失败，请查看详情', 'error');
+        }
+      } catch { /* 网络抖动，继续轮询 */ }
+    }, 2000);
+  }
+
+  function updateBatchProgress(data, total) {
+    const done = (data.success_count || 0) + (data.error_count || 0);
+    const pct  = total > 0 ? Math.round(done / total * 100) : 0;
+    document.getElementById('batch-progress-bar').style.width = pct + '%';
+    document.getElementById('batch-success-count').textContent = `✅ 成功: ${data.success_count||0}`;
+    document.getElementById('batch-review-count').textContent  = `⚠️ 待复核: ${data.needs_review_count||0}`;
+    document.getElementById('batch-error-count').textContent   = `❌ 失败: ${data.error_count||0}`;
+    const statusMap = { PENDING:'排队中', PROCESSING:'处理中', COMPLETED:'已完成', FAILED:'处理失败' };
+    document.getElementById('batch-status-text').textContent = statusMap[data.status] || data.status;
+  }
+
+  function stopBatchPolling() {
+    if (_batchPollTimer) { clearInterval(_batchPollTimer); _batchPollTimer = null; }
+  }
+
+  async function loadBatchResults(taskId) {
+    try {
+      const res  = await fetch(`${API}/api/batch/task/${taskId}/results`);
+      const data = await res.json();
+      if (!res.ok) { showToast(data.detail || '获取结果失败', 'error'); return; }
+      renderBatchResults(data);
+    } catch (e) { showToast('获取结果失败：' + e.message, 'error'); }
+  }
+
+  function renderBatchResults(data) {
+    const successOnly = (data.success||[]).filter(r => !r.needs_review);
+    const reviewItems = data.needs_review || [];
+    const errors      = data.errors || [];
+
+    const rowHtml = (items, extraCss) => items.map(r => `
+      <tr style="border-top:1px solid var(--border)${extraCss?';'+extraCss:''}">
+        <td style="padding:7px 10px">${r.raw_data?.date||''}</td>
+        <td style="padding:7px 10px;text-align:right">¥${fmt(r.raw_data?.amount||0)}</td>
+        <td style="padding:7px 10px;color:var(--text-muted)">${escHtml(r.raw_data?.summary||'')}</td>
+        <td style="padding:7px 10px;text-align:center">
+          <span style="font-size:11px;font-weight:600;color:${r.confidence==='HIGH'?'#16a34a':r.confidence==='MEDIUM'?'#d97706':'#6b7280'}">${r.confidence||'—'}</span>
+        </td>
+        <td style="padding:7px 10px">${r.voucher_id ? `<span style="font-family:monospace">#${r.voucher_id}</span>` : (r.error_msg ? `<span style="color:var(--error);font-size:12px">${escHtml(r.error_msg)}</span>` : '—')}</td>
+      </tr>`).join('');
+
+    const thead = `<thead><tr style="background:var(--bg)">
+      <th style="padding:7px 10px;text-align:left">日期</th>
+      <th style="padding:7px 10px;text-align:right">金额</th>
+      <th style="padding:7px 10px;text-align:left">摘要</th>
+      <th style="padding:7px 10px;text-align:center">置信度</th>
+      <th style="padding:7px 10px;text-align:left">凭证号 / 错误</th>
+    </tr></thead>`;
+
+    const step4 = document.getElementById('batch-step4');
+    step4.style.display = '';
+    step4.innerHTML = `
+      <div style="display:flex;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+        <div style="flex:1;min-width:140px;text-align:center;padding:16px;background:#f0fff4;border-radius:8px;border:1px solid #9ae6b4">
+          <div style="font-size:24px;font-weight:700;color:#16a34a">${successOnly.length}</div>
+          <div style="font-size:12px;color:#276749;margin-top:4px">自动入账</div>
+        </div>
+        <div style="flex:1;min-width:140px;text-align:center;padding:16px;background:#fffbeb;border-radius:8px;border:1px solid #fcd34d">
+          <div style="font-size:24px;font-weight:700;color:#d97706">${reviewItems.length}</div>
+          <div style="font-size:12px;color:#92400e;margin-top:4px">需人工复核</div>
+        </div>
+        <div style="flex:1;min-width:140px;text-align:center;padding:16px;background:#fff5f5;border-radius:8px;border:1px solid #feb2b2">
+          <div style="font-size:24px;font-weight:700;color:#dc2626">${errors.length}</div>
+          <div style="font-size:12px;color:#c53030;margin-top:4px">处理失败</div>
+        </div>
+      </div>
+      ${successOnly.length ? `<div class="card" style="margin-bottom:12px">
+        <div class="card-header" style="background:#f0fff4"><span>🟢</span><span class="card-title" style="color:#276749">自动入账明细（${successOnly.length} 条）</span></div>
+        <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">${thead}<tbody>${rowHtml(successOnly,'')}</tbody></table></div>
+      </div>` : ''}
+      ${reviewItems.length ? `<div class="card" style="margin-bottom:12px">
+        <div class="card-header" style="background:#fffbeb"><span>🟡</span><span class="card-title" style="color:#92400e">需人工复核（${reviewItems.length} 条）</span></div>
+        <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">${thead}<tbody>${rowHtml(reviewItems,'background:#fffde7')}</tbody></table></div>
+      </div>` : ''}
+      ${errors.length ? `<div class="card" style="margin-bottom:12px">
+        <div class="card-header" style="background:#fff5f5"><span>🔴</span><span class="card-title" style="color:#c53030">处理失败（${errors.length} 条）</span></div>
+        <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:13px">${thead}<tbody>${rowHtml(errors,'background:#fff5f5')}</tbody></table></div>
+      </div>` : ''}
+      <div style="margin-top:8px">
+        <button class="btn btn-outline" onclick="resetBatchPage()">重新发起导入</button>
+      </div>`;
+    step4.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }
 
 </script>
