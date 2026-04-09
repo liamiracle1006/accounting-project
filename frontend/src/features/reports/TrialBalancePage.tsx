@@ -11,6 +11,7 @@
  *  - 打印（window.print() + @media print CSS）
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import * as XLSX from 'xlsx'
 import { reportsApi } from '@/api/reports'
 import { useReportStore } from '@/store/useReportStore'
@@ -55,12 +56,22 @@ function NumberInput({
 
 // ═══════════════════════════════════════════════════════════════════════════
 export default function TrialBalancePage() {
+  const navigate = useNavigate()
   const {
     tbParams, tbItems, tbTotals, tbBalanced,
     tbOpeningBalanced, tbCurrentBalanced, tbClosingBalanced,
     tbLoading, tbError,
     setTbParams, setTbData, setTbLoading, setTbError,
   } = useReportStore()
+
+  const handleDrillDown = useCallback((code: string) => {
+    const p = new URLSearchParams({
+      subject_code: code,
+      date_from: tbParams.date_from ?? '',
+      date_to:   tbParams.date_to   ?? '',
+    })
+    navigate(`/ledger?${p}`)
+  }, [navigate, tbParams.date_from, tbParams.date_to])
 
   // 高级筛选气泡开关
   const [filterOpen, setFilterOpen] = useState(false)
@@ -361,7 +372,7 @@ export default function TrialBalancePage() {
             )}
 
             {!tbLoading && tbItems.map(item => (
-              <TrialBalanceRow key={item.code} item={item} />
+              <TrialBalanceRow key={item.code} item={item} onDrillDown={handleDrillDown} />
             ))}
           </tbody>
 
@@ -403,7 +414,7 @@ export default function TrialBalancePage() {
 }
 
 // ── 单行组件 ──────────────────────────────────────────────────────────────
-function TrialBalanceRow({ item }: { item: TrialBalanceItem }) {
+function TrialBalanceRow({ item, onDrillDown }: { item: TrialBalanceItem; onDrillDown: (code: string) => void }) {
   const indent   = (item.level - 1) * 20
   const isBold   = item.level === 1
   const redOpen  = isReversed(item, 'opening')
@@ -416,12 +427,18 @@ function TrialBalanceRow({ item }: { item: TrialBalanceItem }) {
         {item.code}
       </td>
 
-      {/* 科目名称（缩进 + 1级加粗） */}
+      {/* 科目名称（缩进 + 1级加粗 + 点击下钻） */}
       <td
         className={`border border-gray-100 py-1.5 pr-3 ${isBold ? 'font-semibold text-gray-800' : 'text-gray-700'}`}
         style={{ paddingLeft: `${12 + indent}px` }}
       >
-        {item.name}
+        <span
+          className="cursor-pointer hover:text-blue-600 hover:underline"
+          onClick={() => onDrillDown(item.code)}
+          title="点击查看明细账"
+        >
+          {item.name}
+        </span>
       </td>
 
       {/* 期初余额借方 */}

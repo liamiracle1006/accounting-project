@@ -298,6 +298,36 @@ export interface Asset {
   purchase_date: string
 }
 
+// ── Sprint 4.2 明细账 ─────────────────────────────────────
+export interface DetailedLedgerRow {
+  row_type:       'opening' | 'transaction' | 'period_total' | 'ytd_total'
+  date:           string | null
+  voucher_id:     number | null
+  voucher_word:   string | null
+  voucher_number: number | null
+  subject_code:   string
+  subject_name:   string
+  memo:           string | null
+  debit:          number
+  credit:         number
+  direction:      '借' | '贷' | '平' | null
+  balance:        number | null
+}
+
+export interface DetailedLedgerResponse {
+  subject_code: string
+  date_from:    string
+  date_to:      string
+  rows:         DetailedLedgerRow[]
+}
+
+export interface DetailedLedgerParams {
+  subject_code: string
+  date_from:    string
+  date_to:      string
+  keyword?:     string
+}
+
 // ── 旧账导入向导 ─────────────────────────────────────────
 export type ImportSourceSystem = 'KINGDEE' | 'YONYOU' | 'GUANJIA' | 'EXCEL'
 

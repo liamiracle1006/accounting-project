@@ -27,6 +27,7 @@ from services.cashflow_service import CashFlowService
 from services.equity_change_service import EquityChangeService
 
 from services.ledger_service import LedgerService
+from services.ledger_detail_service import LedgerDetailService
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/reports", tags=["reports"])
@@ -135,6 +136,54 @@ def get_trial_balance(
             }
             for i in items
         ],
+    }
+
+
+# ── Detailed Ledger (明细账 Sprint 4.2) ───────────────────────────────────
+
+@router.get("/detailed-ledger")
+def get_detailed_ledger(
+    subject_code: str,
+    date_from:    str | None = None,
+    date_to:      str | None = None,
+    keyword:      str | None = None,
+    current_user: UserAccount = Depends(get_current_user),
+    db:           Session     = Depends(get_db),
+) -> Any:
+    """
+    单科目明细账（逐笔余额）。
+    返回：期初余额行 + 凭证明细行 + 本期合计行 + 本年累计行。
+    """
+    if not subject_code:
+        raise HTTPException(status_code=422, detail="subject_code 不能为空")
+
+    today = date.today()
+    try:
+        df = date.fromisoformat(date_from) if date_from else date(today.year, today.month, 1)
+        dt = date.fromisoformat(date_to)   if date_to   else today
+    except ValueError:
+        raise HTTPException(status_code=422, detail="日期格式应为 YYYY-MM-DD")
+
+    tenant_id, account_set_id = _get_ctx()
+    svc = LedgerDetailService(db)
+    try:
+        rows = svc.get_detailed_ledger(
+            tenant_id      = tenant_id,
+            account_set_id = account_set_id,
+            subject_code   = subject_code,
+            date_from      = df,
+            date_to        = dt,
+            keyword        = keyword,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+    from dataclasses import asdict
+    return {
+        "subject_code": subject_code,
+        "date_from":    str(df),
+        "date_to":      str(dt),
+        "rows":         [asdict(r) for r in rows],
     }
 
 

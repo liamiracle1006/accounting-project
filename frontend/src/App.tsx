@@ -14,7 +14,8 @@ const AIVoucherPage      = lazy(() => import('@/features/ai-voucher/AIVoucherPag
 const BatchImportConsole = lazy(() => import('@/features/batch-import/BatchImportConsole'))
 const PeriodClosingPage  = lazy(() => import('@/features/periods/PeriodClosingPage'))
 const ReportsPage        = lazy(() => import('@/features/reports/ReportsPage'))
-const TrialBalancePage   = lazy(() => import('@/features/reports/TrialBalancePage'))
+const TrialBalancePage      = lazy(() => import('@/features/reports/TrialBalancePage'))
+const DetailedLedgerPage    = lazy(() => import('@/features/reports/DetailedLedgerPage'))
 const ExpensesPage       = lazy(() => import('@/features/expenses/ExpensesPage'))
 const DecisionsPage      = lazy(() => import('@/features/decisions/DecisionsPage'))
 const AssetsPage         = lazy(() => import('@/features/assets/AssetsPage'))
@@ -41,6 +42,7 @@ export default function App() {
               <Route path="closing"    element={<PeriodClosingPage />} />
               <Route path="reports"        element={<ReportsPage />} />
               <Route path="trial-balance"  element={<TrialBalancePage />} />
+              <Route path="ledger"         element={<DetailedLedgerPage />} />
               <Route path="expenses"   element={<ExpensesPage />} />
               <Route path="decisions"  element={<DecisionsPage />} />
               <Route path="assets"     element={<AssetsPage />} />

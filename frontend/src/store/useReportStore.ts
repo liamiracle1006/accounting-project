@@ -1,5 +1,8 @@
 import { create } from 'zustand'
-import type { TrialBalanceItem, TrialBalanceTotals, TrialBalanceParams } from '@/types'
+import type {
+  TrialBalanceItem, TrialBalanceTotals, TrialBalanceParams,
+  DetailedLedgerRow,
+} from '@/types'
 
 // ── 默认期间：当月 ────────────────────────────────────────────────────────────
 function defaultDateFrom(): string {
@@ -16,21 +19,31 @@ interface ReportState {
   tbParams: TrialBalanceParams
 
   // ── 科目余额表数据 ─────────────────────────────────────────
-  tbItems:    TrialBalanceItem[]
-  tbTotals:   TrialBalanceTotals | null
-  tbBalanced: boolean
+  tbItems:           TrialBalanceItem[]
+  tbTotals:          TrialBalanceTotals | null
+  tbBalanced:        boolean
   tbOpeningBalanced: boolean
   tbCurrentBalanced: boolean
   tbClosingBalanced: boolean
-  tbLoading:  boolean
-  tbError:    string | null
+  tbLoading:         boolean
+  tbError:           string | null
+
+  // ── 明细账数据（Sprint 4.2） ───────────────────────────────
+  dlRows:    DetailedLedgerRow[]
+  dlLoading: boolean
+  dlError:   string | null
 
   // ── Actions ────────────────────────────────────────────────
-  setTbParams: (p: Partial<TrialBalanceParams>) => void
-  setTbData:   (items: TrialBalanceItem[], totals: TrialBalanceTotals, balanced: boolean, ob: boolean, cb: boolean, clb: boolean) => void
+  setTbParams:  (p: Partial<TrialBalanceParams>) => void
+  setTbData:    (items: TrialBalanceItem[], totals: TrialBalanceTotals, balanced: boolean, ob: boolean, cb: boolean, clb: boolean) => void
   setTbLoading: (v: boolean) => void
   setTbError:   (e: string | null) => void
   resetTb:      () => void
+
+  setDlRows:    (rows: DetailedLedgerRow[]) => void
+  setDlLoading: (v: boolean) => void
+  setDlError:   (e: string | null) => void
+  resetDl:      () => void
 }
 
 const defaultTotals: TrialBalanceTotals = {
@@ -53,6 +66,10 @@ export const useReportStore = create<ReportState>((set) => ({
   tbClosingBalanced: true,
   tbLoading:         false,
   tbError:           null,
+
+  dlRows:    [],
+  dlLoading: false,
+  dlError:   null,
 
   setTbParams: (p) =>
     set((s) => ({ tbParams: { ...s.tbParams, ...p } })),
@@ -78,4 +95,9 @@ export const useReportStore = create<ReportState>((set) => ({
       tbBalanced: true,
       tbError:    null,
     }),
+
+  setDlRows:    (rows) => set({ dlRows: rows, dlError: null }),
+  setDlLoading: (v)    => set({ dlLoading: v }),
+  setDlError:   (e)    => set({ dlError: e, dlLoading: false }),
+  resetDl:      ()     => set({ dlRows: [], dlError: null }),
 }))

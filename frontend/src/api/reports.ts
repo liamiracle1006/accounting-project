@@ -1,5 +1,5 @@
 import { api } from './client'
-import type { TrialBalanceParams, TrialBalanceResponse } from '@/types'
+import type { TrialBalanceParams, TrialBalanceResponse, DetailedLedgerParams, DetailedLedgerResponse } from '@/types'
 
 function buildQuery(params: Record<string, string | number | boolean | undefined>): string {
   const q = Object.entries(params)
@@ -14,6 +14,12 @@ export const reportsApi = {
   trialBalance: (params: TrialBalanceParams = {}) =>
     api.get<TrialBalanceResponse>(
       `/api/reports/trial-balance${buildQuery(params as Record<string, string | number | boolean | undefined>)}`
+    ),
+
+  // ── Sprint 4.2 明细账 ─────────────────────────────────────────────
+  detailedLedger: (params: DetailedLedgerParams) =>
+    api.get<DetailedLedgerResponse>(
+      `/api/reports/detailed-ledger${buildQuery(params as Record<string, string | number | boolean | undefined>)}`
     ),
 
   // ── 现有报表（保持不动）──────────────────────────────────────────
