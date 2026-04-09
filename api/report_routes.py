@@ -26,10 +26,116 @@ from services.period_closing_service import PeriodClosingService, PeriodClosingE
 from services.cashflow_service import CashFlowService
 from services.equity_change_service import EquityChangeService
 
+from services.ledger_service import LedgerService
+
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/reports", tags=["reports"])
 
 FINANCE_ROLES = (UserRole.BOSS, UserRole.ACCOUNTANT)
+
+
+def _get_ctx() -> tuple[int, int]:
+    from database.tenant_context import get_current_tenant
+    ctx = get_current_tenant()
+    if ctx is None:
+        raise HTTPException(status_code=401, detail="未设置租户上下文，请先登录")
+    if ctx.account_set_id is None:
+        raise HTTPException(status_code=400, detail="请先选择账套")
+    return ctx.tenant_id, ctx.account_set_id
+
+
+# ── Trial Balance (科目余额表 Sprint 4.1) ──────────────────────────────────
+
+@router.get("/trial-balance")
+def get_trial_balance(
+    date_from:          str | None = None,
+    date_to:            str | None = None,
+    max_level:          int | None = None,
+    hide_zero:          bool       = False,
+    start_subject_code: str | None = None,
+    end_subject_code:   str | None = None,
+    current_user: UserAccount = Depends(get_current_user),
+    db:           Session     = Depends(get_db),
+) -> Any:
+    """
+    科目余额表（试算平衡表）。
+    返回 [date_from, date_to] 期间所有科目的六列余额。
+    试算平衡断言在后端执行，不平时 balanced=false + 警告信息。
+    """
+    today = date.today()
+    try:
+        df = date.fromisoformat(date_from) if date_from else date(today.year, today.month, 1)
+        dt = date.fromisoformat(date_to)   if date_to   else today
+    except ValueError:
+        raise HTTPException(status_code=422, detail="日期格式应为 YYYY-MM-DD")
+
+    tenant_id, account_set_id = _get_ctx()
+    svc   = LedgerService(db)
+    items = svc.calculate_period_balances(
+        tenant_id          = tenant_id,
+        account_set_id     = account_set_id,
+        date_from          = df,
+        date_to            = dt,
+        max_level          = max_level,
+        hide_zero          = hide_zero,
+        start_subject_code = start_subject_code,
+        end_subject_code   = end_subject_code,
+    )
+
+    # 试算平衡断言
+    from decimal import Decimal
+    total_opening_d = sum(i.opening_debit  for i in items)
+    total_opening_c = sum(i.opening_credit for i in items)
+    total_current_d = sum(i.current_debit  for i in items)
+    total_current_c = sum(i.current_credit for i in items)
+    total_closing_d = sum(i.closing_debit  for i in items)
+    total_closing_c = sum(i.closing_credit for i in items)
+
+    opening_balanced = abs(total_opening_d - total_opening_c) < Decimal("1.00")
+    current_balanced = abs(total_current_d - total_current_c) < Decimal("1.00")
+    closing_balanced = abs(total_closing_d - total_closing_c) < Decimal("1.00")
+    balanced = opening_balanced and current_balanced and closing_balanced
+
+    if not balanced:
+        logger.error(
+            "试算不平衡！期初 D=%s C=%s | 本期 D=%s C=%s | 期末 D=%s C=%s",
+            total_opening_d, total_opening_c,
+            total_current_d, total_current_c,
+            total_closing_d, total_closing_c,
+        )
+
+    return {
+        "date_from":        str(df),
+        "date_to":          str(dt),
+        "balanced":         balanced,
+        "opening_balanced": opening_balanced,
+        "current_balanced": current_balanced,
+        "closing_balanced": closing_balanced,
+        "totals": {
+            "opening_debit":  float(total_opening_d),
+            "opening_credit": float(total_opening_c),
+            "current_debit":  float(total_current_d),
+            "current_credit": float(total_current_c),
+            "closing_debit":  float(total_closing_d),
+            "closing_credit": float(total_closing_c),
+        },
+        "items": [
+            {
+                "code":           i.code,
+                "name":           i.name,
+                "level":          i.level,
+                "direction":      i.direction,
+                "parent_code":    i.parent_code,
+                "opening_debit":  float(i.opening_debit),
+                "opening_credit": float(i.opening_credit),
+                "current_debit":  float(i.current_debit),
+                "current_credit": float(i.current_credit),
+                "closing_debit":  float(i.closing_debit),
+                "closing_credit": float(i.closing_credit),
+            }
+            for i in items
+        ],
+    }
 
 
 # ── Balance Sheet (会企01表) ────────────────────────────────────────────────

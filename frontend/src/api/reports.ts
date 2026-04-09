@@ -1,12 +1,22 @@
 import { api } from './client'
+import type { TrialBalanceParams, TrialBalanceResponse } from '@/types'
+
+function buildQuery(params: Record<string, string | number | boolean | undefined>): string {
+  const q = Object.entries(params)
+    .filter(([, v]) => v !== undefined && v !== null && v !== '')
+    .map(([k, v]) => `${k}=${encodeURIComponent(String(v))}`)
+    .join('&')
+  return q ? `?${q}` : ''
+}
 
 export const reportsApi = {
-  trialBalance: (dateFrom: string, dateTo: string) =>
-    api.get(`/api/reports/trial-balance?date_from=${dateFrom}&date_to=${dateTo}`),
+  // ── Sprint 4.1 科目余额表 ──────────────────────────────────────────
+  trialBalance: (params: TrialBalanceParams = {}) =>
+    api.get<TrialBalanceResponse>(
+      `/api/reports/trial-balance${buildQuery(params as Record<string, string | number | boolean | undefined>)}`
+    ),
 
-  incomeExpense: (year: number, month: number) =>
-    api.get(`/api/reports/income-expense?year=${year}&month=${month}`),
-
+  // ── 现有报表（保持不动）──────────────────────────────────────────
   balanceSheet: (asOf: string) =>
     api.get(`/api/reports/balance-sheet?as_of=${asOf}`),
 

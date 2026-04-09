@@ -217,9 +217,48 @@ export interface InitialBalanceNode {
   children?: InitialBalanceNode[]
 }
 
-export interface TrialBalanceResult {
-  items: { label: string; debit: number; credit: number; balanced: boolean }[]
+// ── Sprint 4.1 科目余额表 ─────────────────────────────────
+export interface TrialBalanceItem {
+  code:           string
+  name:           string
+  level:          number
+  direction:      '借' | '贷'   // 科目固有方向
+  parent_code:    string | null
+  opening_debit:  number
+  opening_credit: number
+  current_debit:  number
+  current_credit: number
+  closing_debit:  number
+  closing_credit: number
+}
+
+export interface TrialBalanceTotals {
+  opening_debit:  number
+  opening_credit: number
+  current_debit:  number
+  current_credit: number
+  closing_debit:  number
+  closing_credit: number
+}
+
+export interface TrialBalanceResponse {
+  date_from:        string
+  date_to:          string
+  balanced:         boolean
   opening_balanced: boolean
+  current_balanced: boolean
+  closing_balanced: boolean
+  totals:           TrialBalanceTotals
+  items:            TrialBalanceItem[]
+}
+
+export interface TrialBalanceParams {
+  date_from?:          string
+  date_to?:            string
+  max_level?:          number
+  hide_zero?:          boolean
+  start_subject_code?: string
+  end_subject_code?:   string
 }
 
 // ── 财务工作台 ────────────────────────────────────────────
