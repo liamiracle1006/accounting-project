@@ -328,6 +328,41 @@ export interface DetailedLedgerParams {
   keyword?:     string
 }
 
+// ── Sprint 4.3 财务报表 ───────────────────────────────────
+export interface BSLineItem {
+  code:     string
+  name:     string
+  end_bal:  number
+  beg_bal:  number
+  is_total: boolean
+}
+
+export interface BalanceSheet {
+  as_of_date:  string
+  beg_of_year: string
+  assets:      BSLineItem[]
+  liabilities: BSLineItem[]
+  equity:      BSLineItem[]
+  balanced:    boolean
+  diff:        number
+}
+
+export interface ISLineItem {
+  code:     string
+  name:     string
+  cur_amt:  number
+  prev_amt: number
+  is_total: boolean
+}
+
+export interface IncomeStatement {
+  date_from: string
+  date_to:   string
+  prev_from: string
+  prev_to:   string
+  items:     ISLineItem[]
+}
+
 // ── 旧账导入向导 ─────────────────────────────────────────
 export type ImportSourceSystem = 'KINGDEE' | 'YONYOU' | 'GUANJIA' | 'EXCEL'
 

@@ -1,5 +1,9 @@
 import { api } from './client'
-import type { TrialBalanceParams, TrialBalanceResponse, DetailedLedgerParams, DetailedLedgerResponse } from '@/types'
+import type {
+  TrialBalanceParams, TrialBalanceResponse,
+  DetailedLedgerParams, DetailedLedgerResponse,
+  BalanceSheet, IncomeStatement,
+} from '@/types'
 
 function buildQuery(params: Record<string, string | number | boolean | undefined>): string {
   const q = Object.entries(params)
@@ -22,12 +26,12 @@ export const reportsApi = {
       `/api/reports/detailed-ledger${buildQuery(params as Record<string, string | number | boolean | undefined>)}`
     ),
 
-  // ── 现有报表（保持不动）──────────────────────────────────────────
+  // ── Sprint 4.3 财务报表 ────────────────────────────────────────────
   balanceSheet: (asOf: string) =>
-    api.get(`/api/reports/balance-sheet?as_of=${asOf}`),
+    api.get<BalanceSheet>(`/api/reports/balance-sheet?as_of=${asOf}`),
 
   incomeStatement: (dateFrom: string, dateTo: string) =>
-    api.get(`/api/reports/income-statement?date_from=${dateFrom}&date_to=${dateTo}`),
+    api.get<IncomeStatement>(`/api/reports/income-statement?date_from=${dateFrom}&date_to=${dateTo}`),
 
   cashFlow: (dateFrom: string, dateTo: string) =>
     api.get(`/api/reports/cash-flow?date_from=${dateFrom}&date_to=${dateTo}`),

@@ -16,6 +16,8 @@ const PeriodClosingPage  = lazy(() => import('@/features/periods/PeriodClosingPa
 const ReportsPage        = lazy(() => import('@/features/reports/ReportsPage'))
 const TrialBalancePage      = lazy(() => import('@/features/reports/TrialBalancePage'))
 const DetailedLedgerPage    = lazy(() => import('@/features/reports/DetailedLedgerPage'))
+const BalanceSheetPage      = lazy(() => import('@/features/reports/BalanceSheetPage'))
+const IncomeStatementPage   = lazy(() => import('@/features/reports/IncomeStatementPage'))
 const ExpensesPage       = lazy(() => import('@/features/expenses/ExpensesPage'))
 const DecisionsPage      = lazy(() => import('@/features/decisions/DecisionsPage'))
 const AssetsPage         = lazy(() => import('@/features/assets/AssetsPage'))
@@ -41,8 +43,10 @@ export default function App() {
               <Route path="batch"      element={<BatchImportConsole />} />
               <Route path="closing"    element={<PeriodClosingPage />} />
               <Route path="reports"        element={<ReportsPage />} />
-              <Route path="trial-balance"  element={<TrialBalancePage />} />
-              <Route path="ledger"         element={<DetailedLedgerPage />} />
+              <Route path="trial-balance"    element={<TrialBalancePage />} />
+              <Route path="ledger"           element={<DetailedLedgerPage />} />
+              <Route path="balance-sheet"    element={<BalanceSheetPage />} />
+              <Route path="income-statement" element={<IncomeStatementPage />} />
               <Route path="expenses"   element={<ExpensesPage />} />
               <Route path="decisions"  element={<DecisionsPage />} />
               <Route path="assets"     element={<AssetsPage />} />
