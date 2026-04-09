@@ -342,6 +342,269 @@ GET   /task/{task_id}/results     — 三色明细报告（success 列表 / need
 
 ---
 
+---
+
+### Sprint 3.6 — AI 规则控制台与沉淀闭环 ✅ (commit: `08c0543`)
+
+**架构：前端沉淀弹窗 + 后端学习钩子打通完整 AI → 入账 → 学习闭环**
+
+#### 核心实现（均在前端 React 组件）
+
+| 功能 | 实现 |
+|------|------|
+| 习惯规则编辑修复 | 表格行新增 [编辑] 按钮；`_habitRulesCache` 缓存规则数据；`openHabitModal(id)` 从缓存预填字段；`saveHabitRule()` 自动分流 POST（新建）/ PUT（更新） |
+| 权重列 | 规则表格新增"权重"列，提取 `rule_json.edges[*].weight` 最大值；weight ≥ 5 显示 🔥 橙色高亮 |
+| 沉淀弹窗（核心） | `selectTrack()` 选轨时快照 `_aiOriginalLineCodes`；`confirmVoucher()` 入账前比对科目变化；有修改 → 弹沉淀弹窗；[是，更新规则并保存] → 保留 `habit_rule_id` 触发后端学习；[仅修改本次] → 强制 `habit_rule_id=null` 不污染 DAG |
+
+#### 完整 AI 闭环
+```
+AI 生成草稿 → 财务人员选轨/修改 → 沉淀弹窗 → 确认入账
+                                          ↓
+                              habit_rule_id → 后端 BackgroundTask
+                                          → learn_from_voucher_async()
+                                          → DAG edge weight++ / 新枝发芽
+```
+
+---
+
+### Sprint 3.x React 迁移 ✅ (commit: `69fc5d1`)
+
+**架构：Vite 5 + React 18 + TypeScript strict + Tailwind CSS + Zustand + React Router v6**
+
+将 `static/index.html`（5500+ 行单文件）完整迁移为现代化前端工程：
+
+| 层 | 技术选型 |
+|----|---------|
+| 构建 | Vite 5，HMR 极速 |
+| UI | React 18 + TypeScript strict |
+| 路由 | React Router v6 + RequireAuth 权限守卫 |
+| 状态 | Zustand（4 个 store：auth / voucher / batch / toast） |
+| 样式 | Tailwind CSS v3 |
+| API | 原生 fetch 封装，401 自动登出 |
+
+**目录结构**：`frontend/src/` 按 Feature-Sliced 思路拆分，约 54 个文件：
+
+```
+api/          ← 15 个 API 模块（全强类型）
+store/        ← 4 个 Zustand store
+components/   ← 公共组件（Toast, Modal, Spinner, Sidebar 等）
+features/     ← 20 个业务页面（按域拆分）
+types/        ← 所有 API 类型（1:1 映射后端 schema）
+```
+
+---
+
+## Epic 4.0 — 极速算盘与报表引擎 ✅
+
+### Sprint 4.1 — 万能算盘引擎 + 科目余额表 ✅ (commit: `7827ebd`)
+
+**架构：确定性六列余额引擎（InitialBalance + VoucherLine 双数据源，有符号中间值滚算）**
+
+#### 新建文件
+
+| 文件 | 作用 |
+|------|------|
+| `services/ledger_service.py` | `LedgerService.calculate_period_balances()` — 万能算盘核心引擎 |
+| `frontend/src/features/reports/TrialBalancePage.tsx` | 科目余额表前端页面 |
+
+#### 修改文件
+- `api/report_routes.py`：新增 `GET /api/reports/trial-balance` 端点
+
+#### 核心算法
+
+**`TrialBalanceItem`（六列数据类）**
+```python
+@dataclass
+class TrialBalanceItem:
+    code, name, level, direction, parent_code
+    opening_debit, opening_credit   # 期初余额
+    current_debit, current_credit   # 本期发生额
+    closing_debit, closing_credit   # 期末余额
+    _opening_signed, _closing_signed  # 内部有符号值（父级滚算用）
+```
+
+**计算公式（有符号中间值，正=借，负=贷）**
+```
+yr_signed    = year_start_balance（正负取决于 balance_direction）
+pre_signed   = yr_signed + Σ(pre_DEBIT) - Σ(pre_CREDIT)  ← 年初→期前
+cur_delta    = Σ(cur_DEBIT) - Σ(cur_CREDIT)               ← 期内发生额
+closing_sig  = pre_signed + cur_delta
+
+# 最终拆回借/贷列：正值→借方；负值→贷方
+```
+
+**父级滚算（多级科目汇总）**
+1. 叶节点直接计算
+2. 父级 = Σ子级 `_closing_signed`，再拆回借/贷列
+3. 全程有符号传递，不丢符号信息
+
+**试算平衡断言**（后端执行）
+- `Σopening_debit == Σopening_credit`
+- `Σcurrent_debit == Σcurrent_credit`
+- `Σclosing_debit == Σclosing_credit`
+- 不平时返回 `balanced: false` + 警告，不报错（财务人员需感知）
+
+#### 前端功能
+- 期间选择器（`date_from` / `date_to`，YYYY-MM-DD）
+- 六列表格：期初借/贷、本期借/贷、期末借/贷
+- 科目层级缩进（`level * 12px`）
+- 试算不平衡红色 Banner
+- Excel 导出（`xlsx` 库）、打印按钮
+- 零余额隐藏开关、最大层级过滤、科目范围过滤
+
+#### API 端点
+
+```
+GET /api/reports/trial-balance
+  ?date_from=YYYY-MM-DD
+  &date_to=YYYY-MM-DD
+  &max_level=2        ← 可选，限制科目层级
+  &hide_zero=true     ← 可选，隐藏零余额
+  &start_subject_code=1001  ← 可选，科目范围
+  &end_subject_code=1999
+```
+
+---
+
+### Sprint 4.2 — 穿透查账与明细账 ✅ (commit: `0be5e1e`)
+
+**架构：Running Balance 逐笔流水引擎（复用 Sprint 4.1 同一算盘公式，严禁重复聚合）**
+
+#### 新建文件
+
+| 文件 | 作用 |
+|------|------|
+| `services/ledger_detail_service.py` | `LedgerDetailService.get_detailed_ledger()` — 逐笔余额引擎 |
+| `frontend/src/features/reports/DetailedLedgerPage.tsx` | 明细账主页面（左主表 + 右快速切换面板） |
+| `frontend/src/components/common/VoucherViewerModal.tsx` | 只读凭证弹窗（复用现有 Modal 组件） |
+
+#### 修改文件
+- `api/report_routes.py`：新增 `GET /api/reports/detailed-ledger` 端点
+- `frontend/src/types/index.ts`：追加 `DetailedLedgerRow / Response / Params` 类型
+- `frontend/src/api/reports.ts`：追加 `detailedLedger()` 调用
+- `frontend/src/store/useReportStore.ts`：追加明细账状态（`dlRows / dlLoading / dlError`）
+- `frontend/src/features/reports/TrialBalancePage.tsx`：科目名称添加下钻跳转
+- `frontend/src/App.tsx`：新增 `/ledger` 路由
+- `frontend/src/components/layout/Sidebar.tsx`：新增"明细账"导航项
+
+#### Running Balance 算法（与 Sprint 4.1 完全相同的有符号公式）
+
+```python
+# ① 年初余额
+yr_signed = year_start_balance（正负取决于 balance_direction）
+
+# ② 期前发生额（年初 → date_from - 1）
+opening_sig = yr_signed + pre_DEBIT - pre_CREDIT
+
+# ③ 逐笔滚算（date_from → date_to，按日期/字号升序）
+running = opening_sig
+for line in current_rows:
+    debit  = line.amount if DEBIT  else 0
+    credit = line.amount if CREDIT else 0
+    running += debit - credit      # DEBIT 恒 +，CREDIT 恒 −
+    direction = "借" if running > 0 else "贷" if running < 0 else "平"
+    balance   = abs(running)
+
+# ④ 本年累计（年初 → date_to，单次聚合）
+ytd = _aggregate_single(year_start, date_to)
+```
+
+**特殊行注入（后端组装，前端按 `row_type` 做样式）**
+
+| row_type | 含义 | 背景 |
+|----------|------|------|
+| `opening` | 期初余额 | 蓝色 `bg-blue-50` |
+| `transaction` | 实际凭证明细行 | 普通，hover 效果 |
+| `period_total` | 本期合计 | 灰色 `bg-gray-100` |
+| `ytd_total` | 本年累计 | 灰色 `bg-gray-100` |
+
+#### 前端功能
+- 日期选择 + 摘要关键字模糊搜索
+- 右侧快速切换面板（搜索框 + 科目列表，`subjectsApi.tree()` 扁平化）
+- 凭证字号可点击 → `VoucherViewerModal` 弹窗展示凭证全部明细行
+- 科目余额表 → 点击科目名称 → 跳转明细账（URL 参数携带 `subject_code + date_from + date_to`）
+- 打印按钮
+
+#### API 端点
+
+```
+GET /api/reports/detailed-ledger
+  ?subject_code=1002          ← 必填
+  &date_from=YYYY-MM-DD
+  &date_to=YYYY-MM-DD
+  &keyword=差旅               ← 可选，摘要模糊搜索
+```
+
+---
+
+### Sprint 4.3 — 资产负债表与利润表前端 ✅ (commit: `d13f7cc`)
+
+**架构：后端已完备，本 Sprint 纯前端视图层**
+
+> **关键决策**：后端 `services/report_service.py`（435行）和所有财务报表端点在早期 Epic 中已建立，直接复用。Gemini 方案中的"AI 公式生成"功能经评估后**不实施**——中国会计准则科目编码高度标准化，公式为确定性知识，AI 介入只增加误差风险，不增加价值。
+
+#### 新建文件
+
+| 文件 | 作用 |
+|------|------|
+| `frontend/src/features/reports/BalanceSheetPage.tsx` | 资产负债表（会企01表）前端页面 |
+| `frontend/src/features/reports/IncomeStatementPage.tsx` | 利润表（会企02表）前端页面 |
+
+#### 修改文件
+- `frontend/src/types/index.ts`：追加 `BSLineItem / BalanceSheet / ISLineItem / IncomeStatement` 类型
+- `frontend/src/api/reports.ts`：`balanceSheet() / incomeStatement()` 添加强类型泛型
+- `frontend/src/App.tsx`：新增 `/balance-sheet`、`/income-statement` 路由
+- `frontend/src/components/layout/Sidebar.tsx`：新增"资产负债表"、"利润表"导航项
+
+#### 资产负债表（BalanceSheetPage）
+
+**布局**：左右双拼（资产 | 负债及所有者权益），期末余额 + 年初余额两列
+
+| 特性 | 实现 |
+|------|------|
+| 期间选择 | 年份输入 + 月份下拉，自动计算月末 `as_of` 日期 |
+| 不平衡预警 | 红色 Banner，显示差额金额 |
+| 合计行 | `is_total=true` → 加粗 + 灰色背景 |
+| 零值显示 | 非合计行为 `—`，合计行强制显示数值 |
+
+**后端接口**：`GET /api/reports/balance-sheet?as_of=YYYY-MM-DD`
+- 返回：`assets[]`（资产方）、`liabilities[]`（负债方）、`equity[]`（权益方）、`balanced`、`diff`
+
+#### 利润表（IncomeStatementPage）
+
+**布局**：单列垂直阶梯式，本期金额 + 上期金额两列
+
+| 特性 | 实现 |
+|------|------|
+| 期间选择 | 年份 + 月份，自动计算月初/月末 |
+| 行缩进 | `减：` / `加：` 开头行左缩进（`pl-6`） |
+| 负数显示 | 红色字体 |
+| 关键行高亮 | 四、净利润 → 绿色背景加粗 |
+
+**后端接口**：`GET /api/reports/income-statement?date_from=YYYY-MM-DD&date_to=YYYY-MM-DD`
+- 返回：`items[]`（行项目），`prev_from/prev_to`（上期同区间）
+
+#### 已有后端基础（零改动）
+
+| 服务 | 内容 |
+|------|------|
+| `services/report_service.py` | 硬编码中国企业会计准则标准科目映射（1001-6899），资产负债表 + 利润表完整实现 |
+| `GET /api/reports/balance-sheet` | 期末余额 + 年初余额，含 `balanced` 标志 |
+| `GET /api/reports/income-statement` | 本期金额 + 上年同期金额 |
+| `GET /api/reports/cash-flow` | 现金流量表（会企03表，间接法） |
+| `GET /api/reports/equity-changes` | 所有者权益变动表（会企04表） |
+
+---
+
+## Epic 4.0 架构铁律（贯穿 4.1~4.3）
+
+1. **报表 = 凭证数据的不同视图**：所有报表均从 `VoucherLine + VoucherHeader（POSTED）` 聚合，严禁独立存储报表数值
+2. **单一算盘原则**：Sprint 4.2 明细账的期初余额算法与 Sprint 4.1 `LedgerService` 使用**完全相同**的有符号中间值公式，不允许两套
+3. **确定性优于生成性**：财务报表公式是中国会计准则的确定性知识，不使用 AI 生成（AI 仅用于有业务数据支撑的场景，如凭证生成、财务分析）
+4. **试算平衡断言**：科目余额表在后端执行三列平衡断言；资产负债表返回 `balanced` 标志，前端展示不平衡警告
+
+---
+
 ## 待做
 
 ### Sprint 3.6（暂定） — 批量复核工作台
