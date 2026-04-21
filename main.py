@@ -31,6 +31,7 @@ from api.voucher_ai_routes import router as voucher_ai_router
 from api.voucher_routes import router as voucher_router
 from api.period_routes import router as period_router
 from api.batch_routes import router as batch_router
+from api.validate_routes import router as validate_router
 from services.auth_service import get_current_user
 from services.audit_guard import register_voucher_guard
 
@@ -82,6 +83,7 @@ app.include_router(voucher_ai_router,       dependencies=_auth)
 app.include_router(voucher_router,          dependencies=_auth)
 app.include_router(period_router,           dependencies=_auth)
 app.include_router(batch_router,            dependencies=_auth)
+app.include_router(validate_router)  # 开发测试，无鉴权
 
 _STATIC = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=_STATIC), name="static")

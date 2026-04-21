@@ -22,6 +22,7 @@ const navItems: NavItem[] = [
   { to: '/ledger',           label: '明细账',     financeOnly: true },
   { to: '/balance-sheet',    label: '资产负债表', financeOnly: true },
   { to: '/income-statement', label: '利润表',     financeOnly: true },
+  { to: '/validate',         label: '[Dev] 报表验证', financeOnly: true },
   { to: '/expenses',    label: '费用申请' },
   { to: '/decisions',   label: '老板决策台', bossOnly: true },
   { to: '/assets',      label: '固定资产',   financeOnly: true },

@@ -18,6 +18,7 @@ const TrialBalancePage      = lazy(() => import('@/features/reports/TrialBalance
 const DetailedLedgerPage    = lazy(() => import('@/features/reports/DetailedLedgerPage'))
 const BalanceSheetPage      = lazy(() => import('@/features/reports/BalanceSheetPage'))
 const IncomeStatementPage   = lazy(() => import('@/features/reports/IncomeStatementPage'))
+const ValidatePage          = lazy(() => import('@/features/validate/ValidatePage'))
 const ExpensesPage       = lazy(() => import('@/features/expenses/ExpensesPage'))
 const DecisionsPage      = lazy(() => import('@/features/decisions/DecisionsPage'))
 const AssetsPage         = lazy(() => import('@/features/assets/AssetsPage'))
@@ -47,6 +48,7 @@ export default function App() {
               <Route path="ledger"           element={<DetailedLedgerPage />} />
               <Route path="balance-sheet"    element={<BalanceSheetPage />} />
               <Route path="income-statement" element={<IncomeStatementPage />} />
+              <Route path="validate"         element={<ValidatePage />} />
               <Route path="expenses"   element={<ExpensesPage />} />
               <Route path="decisions"  element={<DecisionsPage />} />
               <Route path="assets"     element={<AssetsPage />} />
