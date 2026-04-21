@@ -18,7 +18,7 @@ AgentLedger V4.0 — Batch Import Schemas (Sprint 3.5)
   MEDIUM — 黄灯，入库但 needs_review=True，前端标黄
   LOW    — 黄灯（Track B 冷启动），入库但 needs_review=True
 """
-from datetime import date, datetime
+from datetime import date as _date, datetime
 from typing import Literal, Optional
 
 from pydantic import BaseModel, Field
@@ -35,7 +35,7 @@ class StandardReceiptItem(BaseModel):
     无论来自 Excel 行还是图片 OCR，最终都转换为此格式，
     供前端"核对网格"展示和用户手动纠偏，再提交给批量入账流水线。
     """
-    date:         date             = Field(..., description="票据日期")
+    date:         _date            = Field(..., description="票据日期")
     amount:       float            = Field(..., gt=0, description="金额（正数，元）")
     counterparty: Optional[str]    = Field(None, max_length=200, description="对方单位名称")
     summary:      str              = Field(..., min_length=1, max_length=300,

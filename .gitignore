@@ -29,3 +29,10 @@ Thumbs.db
 # Logs
 *.log
 logs/
+
+# Node
+node_modules/
+frontend/dist/
+
+# ChromaDB
+chroma_db/

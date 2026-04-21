@@ -75,6 +75,44 @@ def _try_load_excel(file_bytes: bytes, skiprows: int) -> pd.DataFrame | None:
         return None
 
 
+def _try_load_excel_multiheader(file_bytes: bytes, skiprows: int) -> pd.DataFrame | None:
+    """读取双行列头格式（如荆鹏等软件导出的科目余额表）。"""
+    try:
+        df = pd.read_excel(
+            io.BytesIO(file_bytes),
+            skiprows=skiprows,
+            header=[0, 1],
+            dtype=str,
+        )
+        new_cols = []
+        for col in df.columns:
+            if isinstance(col, tuple):
+                parts = [str(p).strip() for p in col
+                         if str(p).strip() not in ('nan', 'None', '')]
+                new_cols.append(''.join(parts))
+            else:
+                new_cols.append(str(col).strip())
+        df.columns = new_cols
+        return df
+    except Exception:
+        return None
+
+
+def _find_header_row(file_bytes: bytes) -> int | None:
+    """扫描前 30 行，找到包含科目代码列头的行号。"""
+    header_hint = re.compile(r"科目.*(代码|编码)|代码|编码|期末|期初|本期")
+    try:
+        raw = pd.read_excel(io.BytesIO(file_bytes), header=None, dtype=str, nrows=30)
+        for i, row in raw.iterrows():
+            cells = [str(c).strip() for c in row if pd.notna(c)]
+            matches = sum(1 for c in cells if header_hint.search(c))
+            if matches >= 2:
+                return int(i)
+    except Exception:
+        pass
+    return None
+
+
 def parse_trial_balance(file_bytes: bytes) -> dict:
     """
     解析科目余额表 Excel，返回:
@@ -92,18 +130,32 @@ def parse_trial_balance(file_bytes: bytes) -> dict:
     col_mapping: dict[str, str] | None = None
     df: pd.DataFrame | None = None
 
-    for skip in range(6):
+    # 先用智能扫描找到列头行，再按固定范围兜底
+    header_row = _find_header_row(file_bytes)
+    skip_candidates = list(dict.fromkeys(
+        ([header_row] if header_row is not None else []) + list(range(15))
+    ))
+
+    for skip in skip_candidates:
+        # Try single-header format
         df_try = _try_load_excel(file_bytes, skip)
-        if df_try is None:
-            continue
-        mapping = _detect_columns(df_try)
-        if mapping is not None:
-            col_mapping = mapping
-            df = df_try
-            break
+        if df_try is not None:
+            mapping = _detect_columns(df_try)
+            if mapping is not None:
+                col_mapping = mapping
+                df = df_try
+                break
+
+        # Try double-row merged-cell header format (e.g. 荆鹏/HBJP export)
+        df_try = _try_load_excel_multiheader(file_bytes, skip)
+        if df_try is not None:
+            mapping = _detect_columns(df_try)
+            if mapping is not None:
+                col_mapping = mapping
+                df = df_try
+                break
 
     if df is None or col_mapping is None:
-        # 提供友好的错误信息
         raw_df = _try_load_excel(file_bytes, 0)
         found_cols = list(raw_df.columns) if raw_df is not None else []
         raise ValueError(

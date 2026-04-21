@@ -23,7 +23,7 @@ from api.invoice_routes import router as invoice_router
 from api.ocr_routes import router as ocr_router
 from api.rag_routes import router as rag_router
 from api.analytics_routes import router as analytics_router
-from api.account_set_routes import router as account_set_router
+# from api.account_set_routes import router as account_set_router  # service not yet implemented
 from api.subject_routes import router as subject_router
 from api.initial_balance_routes import router as initial_balance_router
 from api.import_routes import router as import_router
@@ -75,7 +75,7 @@ app.include_router(invoice_router,     dependencies=_auth)
 app.include_router(ocr_router,         dependencies=_auth)
 app.include_router(rag_router,         dependencies=_auth)
 app.include_router(analytics_router,   dependencies=_auth)
-app.include_router(account_set_router, dependencies=_auth)
+# app.include_router(account_set_router, dependencies=_auth)
 app.include_router(subject_router,          dependencies=_auth)
 app.include_router(initial_balance_router,  dependencies=_auth)
 app.include_router(import_router,           dependencies=_auth)
@@ -91,6 +91,11 @@ app.mount("/static", StaticFiles(directory=_STATIC), name="static")
 
 @app.get("/", include_in_schema=False)
 def index():
+    return FileResponse(_STATIC / "index.html")
+
+
+@app.get("/{full_path:path}", include_in_schema=False)
+def spa_fallback(full_path: str):
     return FileResponse(_STATIC / "index.html")
 
 

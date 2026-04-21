@@ -594,9 +594,67 @@ GET /api/reports/detailed-ledger
 | `GET /api/reports/cash-flow` | 现金流量表（会企03表，间接法） |
 | `GET /api/reports/equity-changes` | 所有者权益变动表（会企04表） |
 
+### Sprint 4.4 — 报表验证工具（Excel → 计算报表 → diff 对比）✅
+
+**目标：开发者用科目余额表 Excel 直接验证报表公式映射，无需数据库**
+
+#### 新建文件
+
+| 文件 | 作用 |
+|---|---|
+| `services/validation_service.py` | Excel 解析引擎（pandas）+ 报表计算 + diff 对比 |
+| `api/validate_routes.py` | `POST /api/validate/trial-balance`（无 JWT 鉴权，开发测试用）|
+| `database/seed_local.sql` | V4.0 兼容最小种子数据（tenant + account_set + 三个默认用户）|
+| `database/seed_demo_v4.sql` | V4.0 兼容演示数据（星辰科技 2026 年 1-3 月，含 13 条凭证）|
+| `DEV_SETUP.md` | 本地开发启动完整指南（MySQL 导入命令、启动顺序、默认账号）|
+
+#### 修改文件
+
+| 文件 | 变更内容 |
+|---|---|
+| `services/report_service.py` | 提取 `_map_balance_sheet()` / `_map_income_statement()` 为纯函数，不依赖 DB Session |
+| `main.py` | 注册 `validate_router`（无鉴权）；注释掉未实现的 `account_set_routes`；补充 SPA catch-all 路由 |
+| `schemas/batch_schemas.py` | 修复 Pydantic v2 字段名冲突：`date: date` → `from datetime import date as _date` |
+| `.gitignore` | 补充 `node_modules/`、`frontend/dist/`、`chroma_db/` |
+
+#### 核心设计
+
+**Excel 解析流程（三层自适应，兼容各会计软件导出格式）**
+```
+1. _find_header_row()     — 扫描前 30 行，找到含 ≥2 个关键词的列头行（不依赖固定行号）
+2. _try_load_excel()      — 单行列头，skiprows = 0~14 逐一尝试
+3. _try_load_excel_multiheader() — 双行合并列头（如荆鹏/HBJP），skiprows + header=[0,1]，
+                                    合并 tuple 列名为 "期初余额借方"/"本期发生额贷方" 等
+列名识别用正则，不做精确匹配（"科目编码"/"科目代码"/"code" 均可识别）
+```
+
+**API 请求（multipart form）**
+```
+POST /api/validate/trial-balance
+  trial_balance_file: Excel（必填）
+  reference_bs_file:  资产负债表 Excel（可选，用于 diff）
+  reference_is_file:  利润表 Excel（可选，用于 diff）
+
+响应：
+  { "row_count", "column_mapping", "balance_sheet", "income_statement",
+    "bs_diff", "is_diff", "raw_rows" }
+```
+
+**diff 对比逻辑**：对参考 Excel 的行项目名称做规范化（去序号前缀、去"减："等），
+与计算结果模糊匹配，差额 < 1 元标记 `match=true`，未匹配行不报告（避免误报）。
+
+#### 兼容性修复（公司电脑调试阶段）
+
+| 问题 | 原因 | 修复 |
+|---|---|---|
+| `.xls` 文件读取失败 | xlrd 未安装 | `pip install xlrd` |
+| 列名显示 `科目余额表.1 .2 ...` | 荆鹏导出为双行合并列头 | 新增 `_try_load_excel_multiheader()` |
+| `/validate` 前端 404 | React Router 路由未被后端处理 | `main.py` 补 SPA catch-all |
+| Pydantic v2 字段名冲突 | `date: date` 自引用 | `from datetime import date as _date` |
+
 ---
 
-## Epic 4.0 架构铁律（贯穿 4.1~4.3）
+## Epic 4.0 架构铁律（贯穿 4.1~4.4）
 
 1. **报表 = 凭证数据的不同视图**：所有报表均从 `VoucherLine + VoucherHeader（POSTED）` 聚合，严禁独立存储报表数值
 2. **单一算盘原则**：Sprint 4.2 明细账的期初余额算法与 Sprint 4.1 `LedgerService` 使用**完全相同**的有符号中间值公式，不允许两套
