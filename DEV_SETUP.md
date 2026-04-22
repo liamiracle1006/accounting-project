@@ -1,5 +1,25 @@
 # AgentLedger 本地开发启动指南
 
+## 每次启动（速查）
+
+**开两个 VSCode 终端，分别运行：**
+
+```
+终端 1（后端）          终端 2（前端）
+─────────────────────   ─────────────────────
+py -3.12 -m uvicorn     cd frontend
+main:app --reload       npm run dev
+```
+
+| 地址 | 用途 |
+|---|---|
+| http://localhost:5173 | 前端界面（登录这里）|
+| http://localhost:8000/docs | 后端 API 文档 |
+
+默认账号密码均为 `123456`，用户名：`accountant`（财务）/ `boss` / `manager`
+
+---
+
 ## 前置要求
 - Python 3.12
 - Node.js 20+
