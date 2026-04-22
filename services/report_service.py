@@ -171,7 +171,6 @@ def _map_balance_sheet(
     a("1401+", "存货",
       E("1401","1402","1403","1405","1406","1408"),
       B("1401","1402","1403","1405","1406","1408"))
-    a("1801", "其他流动资产",            E("1801"),  B("1801"))
 
     ca_end = sum(i.end_bal for i in bs.assets)
     ca_beg = sum(i.beg_bal for i in bs.assets)

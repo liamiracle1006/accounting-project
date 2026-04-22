@@ -27,8 +27,12 @@ _COL_PATTERNS: dict[str, re.Pattern] = {
     "code":       re.compile(r"科目.*(代码|编码)|代码|编码|code", re.IGNORECASE),
     "beg_debit":  re.compile(r"期初.*(借|借方)|(借|借方).*期初", re.IGNORECASE),
     "beg_credit": re.compile(r"期初.*(贷|贷方)|(贷|贷方).*期初", re.IGNORECASE),
-    "cur_debit":  re.compile(r"本期.*(借|借方)|(借|借方).*本期|(发生|累计).*(借|借方)", re.IGNORECASE),
-    "cur_credit": re.compile(r"本期.*(贷|贷方)|(贷|贷方).*本期|(发生|累计).*(贷|贷方)", re.IGNORECASE),
+    # 本期发生额（单月）
+    "cur_debit":  re.compile(r"本期.*(借|借方)|(借|借方).*本期", re.IGNORECASE),
+    "cur_credit": re.compile(r"本期.*(贷|贷方)|(贷|贷方).*本期", re.IGNORECASE),
+    # 本年累计发生额（年累计，优先用于利润表）
+    "ytd_debit":  re.compile(r"本年累计.*(借|借方)|(累计发生).*(借|借方)", re.IGNORECASE),
+    "ytd_credit": re.compile(r"本年累计.*(贷|贷方)|(累计发生).*(贷|贷方)", re.IGNORECASE),
     "end_debit":  re.compile(r"期末.*(借|借方)|(借|借方).*期末", re.IGNORECASE),
     "end_credit": re.compile(r"期末.*(贷|贷方)|(贷|贷方).*期末", re.IGNORECASE),
 }
@@ -168,6 +172,8 @@ def parse_trial_balance(file_bytes: bytes) -> dict:
     beg_bal:        dict[str, Decimal] = {}
     cur_debit_map:  dict[str, Decimal] = {}
     cur_credit_map: dict[str, Decimal] = {}
+    ytd_debit_map:  dict[str, Decimal] = {}
+    ytd_credit_map: dict[str, Decimal] = {}
     raw_rows: list[dict] = []
 
     code_col = col_mapping["code"]
@@ -188,6 +194,8 @@ def parse_trial_balance(file_bytes: bytes) -> dict:
         beg_c  = get(row, "beg_credit")
         cur_d  = get(row, "cur_debit")
         cur_c  = get(row, "cur_credit")
+        ytd_d  = get(row, "ytd_debit")
+        ytd_c  = get(row, "ytd_credit")
 
         net_end = end_d - end_c
         net_beg = beg_d - beg_c
@@ -200,6 +208,10 @@ def parse_trial_balance(file_bytes: bytes) -> dict:
             cur_debit_map[code]  = cur_debit_map.get(code, Decimal("0")) + cur_d
         if cur_c != 0:
             cur_credit_map[code] = cur_credit_map.get(code, Decimal("0")) + cur_c
+        if ytd_d != 0:
+            ytd_debit_map[code]  = ytd_debit_map.get(code, Decimal("0")) + ytd_d
+        if ytd_c != 0:
+            ytd_credit_map[code] = ytd_credit_map.get(code, Decimal("0")) + ytd_c
 
         raw_rows.append({
             "code":       code,
@@ -209,19 +221,23 @@ def parse_trial_balance(file_bytes: bytes) -> dict:
             "beg_credit": float(beg_c),
             "cur_debit":  float(cur_d),
             "cur_credit": float(cur_c),
+            "ytd_debit":  float(ytd_d),
+            "ytd_credit": float(ytd_c),
         })
 
     if not raw_rows:
         raise ValueError("解析到 0 条有效科目行，请检查文件格式是否正确。")
 
     return {
-        "end_bal":        end_bal,
-        "beg_bal":        beg_bal,
-        "cur_debit_map":  cur_debit_map,
-        "cur_credit_map": cur_credit_map,
-        "raw_rows":       raw_rows,
-        "column_mapping": col_mapping,
-        "row_count":      len(raw_rows),
+        "end_bal":         end_bal,
+        "beg_bal":         beg_bal,
+        "cur_debit_map":   cur_debit_map,
+        "cur_credit_map":  cur_credit_map,
+        "ytd_debit_map":   ytd_debit_map,
+        "ytd_credit_map":  ytd_credit_map,
+        "raw_rows":        raw_rows,
+        "column_mapping":  col_mapping,
+        "row_count":       len(raw_rows),
     }
 
 
@@ -247,8 +263,13 @@ def compute_bs_from_trial_balance(parsed: dict) -> BalanceSheet:
 
 
 def compute_is_from_trial_balance(parsed: dict) -> IncomeStatement:
-    """用本期发生额计算利润表（无上期对比数据）。"""
-    cur_fn  = _make_sum_fn(parsed["cur_debit_map"], parsed["cur_credit_map"])
+    """用本年累计发生额（优先）或本期发生额计算利润表。"""
+    # 年末试算平衡表中 6xxx 的「本期发生额」经结转后为 0，需用「本年累计发生额」
+    ytd_d = parsed.get("ytd_debit_map", {})
+    ytd_c = parsed.get("ytd_credit_map", {})
+    is_debit  = ytd_d if ytd_d else parsed["cur_debit_map"]
+    is_credit = ytd_c if ytd_c else parsed["cur_credit_map"]
+    cur_fn  = _make_sum_fn(is_debit, is_credit)
     prev_fn = _make_sum_fn({}, {})  # 科目余额表无上期数据，上期列为 0
     return _map_income_statement(
         cur_fn, prev_fn,
