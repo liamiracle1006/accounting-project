@@ -192,6 +192,7 @@ def get_detailed_ledger(
 @router.get("/balance-sheet")
 def get_balance_sheet(
     as_of:        str | None = None,
+    standard:     str        = "gaap",
     current_user: UserAccount = Depends(get_current_user),
     db:           Session     = Depends(get_db),
 ) -> Any:
@@ -206,7 +207,7 @@ def get_balance_sheet(
         raise HTTPException(status_code=422, detail="as_of 格式应为 YYYY-MM-DD")
 
     svc = ReportService(db)
-    bs  = svc.get_balance_sheet(as_of_date)
+    bs  = svc.get_balance_sheet(as_of_date, standard=standard)
 
     def items(lst):
         return [
@@ -237,6 +238,7 @@ def get_balance_sheet(
 def get_income_statement(
     date_from:    str | None = None,
     date_to:      str | None = None,
+    standard:     str        = "gaap",
     current_user: UserAccount = Depends(get_current_user),
     db:           Session     = Depends(get_db),
 ) -> Any:
@@ -253,7 +255,7 @@ def get_income_statement(
         raise HTTPException(status_code=422, detail="日期格式应为 YYYY-MM-DD")
 
     svc = ReportService(db)
-    is_ = svc.get_income_statement(df, dt)
+    is_ = svc.get_income_statement(df, dt, standard=standard)
 
     return {
         "date_from":  is_.date_from,

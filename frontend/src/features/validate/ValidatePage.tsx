@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react'
-import type { BalanceSheet, BSLineItem, IncomeStatement, ISLineItem } from '@/types'
+import { useState } from 'react'
+import type { BalanceSheet, BSLineItem, IncomeStatement } from '@/types'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -101,10 +101,10 @@ function BSSection({ title, items }: { title: string; items: BSLineItem[] }) {
               <td className={`border border-gray-200 px-3 py-1.5 text-gray-700 ${item.is_total ? '' : 'pl-5'}`}>
                 {item.name}
               </td>
-              <td className="border border-gray-200 px-3 py-1.5 text-right tabular-nums text-gray-800">
+              <td className={`border border-gray-200 px-3 py-1.5 text-right tabular-nums ${item.end_bal < 0 ? 'text-red-600' : 'text-gray-800'}`}>
                 {fmtNum(item.end_bal, item.is_total)}
               </td>
-              <td className="border border-gray-200 px-3 py-1.5 text-right tabular-nums text-gray-800">
+              <td className={`border border-gray-200 px-3 py-1.5 text-right tabular-nums ${item.beg_bal < 0 ? 'text-red-600' : 'text-gray-800'}`}>
                 {fmtNum(item.beg_bal, item.is_total)}
               </td>
             </tr>
@@ -117,25 +117,35 @@ function BSSection({ title, items }: { title: string; items: BSLineItem[] }) {
 
 // ── IS Table ─────────────────────────────────────────────────────────────────
 
-function ISTable({ items }: { items: ISLineItem[] }) {
+function ISTable({ is }: { is: IncomeStatement }) {
+  const { items, col1_label = '本期金额', col2_label = '上期金额' } = is
+  const hasRowNum = items.some(it => it.row_num > 0)
   return (
     <table className="w-full text-sm border-collapse">
       <thead>
         <tr className="bg-gray-50">
+          {hasRowNum && (
+            <th className="border border-gray-200 px-2 py-2 text-center font-medium text-gray-600 w-10">行次</th>
+          )}
           <th className="border border-gray-200 px-3 py-2 text-left font-medium text-gray-600">项目</th>
-          <th className="border border-gray-200 px-3 py-2 text-right font-medium text-gray-600 w-40">本期金额</th>
-          <th className="border border-gray-200 px-3 py-2 text-right font-medium text-gray-600 w-40">上期金额</th>
+          <th className="border border-gray-200 px-3 py-2 text-right font-medium text-gray-600 w-40">{col1_label}</th>
+          <th className="border border-gray-200 px-3 py-2 text-right font-medium text-gray-600 w-40">{col2_label}</th>
         </tr>
       </thead>
       <tbody>
         {items.map((item, idx) => {
-          const isNetProfit = item.name.includes('四、净利润')
+          const isNetProfit = item.name.includes('净利润') && item.is_total
           return (
             <tr key={idx} className={
               isNetProfit ? 'bg-green-50 font-bold text-green-800'
               : item.is_total ? 'bg-gray-50 font-semibold'
               : 'hover:bg-blue-50/30'
             }>
+              {hasRowNum && (
+                <td className="border border-gray-200 px-2 py-1.5 text-center text-gray-400 text-xs">
+                  {item.row_num > 0 ? item.row_num : ''}
+                </td>
+              )}
               <td className={`border border-gray-200 px-3 py-1.5 text-gray-700 ${
                 item.is_total ? '' : item.name.startsWith('  ') ? 'pl-8'
                 : item.name.startsWith('减：') || item.name.startsWith('加：') ? 'pl-6' : 'pl-3'
@@ -187,6 +197,7 @@ export default function ValidatePage() {
   const [tbFile,    setTbFile]    = useState<File | null>(null)
   const [bsRefFile, setBsRefFile] = useState<File | null>(null)
   const [isRefFile, setIsRefFile] = useState<File | null>(null)
+  const [standard,  setStandard]  = useState<'xiye' | 'gaap'>('xiye')
   const [loading,   setLoading]   = useState(false)
   const [error,     setError]     = useState<string | null>(null)
   const [result,    setResult]    = useState<ValidateResult | null>(null)
@@ -200,6 +211,7 @@ export default function ValidatePage() {
       form.append('file', tbFile)
       if (bsRefFile) form.append('bs_ref', bsRefFile)
       if (isRefFile) form.append('is_ref', isRefFile)
+      form.append('standard', standard)
 
       const resp = await fetch('/api/validate/trial-balance', { method: 'POST', body: form })
       if (!resp.ok) {
@@ -241,6 +253,24 @@ export default function ValidatePage() {
           value={tbFile}
           onChange={setTbFile}
         />
+        <div className="flex flex-col gap-1">
+          <label className="text-xs text-gray-500">会计准则</label>
+          <div className="flex gap-3 items-center h-8">
+            {(['xiye', 'gaap'] as const).map(s => (
+              <label key={s} className="flex items-center gap-1.5 cursor-pointer text-sm text-gray-700">
+                <input
+                  type="radio"
+                  name="validate-standard"
+                  value={s}
+                  checked={standard === s}
+                  onChange={() => setStandard(s)}
+                  className="accent-blue-600"
+                />
+                {s === 'gaap' ? '企业准则（2006）' : '小企业准则（2013）'}
+              </label>
+            ))}
+          </div>
+        </div>
         <div className="w-px h-10 bg-gray-200 hidden sm:block" />
         <FileInput
           label="参考资产负债表 Excel（可选）"
@@ -330,7 +360,7 @@ export default function ValidatePage() {
                 <p className="text-xs text-gray-400 mt-0.5">科目余额表无上期数据，上期列为空</p>
               </div>
               <div className="overflow-auto">
-                <ISTable items={result.income_statement.items} />
+                <ISTable is={result.income_statement} />
               </div>
             </div>
           </div>

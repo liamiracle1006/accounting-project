@@ -30,8 +30,9 @@ function rowStyle(item: ISLineItem): string {
 
 export default function IncomeStatementPage() {
   const today     = new Date()
-  const [year,  setYear]  = useState(today.getFullYear())
-  const [month, setMonth] = useState(today.getMonth() + 1)
+  const [year,     setYear]     = useState(today.getFullYear())
+  const [month,    setMonth]    = useState(today.getMonth() + 1)
+  const [standard, setStandard] = useState<'gaap' | 'xiye'>('gaap')
   const [data,    setData]    = useState<IncomeStatement | null>(null)
   const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState<string | null>(null)
@@ -41,11 +42,11 @@ export default function IncomeStatementPage() {
     const to   = lastDayOfMonth(year, month)
     setLoading(true)
     setError(null)
-    reportsApi.incomeStatement(from, to)
+    reportsApi.incomeStatement(from, to, standard)
       .then(d  => setData(d))
       .catch(() => setError('加载失败，请检查后端服务'))
       .finally(() => setLoading(false))
-  }, [year, month])
+  }, [year, month, standard])
 
   useEffect(() => { fetchData() }, [fetchData])
 
@@ -76,6 +77,24 @@ export default function IncomeStatementPage() {
               <option key={m} value={m}>{m} 月</option>
             ))}
           </select>
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-xs text-gray-500">会计准则</label>
+          <div className="flex gap-3 items-center h-8">
+            {(['gaap', 'xiye'] as const).map(s => (
+              <label key={s} className="flex items-center gap-1.5 cursor-pointer text-sm text-gray-700">
+                <input
+                  type="radio"
+                  name="is-standard"
+                  value={s}
+                  checked={standard === s}
+                  onChange={() => setStandard(s)}
+                  className="accent-blue-600"
+                />
+                {s === 'gaap' ? '企业准则' : '小企业准则'}
+              </label>
+            ))}
+          </div>
         </div>
         <button
           onClick={fetchData}
@@ -115,30 +134,36 @@ export default function IncomeStatementPage() {
       )}
 
       {/* Table */}
-      {data && !loading && (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-auto flex-1">
-          <table className="w-full text-sm border-collapse">
-            <thead>
-              <tr className="bg-gray-50 sticky top-0 z-10">
-                <th className="border border-gray-200 px-3 py-2 text-left font-medium text-gray-600 w-[50%]">
-                  项目
-                </th>
-                <th className="border border-gray-200 px-3 py-2 text-right font-medium text-gray-600 w-[25%]">
-                  本期金额
-                </th>
-                <th className="border border-gray-200 px-3 py-2 text-right font-medium text-gray-600 w-[25%]">
-                  上期金额
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.items.map((item, idx) => (
-                <ISRow key={idx} item={item} />
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      {data && !loading && (() => {
+        const hasRowNum = data.items.some(i => i.row_num > 0)
+        return (
+          <div className="bg-white rounded-xl border border-gray-200 overflow-auto flex-1">
+            <table className="w-full text-sm border-collapse">
+              <thead>
+                <tr className="bg-gray-50 sticky top-0 z-10">
+                  {hasRowNum && (
+                    <th className="border border-gray-200 px-2 py-2 text-center font-medium text-gray-600 w-10">行次</th>
+                  )}
+                  <th className="border border-gray-200 px-3 py-2 text-left font-medium text-gray-600 w-[50%]">
+                    项目
+                  </th>
+                  <th className="border border-gray-200 px-3 py-2 text-right font-medium text-gray-600 w-[25%]">
+                    {data.col1_label ?? '本期金额'}
+                  </th>
+                  <th className="border border-gray-200 px-3 py-2 text-right font-medium text-gray-600 w-[25%]">
+                    {data.col2_label ?? '上期金额'}
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.items.map((item, idx) => (
+                  <ISRow key={idx} item={item} hasRowNum={hasRowNum} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )
+      })()}
 
       {loading && !data && (
         <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">
@@ -151,13 +176,18 @@ export default function IncomeStatementPage() {
 
 // ── Row ───────────────────────────────────────────────────────────────────────
 
-function ISRow({ item }: { item: ISLineItem }) {
+function ISRow({ item, hasRowNum }: { item: ISLineItem; hasRowNum: boolean }) {
   const bg = rowStyle(item)
   const isReduce = item.name.startsWith('减：') || item.name.startsWith('加：')
-  const indent = !item.is_total && isReduce ? 'pl-6' : !item.is_total ? 'pl-3' : 'pl-3'
+  const indent = !item.is_total && isReduce ? 'pl-6' : 'pl-3'
 
   return (
     <tr className={bg}>
+      {hasRowNum && (
+        <td className="border border-gray-200 px-2 py-1.5 text-center text-gray-400 text-xs">
+          {item.row_num > 0 ? item.row_num : ''}
+        </td>
+      )}
       <td className={`border border-gray-200 px-3 py-1.5 text-gray-700 ${indent}`}>
         {item.name}
       </td>

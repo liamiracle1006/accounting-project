@@ -27,11 +27,11 @@ export const reportsApi = {
     ),
 
   // ── Sprint 4.3 财务报表 ────────────────────────────────────────────
-  balanceSheet: (asOf: string) =>
-    api.get<BalanceSheet>(`/api/reports/balance-sheet?as_of=${asOf}`),
+  balanceSheet: (asOf: string, standard = 'gaap') =>
+    api.get<BalanceSheet>(`/api/reports/balance-sheet?as_of=${asOf}&standard=${standard}`),
 
-  incomeStatement: (dateFrom: string, dateTo: string) =>
-    api.get<IncomeStatement>(`/api/reports/income-statement?date_from=${dateFrom}&date_to=${dateTo}`),
+  incomeStatement: (dateFrom: string, dateTo: string, standard = 'gaap') =>
+    api.get<IncomeStatement>(`/api/reports/income-statement?date_from=${dateFrom}&date_to=${dateTo}&standard=${standard}`),
 
   cashFlow: (dateFrom: string, dateTo: string) =>
     api.get(`/api/reports/cash-flow?date_from=${dateFrom}&date_to=${dateTo}`),

@@ -76,8 +76,9 @@ function SectionTable({
 
 export default function BalanceSheetPage() {
   const today     = new Date()
-  const [year,  setYear]  = useState(today.getFullYear())
-  const [month, setMonth] = useState(today.getMonth() + 1)
+  const [year,     setYear]     = useState(today.getFullYear())
+  const [month,    setMonth]    = useState(today.getMonth() + 1)
+  const [standard, setStandard] = useState<'gaap' | 'xiye'>('gaap')
   const [data,    setData]    = useState<BalanceSheet | null>(null)
   const [loading, setLoading] = useState(false)
   const [error,   setError]   = useState<string | null>(null)
@@ -86,11 +87,11 @@ export default function BalanceSheetPage() {
     const asOf = lastDayOfMonth(year, month)
     setLoading(true)
     setError(null)
-    reportsApi.balanceSheet(asOf)
+    reportsApi.balanceSheet(asOf, standard)
       .then(d  => setData(d))
       .catch(() => setError('加载失败，请检查后端服务'))
       .finally(() => setLoading(false))
-  }, [year, month])
+  }, [year, month, standard])
 
   useEffect(() => { fetchData() }, [fetchData])
 
@@ -123,6 +124,24 @@ export default function BalanceSheetPage() {
               <option key={m} value={m}>{m} 月</option>
             ))}
           </select>
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-xs text-gray-500">会计准则</label>
+          <div className="flex gap-3 items-center h-8">
+            {(['gaap', 'xiye'] as const).map(s => (
+              <label key={s} className="flex items-center gap-1.5 cursor-pointer text-sm text-gray-700">
+                <input
+                  type="radio"
+                  name="bs-standard"
+                  value={s}
+                  checked={standard === s}
+                  onChange={() => setStandard(s)}
+                  className="accent-blue-600"
+                />
+                {s === 'gaap' ? '企业准则' : '小企业准则'}
+              </label>
+            ))}
+          </div>
         </div>
         <button
           onClick={fetchData}

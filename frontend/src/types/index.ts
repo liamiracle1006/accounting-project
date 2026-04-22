@@ -353,14 +353,17 @@ export interface ISLineItem {
   cur_amt:  number
   prev_amt: number
   is_total: boolean
+  row_num:  number
 }
 
 export interface IncomeStatement {
-  date_from: string
-  date_to:   string
-  prev_from: string
-  prev_to:   string
-  items:     ISLineItem[]
+  date_from:  string
+  date_to:    string
+  prev_from:  string
+  prev_to:    string
+  items:      ISLineItem[]
+  col1_label: string
+  col2_label: string
 }
 
 // ── 旧账导入向导 ─────────────────────────────────────────

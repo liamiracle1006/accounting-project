@@ -9,7 +9,7 @@ import logging
 from dataclasses import asdict
 from typing import Optional
 
-from fastapi import APIRouter, File, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 
 from services.validation_service import (
     parse_trial_balance,
@@ -32,9 +32,10 @@ async def _read_optional_file(f: Optional[UploadFile]) -> bytes | None:
 
 @router.post("/trial-balance")
 async def validate_from_trial_balance(
-    file:   UploadFile          = File(...),
-    bs_ref: Optional[UploadFile] = File(None),
-    is_ref: Optional[UploadFile] = File(None),
+    file:     UploadFile          = File(...),
+    bs_ref:   Optional[UploadFile] = File(None),
+    is_ref:   Optional[UploadFile] = File(None),
+    standard: str                  = Form("xiye"),
 ):
     """
     上传科目余额表 Excel → 返回计算出的资产负债表和利润表。
@@ -49,7 +50,7 @@ async def validate_from_trial_balance(
         raise HTTPException(status_code=400, detail="文件不能超过 10MB")
 
     try:
-        parsed = parse_trial_balance(content)
+        parsed = parse_trial_balance(content, standard=standard)
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
     except Exception as exc:
@@ -57,8 +58,8 @@ async def validate_from_trial_balance(
         raise HTTPException(status_code=500, detail=f"解析失败：{exc}")
 
     try:
-        bs  = compute_bs_from_trial_balance(parsed)
-        is_ = compute_is_from_trial_balance(parsed)
+        bs  = compute_bs_from_trial_balance(parsed, standard=standard)
+        is_ = compute_is_from_trial_balance(parsed, standard=standard)
     except Exception as exc:
         logger.exception("计算报表失败")
         raise HTTPException(status_code=500, detail=f"计算失败：{exc}")

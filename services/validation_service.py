@@ -15,7 +15,9 @@ import pandas as pd
 
 from services.report_service import (
     _map_balance_sheet,
+    _map_balance_sheet_xiye,
     _map_income_statement,
+    _map_income_statement_xiye,
     BalanceSheet,
     IncomeStatement,
 )
@@ -56,25 +58,23 @@ _ACCOUNT_NAME_TO_CODE: dict[str, str] = {
     "营业外支出": "6711",
     "所得税费用": "6801",
     # 权益类 → 4xxx（小企业制度3xxx → 新准则4xxx）
+    "实收资本": "4001",
     "资本公积": "4002",
     "盈余公积": "4101",
     "本年利润": "4103",
     "利润分配": "4104", "未分配利润": "4104",
+    # 企业准则特有损益科目
+    "公允价值变动损益": "6101",
+    "资产减值损失": "6701",
+    "以前年度损益调整": "6901",
     # 资产：累计摊销（老制度1702，新准则在1703）
     "累计摊销": "1703",
 }
 
-# 编码前缀兜底：处理子科目（如5603001→6603001）及名称识别未覆盖的科目
-# 小企业会计制度（2004）→ 企业会计准则（2006）
+# 编码前缀兜底：仅处理权益类3xxx→4xxx（两套准则3xxx均为权益，无冲突）
+# 损益类5xxx不做前缀映射，完全依赖名称匹配，避免与企业准则的5xxx成本类冲突
 _LEGACY_PREFIX_MAP: dict[str, str] = {
-    # 所有者权益
-    "3002": "4002", "3101": "4101", "3103": "4103", "3104": "4104",
-    # 损益类
-    "5001": "6001", "5051": "6051", "5111": "6111",
-    "5301": "6301",
-    "5401": "6401", "5402": "6402", "5403": "6403",
-    "5601": "6601", "5602": "6602", "5603": "6603",
-    "5711": "6711", "5801": "6801",
+    "3001": "4001", "3002": "4002", "3101": "4101", "3103": "4103", "3104": "4104",
 }
 
 
@@ -177,19 +177,12 @@ def _find_header_row(file_bytes: bytes) -> int | None:
     return None
 
 
-def parse_trial_balance(file_bytes: bytes) -> dict:
+def parse_trial_balance(file_bytes: bytes, standard: str = "xiye") -> dict:
     """
-    解析科目余额表 Excel，返回:
-    {
-      "end_bal":        {code: Decimal},   # 期末余额（借-贷），用于资产负债表
-      "beg_bal":        {code: Decimal},   # 期初余额（借-贷），用于资产负债表年初列
-      "cur_debit_map":  {code: Decimal},   # 本期借方发生额，用于利润表
-      "cur_credit_map": {code: Decimal},   # 本期贷方发生额，用于利润表
-      "raw_rows":       list[dict],        # 原始解析行，供前端展示 / debug
-      "column_mapping": dict[str, str],    # 识别到的列名映射，供 debug
-      "row_count":      int,
-    }
-    如果列识别失败，抛出 ValueError 并附上当前列名列表。
+    解析科目余额表 Excel，返回余额字典。
+    standard: "xiye"（小企业准则，默认）或 "gaap"（企业准则）。
+    xiye 模式下将 5xxx/3xxx 科目通过名称映射规范化为 6xxx/4xxx。
+    gaap 模式下跳过规范化（编码已是标准格式）。
     """
     col_mapping: dict[str, str] | None = None
     df: pd.DataFrame | None = None
@@ -228,6 +221,40 @@ def parse_trial_balance(file_bytes: bytes) -> dict:
             f"实际检测到的列名：{found_cols}"
         )
 
+    code_col = col_mapping["code"]
+    name_col = col_mapping.get("name", "__none__")
+    get = lambda row, field: _to_decimal(row.get(col_mapping.get(field, "__none__")))
+
+    # ── 第一步：全量读入原始字典（raw_code 为 key，不做编码规范化）──────────────
+    raw_data: dict[str, dict] = {}
+    for _, row in df.iterrows():
+        raw_code = re.sub(r"\s+", "", str(row.get(code_col, "")).strip())
+        if not raw_code or raw_code in ("nan", "None", "科目代码", "合计", "总计"):
+            continue
+        if not re.match(r"^\d{4,}", raw_code):
+            continue
+        raw_data[raw_code] = {
+            "name": str(row.get(name_col, "")).strip(),
+            "ed": get(row, "end_debit"),  "ec": get(row, "end_credit"),
+            "bd": get(row, "beg_debit"),  "bc": get(row, "beg_credit"),
+            "cd": get(row, "cur_debit"),  "cc": get(row, "cur_credit"),
+            "yd": get(row, "ytd_debit"),  "yc": get(row, "ytd_credit"),
+        }
+
+    # ── 第二步：去重清洗————删除父科目有非零余额时的子科目行 ─────────────────────
+    # 当荆鹏同时导出父行（如 "3104" 利润分配，汇总余额）和子行（如 "3104006" 未分配利润，
+    # 相同金额），两者若都解析到同一标准编码，会造成重复计数。
+    # 规则：4位父科目期末净额非零 → 父行已是汇总行 → 删除其所有子科目行。
+    parent_nonzero = {
+        code for code, d in raw_data.items()
+        if len(code) == 4 and d["ed"] - d["ec"] != 0
+    }
+    raw_data = {
+        code: d for code, d in raw_data.items()
+        if not (len(code) > 4 and code[:4] in parent_nonzero)
+    }
+
+    # ── 第三步：规范化编码并构建余额映射 ─────────────────────────────────────────
     end_bal:        dict[str, Decimal] = {}
     beg_bal:        dict[str, Decimal] = {}
     cur_debit_map:  dict[str, Decimal] = {}
@@ -236,57 +263,28 @@ def parse_trial_balance(file_bytes: bytes) -> dict:
     ytd_credit_map: dict[str, Decimal] = {}
     raw_rows: list[dict] = []
 
-    code_col = col_mapping["code"]
-    name_col = col_mapping.get("name", "__none__")
-    get = lambda row, field: _to_decimal(row.get(col_mapping.get(field, "__none__")))
-
-    for _, row in df.iterrows():
-        raw_code = str(row.get(code_col, "")).strip()
-        if not raw_code or raw_code in ("nan", "None", "科目代码", "合计", "总计"):
-            continue
-        # 只保留纯数字科目代码
-        code = re.sub(r"\s+", "", raw_code)
-        if not re.match(r"^\d{4,}", code):
-            continue
-        # 规范化：将旧版会计制度编码映射为新准则标准编码
-        account_name = str(row.get(name_col, "")).strip()
-        code = _resolve_code(code, account_name)
-
-        end_d  = get(row, "end_debit")
-        end_c  = get(row, "end_credit")
-        beg_d  = get(row, "beg_debit")
-        beg_c  = get(row, "beg_credit")
-        cur_d  = get(row, "cur_debit")
-        cur_c  = get(row, "cur_credit")
-        ytd_d  = get(row, "ytd_debit")
-        ytd_c  = get(row, "ytd_credit")
-
-        net_end = end_d - end_c
-        net_beg = beg_d - beg_c
-
+    for raw_code, d in raw_data.items():
+        code = _resolve_code(raw_code, d["name"]) if standard == "xiye" else raw_code
+        net_end = d["ed"] - d["ec"]
+        net_beg = d["bd"] - d["bc"]
         if net_end != 0:
-            end_bal[code] = end_bal.get(code, Decimal("0")) + net_end
+            end_bal[code]        = end_bal.get(code, Decimal("0"))        + net_end
         if net_beg != 0:
-            beg_bal[code] = beg_bal.get(code, Decimal("0")) + net_beg
-        if cur_d != 0:
-            cur_debit_map[code]  = cur_debit_map.get(code, Decimal("0")) + cur_d
-        if cur_c != 0:
-            cur_credit_map[code] = cur_credit_map.get(code, Decimal("0")) + cur_c
-        if ytd_d != 0:
-            ytd_debit_map[code]  = ytd_debit_map.get(code, Decimal("0")) + ytd_d
-        if ytd_c != 0:
-            ytd_credit_map[code] = ytd_credit_map.get(code, Decimal("0")) + ytd_c
-
+            beg_bal[code]        = beg_bal.get(code, Decimal("0"))        + net_beg
+        if d["cd"]:
+            cur_debit_map[code]  = cur_debit_map.get(code, Decimal("0"))  + d["cd"]
+        if d["cc"]:
+            cur_credit_map[code] = cur_credit_map.get(code, Decimal("0")) + d["cc"]
+        if d["yd"]:
+            ytd_debit_map[code]  = ytd_debit_map.get(code, Decimal("0"))  + d["yd"]
+        if d["yc"]:
+            ytd_credit_map[code] = ytd_credit_map.get(code, Decimal("0")) + d["yc"]
         raw_rows.append({
             "code":       code,
-            "end_debit":  float(end_d),
-            "end_credit": float(end_c),
-            "beg_debit":  float(beg_d),
-            "beg_credit": float(beg_c),
-            "cur_debit":  float(cur_d),
-            "cur_credit": float(cur_c),
-            "ytd_debit":  float(ytd_d),
-            "ytd_credit": float(ytd_c),
+            "end_debit":  float(d["ed"]), "end_credit": float(d["ec"]),
+            "beg_debit":  float(d["bd"]), "beg_credit": float(d["bc"]),
+            "cur_debit":  float(d["cd"]), "cur_credit": float(d["cc"]),
+            "ytd_debit":  float(d["yd"]), "ytd_credit": float(d["yc"]),
         })
 
     if not raw_rows:
@@ -306,37 +304,110 @@ def parse_trial_balance(file_bytes: bytes) -> dict:
 
 
 def _make_sum_fn(debit_map: dict[str, Decimal], credit_map: dict[str, Decimal]):
-    """构造 IS 取数函数：按科目代码前缀聚合发生额（模拟 _sum_period 的 LIKE 行为）"""
+    """GAAP 模式 IS 取数：按前缀在单方向 map 里聚合。"""
     def fn(code_prefix: str, direction: str) -> Decimal:
         lookup = debit_map if direction == "DEBIT" else credit_map
+        return sum((v for k, v in lookup.items() if k.startswith(code_prefix)), Decimal("0"))
+    return fn
+
+
+def _make_xiye_fn(debit_map: dict[str, Decimal], credit_map: dict[str, Decimal]):
+    """
+    xiye 模式 IS 取数：单方向聚合，同时查 5xxx 和 6xxx 前缀。
+    不做净额处理（避免关账分录抵消实际发生额）。
+    """
+    def fn(code_prefix: str, direction: str) -> Decimal:
+        lookup = debit_map if direction == "DEBIT" else credit_map
+        prefixes = [code_prefix]
+        if code_prefix.startswith("6"):
+            prefixes.append("5" + code_prefix[1:])
+        elif code_prefix.startswith("5"):
+            prefixes.append("6" + code_prefix[1:])
         return sum(
-            (v for k, v in lookup.items() if k.startswith(code_prefix)),
+            (v for k, v in lookup.items() if any(k.startswith(p) for p in prefixes)),
             Decimal("0"),
         )
     return fn
 
 
-def compute_bs_from_trial_balance(parsed: dict) -> BalanceSheet:
-    """用期末余额和期初余额计算资产负债表。"""
-    return _map_balance_sheet(
-        parsed["end_bal"],
-        parsed["beg_bal"],
-        as_of_str="（来自Excel）",
-        beg_of_year_str="（来自Excel期初）",
-    )
+def _aggregate_sub_codes(bal: dict[str, Decimal]) -> dict[str, Decimal]:
+    """
+    将只有子科目（>4位）的余额汇总到4位父科目。
+    若4位父科目已有直接余额行（荆鹏同时导出了父行），则不重复汇总。
+    解决荆鹏等软件只导出明细子科目、不含合计父行的情况（如应付账款220200→2202）。
+    """
+    existing4 = {c for c in bal if len(c) == 4}
+    result = dict(bal)
+    for code, amount in bal.items():
+        if len(code) > 4:
+            parent4 = code[:4]
+            if parent4 not in existing4:
+                result[parent4] = result.get(parent4, Decimal("0")) + amount
+    return result
 
 
-def compute_is_from_trial_balance(parsed: dict) -> IncomeStatement:
-    """用本年累计发生额（优先）或本期发生额计算利润表。"""
-    # 年末试算平衡表中 6xxx 的「本期发生额」经结转后为 0，需用「本年累计发生额」
+def compute_bs_from_trial_balance(parsed: dict, standard: str = "xiye") -> BalanceSheet:
+    """用期末余额和年初余额计算资产负债表。standard: "xiye" 小企业准则，"gaap" 企业准则。"""
+    end_bal_raw = parsed["end_bal"]
     ytd_d = parsed.get("ytd_debit_map", {})
     ytd_c = parsed.get("ytd_credit_map", {})
-    is_debit  = ytd_d if ytd_d else parsed["cur_debit_map"]
-    is_credit = ytd_c if ytd_c else parsed["cur_credit_map"]
-    cur_fn  = _make_sum_fn(is_debit, is_credit)
-    prev_fn = _make_sum_fn({}, {})  # 科目余额表无上期数据，上期列为 0
+
+    # 年初余额 = 期末余额 - 本年累计净发生额（比直接用期初余额更准确）
+    # 公式：年初净余额 = 期末净余额 - (本年累计借方 - 本年累计贷方)
+    if ytd_d or ytd_c:
+        all_codes = set(list(end_bal_raw.keys()) + list(ytd_d.keys()) + list(ytd_c.keys()))
+        beg_bal_raw: dict[str, Decimal] = {}
+        for code in all_codes:
+            val = (end_bal_raw.get(code, Decimal("0"))
+                   - ytd_d.get(code, Decimal("0"))
+                   + ytd_c.get(code, Decimal("0")))
+            if val != Decimal("0"):
+                beg_bal_raw[code] = val
+    else:
+        beg_bal_raw = parsed["beg_bal"]  # 无本年累计列时降级使用期初余额
+
+    # 子科目汇总到4位父科目（处理荆鹏等只导出子科目不含父行的情况）
+    end_bal = _aggregate_sub_codes(end_bal_raw)
+    beg_bal = _aggregate_sub_codes(beg_bal_raw)
+
+    if standard == "xiye":
+        return _map_balance_sheet_xiye(end_bal, beg_bal,
+                                       as_of_str="（来自Excel）",
+                                       beg_of_year_str="（来自Excel年初）")
+    return _map_balance_sheet(end_bal, beg_bal,
+                              as_of_str="（来自Excel）",
+                              beg_of_year_str="（来自Excel年初）")
+
+
+def _merge_maps(ytd: dict, cur: dict) -> dict:
+    """每个科目优先取 ytd，ytd 没有才取 cur（避免 ytd 有 BS 数据但无 IS 数据时 IS 全零）。"""
+    merged = dict(cur)
+    merged.update(ytd)   # ytd 覆盖 cur
+    return merged
+
+
+def compute_is_from_trial_balance(parsed: dict, standard: str = "xiye") -> IncomeStatement:
+    """用本年累计发生额（优先）或本期发生额计算利润表。"""
+    ytd_d = parsed.get("ytd_debit_map", {})
+    ytd_c = parsed.get("ytd_credit_map", {})
+    cur_d = parsed["cur_debit_map"]
+    cur_c = parsed["cur_credit_map"]
+
+    if standard == "xiye":
+        # 合并ytd+cur：ytd有的科目用ytd，没有的（IS科目）降级用cur
+        d_ytd = _merge_maps(ytd_d, cur_d)
+        c_ytd = _merge_maps(ytd_c, cur_c)
+        ytd_fn = _make_xiye_fn(d_ytd, c_ytd)
+        cur_fn = _make_xiye_fn(cur_d, cur_c)
+        return _map_income_statement_xiye(ytd_fn, cur_fn, as_of_str="（来自Excel）")
+
+    # 企业准则：本期 vs 上期（无上期数据）
+    is_debit  = ytd_d if ytd_d else cur_d
+    is_credit = ytd_c if ytd_c else cur_c
+    fn      = _make_sum_fn(is_debit, is_credit)
+    prev_fn = _make_sum_fn({}, {})
     return _map_income_statement(
-        cur_fn, prev_fn,
+        fn, prev_fn,
         date_from_str="（来自Excel）",
         date_to_str="（来自Excel）",
         prev_from_str="N/A",
