@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 # 列识别关键词（正则，不区分大小写）
 _COL_PATTERNS: dict[str, re.Pattern] = {
     "code":       re.compile(r"科目.*(代码|编码)|代码|编码|code", re.IGNORECASE),
+    "name":       re.compile(r"科目.*名称|名称|subject.*name", re.IGNORECASE),
     "beg_debit":  re.compile(r"期初.*(借|借方)|(借|借方).*期初", re.IGNORECASE),
     "beg_credit": re.compile(r"期初.*(贷|贷方)|(贷|贷方).*期初", re.IGNORECASE),
     # 本期发生额（单月）
@@ -36,6 +37,65 @@ _COL_PATTERNS: dict[str, re.Pattern] = {
     "end_debit":  re.compile(r"期末.*(借|借方)|(借|借方).*期末", re.IGNORECASE),
     "end_credit": re.compile(r"期末.*(贷|贷方)|(贷|贷方).*期末", re.IGNORECASE),
 }
+
+# ── 科目编码规范化（多版本会计制度兼容）──────────────────────────────────────
+# 科目名称 → 企业会计准则2006标准编码（名称跨制度稳定，优先于编码规则）
+_ACCOUNT_NAME_TO_CODE: dict[str, str] = {
+    # 损益类 → 6xxx
+    "主营业务收入": "6001", "营业收入": "6001", "主营业务销售收入": "6001",
+    "其他业务收入": "6051",
+    "投资收益": "6111",
+    "营业外收入": "6301",
+    "主营业务成本": "6401", "营业成本": "6401",
+    "其他业务成本": "6402",
+    "营业税金及附加": "6403", "税金及附加": "6403",
+    "销售费用": "6601", "营业费用": "6601",
+    "管理费用": "6602",
+    "财务费用": "6603",
+    "研发费用": "6604",
+    "营业外支出": "6711",
+    "所得税费用": "6801",
+    # 权益类 → 4xxx（小企业制度3xxx → 新准则4xxx）
+    "资本公积": "4002",
+    "盈余公积": "4101",
+    "本年利润": "4103",
+    "利润分配": "4104", "未分配利润": "4104",
+    # 资产：累计摊销（老制度1702，新准则在1703）
+    "累计摊销": "1703",
+}
+
+# 编码前缀兜底：处理子科目（如5603001→6603001）及名称识别未覆盖的科目
+# 小企业会计制度（2004）→ 企业会计准则（2006）
+_LEGACY_PREFIX_MAP: dict[str, str] = {
+    # 所有者权益
+    "3002": "4002", "3101": "4101", "3103": "4103", "3104": "4104",
+    # 损益类
+    "5001": "6001", "5051": "6051", "5111": "6111",
+    "5301": "6301",
+    "5401": "6401", "5402": "6402", "5403": "6403",
+    "5601": "6601", "5602": "6602", "5603": "6603",
+    "5711": "6711", "5801": "6801",
+}
+
+
+def _resolve_code(raw_code: str, account_name: str) -> str:
+    """
+    将任意会计制度的科目编码规范化为企业会计准则2006标准编码。
+    优先级：名称精确匹配 > 名称前缀匹配（子科目）> 编码前缀兜底 > 原编码不变。
+    """
+    name = re.sub(r"\s+", "", account_name)
+    # 1. 精确名称匹配
+    if name in _ACCOUNT_NAME_TO_CODE:
+        return _ACCOUNT_NAME_TO_CODE[name]
+    # 2. 名称前缀匹配（子科目，如"财务费用-利息费用"→ 归入6603桶）
+    for std_name, std_code in _ACCOUNT_NAME_TO_CODE.items():
+        if name.startswith(std_name + "-") or name.startswith(std_name + "—"):
+            return std_code
+    # 3. 编码前缀兜底（处理子科目，如5603001→6603001）
+    for legacy, standard in _LEGACY_PREFIX_MAP.items():
+        if raw_code.startswith(legacy):
+            return standard + raw_code[len(legacy):]
+    return raw_code
 
 
 def _to_decimal(val) -> Decimal:
@@ -177,6 +237,7 @@ def parse_trial_balance(file_bytes: bytes) -> dict:
     raw_rows: list[dict] = []
 
     code_col = col_mapping["code"]
+    name_col = col_mapping.get("name", "__none__")
     get = lambda row, field: _to_decimal(row.get(col_mapping.get(field, "__none__")))
 
     for _, row in df.iterrows():
@@ -187,6 +248,9 @@ def parse_trial_balance(file_bytes: bytes) -> dict:
         code = re.sub(r"\s+", "", raw_code)
         if not re.match(r"^\d{4,}", code):
             continue
+        # 规范化：将旧版会计制度编码映射为新准则标准编码
+        account_name = str(row.get(name_col, "")).strip()
+        code = _resolve_code(code, account_name)
 
         end_d  = get(row, "end_debit")
         end_c  = get(row, "end_credit")
