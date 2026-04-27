@@ -1,140 +1,96 @@
-# AgentLedger V1.0 — 基于 LLM 的小微企业智能业财融合系统
+# AgentLedger — 小微企业智能业财融合系统
 
-## 架构概览
+基于 AI 的复式记账系统，支持自然语言生成凭证、多级审核、财务报表生成及报表验证。
 
-```
-自然语言输入
-     │
-     ▼
-┌─────────────────────────────────────────┐
-│  POST /api/records                      │  ← FastAPI 入口
-└─────────────────────────────────────────┘
-     │
-     ▼
-┌─────────────────────────────────────────┐
-│  RecordService                          │
-│  1. 存入 operational_record (PENDING)   │
-│  2. 调用 LLM API → 获取 JSON           │
-│  3. 更新 extracted_json                 │
-└─────────────────────────────────────────┘
-     │
-     ▼
-┌─────────────────────────────────────────┐
-│  ai/json_parser.py                      │
-│  严格校验 JSON：金额>0、枚举合法等       │
-└─────────────────────────────────────────┘
-     │
-     ▼
-┌─────────────────────────────────────────┐
-│  AccountingEngineService（核心护城河）  │
-│  • 关键词映射 expense_type → 科目代码   │
-│  • payment_method → 贷方科目            │
-│  • 组装借贷分录                         │
-│  • 强制校验 Σ借 == Σ贷                 │
-│  • 写入 voucher_header + voucher_line   │
-└─────────────────────────────────────────┘
-     │
-     ▼
-  operational_record.status = PROCESSED
-  （任何异常 → MANUAL_REVIEW + 事务回滚）
-```
+## 技术栈
+
+| 层 | 技术 |
+|---|---|
+| 前端 | React 18 + TypeScript + Vite + Tailwind CSS |
+| 后端 | Python 3.12 + FastAPI + SQLAlchemy |
+| 数据库 | MySQL 8.4 |
+| AI | Claude API（凭证生成双轨模型） |
 
 ## 快速启动
 
-```bash
-# 1. 安装依赖
-pip install -r requirements.txt
-
-# 2. 配置环境变量
-cp .env.example .env
-# 编辑 .env，填入数据库和 LLM API 信息
-
-# 3. 初始化数据库
-mysql -u root -p agentledger < database/ddl.sql
-mysql -u root -p agentledger < database/dml.sql
-
-# 4. 启动服务
-python main.py
-# 或
-uvicorn main:app --reload
+```
+终端 1（后端）                    终端 2（前端）
+─────────────────────────────     ─────────────
+py -3.12 -m uvicorn main:app      cd frontend
+  --reload                        npm run dev
 ```
 
-访问 http://localhost:8000/docs 查看交互式 API 文档。
+| 地址 | 用途 |
+|---|---|
+| http://localhost:5173 | 前端界面 |
+| http://localhost:8000/docs | 后端 API 文档 |
 
-## API 说明
+默认账号：`accountant` / `boss` / `manager`，密码均为 `123456`
 
-| 方法 | 路径 | 说明 |
-|------|------|------|
-| POST | `/api/records` | 提交自然语言流水（核心接口） |
-| GET  | `/api/records` | 分页查询流水列表，支持按 status 过滤 |
-| GET  | `/api/records/{id}` | 查询单条流水 |
-| GET  | `/api/vouchers/{id}` | 查询凭证详情（含借贷明细） |
-| GET  | `/health` | 健康检查 |
+## 功能模块
 
-### 请求示例
+### 凭证管理
+- 自然语言描述 → AI 自动生成借贷分录（双轨模型：习惯规则 + AI 规则）
+- 凭证审核工作流：草稿 → 待审 → 已过账 / 驳回
+- 批量导入（Excel / 图片 / 混合解析）
 
-```bash
-curl -X POST http://localhost:8000/api/records \
-  -H "Content-Type: application/json" \
-  -d '{"raw_text": "今天请客户吃饭花了800元，员工张三垫付"}'
-```
+### 账簿查询
+- **科目余额表**：多级科目展示，借贷平衡校验
+- **明细账**：Running Balance 引擎，支持穿透查账
 
-### 响应示例
+### 财务报表
+- **资产负债表**：企业准则 / 小企业准则双版本
+- **利润表**：企业准则 / 小企业准则双版本，按月查询
 
-```json
-{
-  "record_id": 1,
-  "status": "PROCESSED",
-  "raw_text": "今天请客户吃饭花了800元，员工张三垫付",
-  "extracted_json": "{\"amount\":800,\"expense_type\":\"招待费\",...}",
-  "error_message": null
-}
-```
+### 报表验证工具
+- 上传荆鹏等软件导出的科目余额表 Excel
+- 自动解析并计算资产负债表和利润表
+- 与用户上传的参考报表进行逐行 diff 对比（绿色=吻合 / 红色=差异）
+- 支持多版本会计制度科目编码自动规范化（小企业 5xxx / 3xxx → 标准 6xxx / 4xxx）
 
-## 运行测试
-
-```bash
-pytest tests/ -v
-```
+### 其他
+- 期间结账（月结、结转损益）
+- 固定资产台账
+- 费用申请审批
+- 习惯规则管理
 
 ## 项目结构
 
 ```
 accounting-project/
-├── main.py                      # FastAPI 应用入口
-├── requirements.txt
-├── .env.example
-├── config/
-│   └── settings.py              # 环境变量配置
+├── main.py                        # FastAPI 入口
+├── api/                           # 路由层
+│   ├── auth_routes.py
+│   ├── voucher_routes.py
+│   ├── report_routes.py
+│   ├── validate_routes.py         # 报表验证接口
+│   └── ...
+├── services/                      # 业务逻辑
+│   ├── report_service.py          # 报表生成引擎
+│   ├── validation_service.py      # Excel 解析 + 报表验证
+│   ├── voucher_service.py
+│   └── ...
+├── models/                        # ORM 实体
 ├── database/
-│   ├── ddl.sql                  # 建表语句
-│   ├── dml.sql                  # 初始化种子数据
-│   └── connection.py            # SQLAlchemy 引擎
-├── models/                      # ORM 实体类
-│   ├── account_subject.py
-│   ├── auxiliary_entity.py
-│   ├── operational_record.py
-│   ├── voucher_header.py
-│   └── voucher_line.py
-├── ai/                          # AI 集成层
-│   ├── llm_client.py            # HTTP 客户端
-│   ├── prompts.py               # Few-shot 提示词
-│   └── json_parser.py           # JSON 解析与校验
-├── services/                    # 业务逻辑层
-│   ├── record_service.py        # 流水全流程编排
-│   └── accounting_engine.py     # 复式记账引擎
-├── api/
-│   └── routes.py                # REST 路由
-└── tests/
-    ├── test_json_parser.py       # JSON 解析单元测试
-    ├── test_accounting_engine.py # 记账引擎单元测试（内存 DB）
-    └── test_api.py               # API 集成测试（Mock LLM）
+│   ├── ddl.sql
+│   └── seed_local.sql
+└── frontend/
+    └── src/
+        ├── features/
+        │   ├── vouchers/          # 凭证管理
+        │   ├── reports/           # 财务报表
+        │   │   ├── BalanceSheetPage.tsx
+        │   │   └── IncomeStatementPage.tsx
+        │   ├── validate/          # 报表验证工具
+        │   │   └── ValidatePage.tsx
+        │   ├── ledger/            # 明细账
+        │   └── trial-balance/     # 科目余额表
+        └── api/
 ```
 
-## 核心设计原则
+## 设计原则
 
-1. **LLM 只做文本解析**：不参与任何数值计算，不输出科目代码
-2. **后端硬编码映射**：科目映射规则在 `accounting_engine.py` 中明确定义
-3. **复式记账平衡强制校验**：`Σ借方 != Σ贷方` 时直接抛出异常，拒绝入账
-4. **事务原子性**：任何环节失败全部回滚，流水状态标记为 `MANUAL_REVIEW`
-5. **穿透审计**：凭证通过 `record_id` 外键可反查原始自然语言输入
+- **LLM 只做文本理解**，不参与数值计算和科目选择
+- **复式记账强制平衡**：`Σ借 ≠ Σ贷` 时拒绝入账并回滚
+- **双准则兼容**：所有报表支持企业会计准则与小企业会计准则切换
+- **科目编码多制度自动对齐**：上传任意会计软件导出文件，系统自动规范化编码

@@ -706,14 +706,16 @@ def _map_income_statement_xiye(
     row("", "            研究费用",              zero(), zero(), False, 17)
 
     # 财务费用（18）及明细（19）
-    fin_y = ytd_fn("6603", "DEBIT") - ytd_fn("6603", "CREDIT")
-    fin_c = cur_fn("6603", "DEBIT") - cur_fn("6603", "CREDIT")
+    # 只取借方：荆鹏 ytd 列含关账分录 Dr 3103/Cr 5603，贷方含关账导致净额=0；借方只含原始费用
+    fin_y = ytd_fn("6603", "DEBIT")
+    fin_c = cur_fn("6603", "DEBIT")
     row("6603", "    财务费用",                  fin_y, fin_c, False, 18)
     row("", '      其中：利息费用（收入以"-"号填列）', zero(), zero(), False, 19)
 
     # 加：投资收益（20）
-    inv_y = ytd_fn("6111", "CREDIT") - ytd_fn("6111", "DEBIT")
-    inv_c = cur_fn("6111", "CREDIT") - cur_fn("6111", "DEBIT")
+    # 只取贷方：荆鹏 ytd 含关账分录 Dr 5111/Cr 3103，借方含关账导致净额=0；贷方只含原始收益
+    inv_y = ytd_fn("6111", "CREDIT")
+    inv_c = cur_fn("6111", "CREDIT")
     row("6111", '加：投资收益（损失以"-"号填列）', inv_y, inv_c, False, 20)
 
     # 二、营业利润（21）

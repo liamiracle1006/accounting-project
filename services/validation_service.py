@@ -40,6 +40,29 @@ _COL_PATTERNS: dict[str, re.Pattern] = {
     "end_credit": re.compile(r"期末.*(贷|贷方)|(贷|贷方).*期末", re.IGNORECASE),
 }
 
+# 科目名称前缀剥离（用于IS明细行名称匹配）
+# 余额表里是"应交城市维护建设税"，利润表模板是"城市维护建设税"，去掉前缀后才能匹配
+_STRIP_NAME_PREFIX = re.compile(r"^(应交|应缴|预交|代交|待交)")
+
+# IS 明细行 → 候选名称关键词（去掉前缀后做 substring 匹配）
+_IS_DETAIL_KEYWORDS: dict[int, list[str]] = {
+    4:  ["消费税"],
+    5:  ["营业税"],
+    6:  ["城市维护建设税", "城建税"],
+    7:  ["资源税"],
+    8:  ["土地增值税"],
+    9:  ["城镇土地使用税", "房产税", "车船税", "印花税"],
+    10: ["教育费附加", "矿产资源补偿费", "排污费"],
+    12: ["商品维修费"],
+    13: ["广告费", "业务宣传费"],
+    15: ["开办费"],
+    16: ["业务招待费"],
+    17: ["研究费用", "研发费用"],
+    23: ["政府补助"],
+    25: ["坏账损失"],
+    29: ["税收滞纳金", "滞纳金"],
+}
+
 # ── 科目编码规范化（多版本会计制度兼容）──────────────────────────────────────
 # 科目名称 → 企业会计准则2006标准编码（名称跨制度稳定，优先于编码规则）
 _ACCOUNT_NAME_TO_CODE: dict[str, str] = {
@@ -241,13 +264,29 @@ def parse_trial_balance(file_bytes: bytes, standard: str = "xiye") -> dict:
             "yd": get(row, "ytd_debit"),  "yc": get(row, "ytd_credit"),
         }
 
-    # ── 第二步：去重清洗————删除父科目有非零余额时的子科目行 ─────────────────────
-    # 当荆鹏同时导出父行（如 "3104" 利润分配，汇总余额）和子行（如 "3104006" 未分配利润，
-    # 相同金额），两者若都解析到同一标准编码，会造成重复计数。
-    # 规则：4位父科目期末净额非零 → 父行已是汇总行 → 删除其所有子科目行。
+    # ── 第1.5步：构建名称→ytd/cur 贷方映射（去重前，保留子科目级别名称） ──────────
+    # 用于IS明细行回填（如"应交城市维护建设税"的ytd贷方 → IS行6城建税）
+    name_ytd_credit: dict[str, Decimal] = {}
+    name_cur_credit: dict[str, Decimal] = {}
+    for d in raw_data.values():
+        raw_name = re.sub(r"\s+", "", d["name"])
+        clean_name = _STRIP_NAME_PREFIX.sub("", raw_name)
+        if d["yc"]:
+            name_ytd_credit[clean_name] = name_ytd_credit.get(clean_name, Decimal("0")) + d["yc"]
+        if d["cc"]:
+            name_cur_credit[clean_name] = name_cur_credit.get(clean_name, Decimal("0")) + d["cc"]
+
+    # ── 第二步：去重清洗————删除父科目存在且有数据时的子科目行 ──────────────────
+    # 荆鹏同时导出父行和子行时会造成重复计数。
+    # 对于 BS 账户：期末余额非零即可判断父行为汇总行。
+    # 对于 IS 账户：月结后期末=0，但本年累计(ytd)有数据 → 也需过滤子行。
     parent_nonzero = {
         code for code, d in raw_data.items()
-        if len(code) == 4 and d["ed"] - d["ec"] != 0
+        if len(code) == 4 and (
+            d["ed"] - d["ec"] != 0  # 期末余额非零（BS账户）
+            or d["yd"]              # ytd借方非零（IS账户关账后期末=0但ytd有数）
+            or d["yc"]              # ytd贷方非零
+        )
     }
     raw_data = {
         code: d for code, d in raw_data.items()
@@ -297,6 +336,8 @@ def parse_trial_balance(file_bytes: bytes, standard: str = "xiye") -> dict:
         "cur_credit_map":  cur_credit_map,
         "ytd_debit_map":   ytd_debit_map,
         "ytd_credit_map":  ytd_credit_map,
+        "name_ytd_credit": name_ytd_credit,
+        "name_cur_credit": name_cur_credit,
         "raw_rows":        raw_rows,
         "column_mapping":  col_mapping,
         "row_count":       len(raw_rows),
@@ -399,7 +440,27 @@ def compute_is_from_trial_balance(parsed: dict, standard: str = "xiye") -> Incom
         c_ytd = _merge_maps(ytd_c, cur_c)
         ytd_fn = _make_xiye_fn(d_ytd, c_ytd)
         cur_fn = _make_xiye_fn(cur_d, cur_c)
-        return _map_income_statement_xiye(ytd_fn, cur_fn, as_of_str="（来自Excel）")
+        is_stmt = _map_income_statement_xiye(ytd_fn, cur_fn, as_of_str="（来自Excel）")
+
+        # 回填IS明细行：用名称贷方字典（如"应交城建税"→城建税行）
+        name_ytd = parsed.get("name_ytd_credit", {})
+        name_cur = parsed.get("name_cur_credit", {})
+        if name_ytd or name_cur:
+            for item in is_stmt.items:
+                if item.is_total or item.row_num not in _IS_DETAIL_KEYWORDS:
+                    continue
+                keywords = _IS_DETAIL_KEYWORDS[item.row_num]
+                ytd_val = sum(
+                    v for k, v in name_ytd.items() if any(kw in k for kw in keywords)
+                )
+                cur_val = sum(
+                    v for k, v in name_cur.items() if any(kw in k for kw in keywords)
+                )
+                if ytd_val:
+                    item.cur_amt = ytd_val
+                if cur_val:
+                    item.prev_amt = cur_val
+        return is_stmt
 
     # 企业准则：本期 vs 上期（无上期数据）
     is_debit  = ytd_d if ytd_d else cur_d
