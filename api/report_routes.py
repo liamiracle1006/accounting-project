@@ -39,7 +39,7 @@ def _get_ctx() -> tuple[int, int]:
     from database.tenant_context import get_current_tenant
     ctx = get_current_tenant()
     if ctx is None:
-        raise HTTPException(status_code=401, detail="未设置租户上下文，请先登录")
+        raise HTTPException(status_code=400, detail="未设置租户上下文，请先登录")
     if ctx.account_set_id is None:
         raise HTTPException(status_code=400, detail="请先选择账套")
     return ctx.tenant_id, ctx.account_set_id
@@ -258,10 +258,12 @@ def get_income_statement(
     is_ = svc.get_income_statement(df, dt, standard=standard)
 
     return {
-        "date_from":  is_.date_from,
-        "date_to":    is_.date_to,
-        "prev_from":  is_.prev_from,
-        "prev_to":    is_.prev_to,
+        "date_from":   is_.date_from,
+        "date_to":     is_.date_to,
+        "prev_from":   is_.prev_from,
+        "prev_to":     is_.prev_to,
+        "col1_label":  is_.col1_label,
+        "col2_label":  is_.col2_label,
         "items": [
             {
                 "code":     i.code,
@@ -269,6 +271,7 @@ def get_income_statement(
                 "cur_amt":  float(i.cur_amt),
                 "prev_amt": float(i.prev_amt),
                 "is_total": i.is_total,
+                "row_num":  i.row_num,
             }
             for i in is_.items
         ],

@@ -84,7 +84,7 @@ def _get_tenant_id(db: Session = Depends(get_db)) -> int:
     from database.tenant_context import get_current_tenant
     ctx = get_current_tenant()
     if ctx is None:
-        raise HTTPException(status_code=401, detail="未设置租户上下文，请先登录")
+        raise HTTPException(status_code=400, detail="未设置租户上下文，请先登录")
     return ctx.tenant_id
 
 

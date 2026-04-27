@@ -25,6 +25,10 @@ const AssetsPage         = lazy(() => import('@/features/assets/AssetsPage'))
 const SubjectsPage       = lazy(() => import('@/features/subjects/SubjectsPage'))
 const SetupWizardPage    = lazy(() => import('@/features/setup/SetupWizardPage'))
 const SettingsPage       = lazy(() => import('@/features/settings/SettingsPage'))
+const AuditLogPage       = lazy(() => import('@/features/audit/AuditLogPage'))
+const InvoicePage        = lazy(() => import('@/features/invoices/InvoicePage'))
+const AdvisorPage        = lazy(() => import('@/features/advisor/AdvisorPage'))
+const KnowledgePage      = lazy(() => import('@/features/knowledge/KnowledgePage'))
 
 export default function App() {
   return (
@@ -55,6 +59,10 @@ export default function App() {
               <Route path="subjects"   element={<SubjectsPage />} />
               <Route path="setup"      element={<SetupWizardPage />} />
               <Route path="settings"   element={<SettingsPage />} />
+              <Route path="audit-log"  element={<AuditLogPage />} />
+              <Route path="invoices"   element={<InvoicePage />} />
+              <Route path="advisor"    element={<AdvisorPage />} />
+              <Route path="knowledge"  element={<KnowledgePage />} />
             </Route>
           </Route>
 

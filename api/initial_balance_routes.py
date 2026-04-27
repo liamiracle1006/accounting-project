@@ -46,7 +46,7 @@ def _get_ctx(db: Session = Depends(get_db)) -> tuple[int, int]:
     from database.tenant_context import get_current_tenant
     ctx = get_current_tenant()
     if ctx is None:
-        raise HTTPException(status_code=401, detail="未设置租户上下文，请先登录")
+        raise HTTPException(status_code=400, detail="未设置租户上下文，请先登录")
     if ctx.account_set_id is None:
         raise HTTPException(status_code=400, detail="请先选择账套（account_set_id 未设置）")
     return ctx.tenant_id, ctx.account_set_id

@@ -77,6 +77,19 @@ def get_current_user(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="用户不存在或已禁用",
         )
+
+    # 自动设置租户上下文（从 account_set 表取该租户的默认账套 ID）
+    from sqlalchemy import text
+    from database.tenant_context import set_current_tenant, TenantContext
+    row = db.execute(
+        text("SELECT account_set_id FROM account_set WHERE tenant_id = :tid LIMIT 1"),
+        {"tid": user.tenant_id},
+    ).first()
+    set_current_tenant(TenantContext(
+        tenant_id      = user.tenant_id,
+        account_set_id = row[0] if row else None,
+    ))
+
     return user
 
 
