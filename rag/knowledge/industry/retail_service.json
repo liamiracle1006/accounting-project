@@ -1,0 +1,80 @@
+[
+  {
+    "strategy_id": "RETAIL-001",
+    "title": "零售企业增值税差额征税与进项抵扣",
+    "trigger_keywords": ["零售", "差额征税", "商业零售", "进项抵扣", "零售业增值税"],
+    "scenario": "零售企业购进商品再销售，如何最大化增值税进项抵扣降低税负",
+    "core_content": "一般纳税人零售企业：采购商品取得专票可按13%/9%抵扣进项；零售给消费者开普通发票或不开票，销售额按1/(1+税率)换算不含税额计税。部分零售企业（旧货、农产品）可选择简易计税3%，但不得抵扣进项。",
+    "action_suggestions": [
+      "优先向一般纳税人供应商采购，取得专用发票（价格允许时）",
+      "散装农产品采购可凭收购凭证按9%计算进项",
+      "评估旧货业务是否适用3%简易计税（放弃进项抵扣须经核算）",
+      "月末及时认证当月收到的增值税专用发票"
+    ],
+    "risk_notes": "选择简易计税后36个月不可更改；旧货与一般货物混合销售须分开核算",
+    "metadata": {
+      "applicable_taxpayer": ["GENERAL"],
+      "applicable_industry": ["零售", "批发零售"],
+      "region_scope": "NATIONAL",
+      "applicable_regions": [],
+      "profit_range": {"min": 0, "max": 99999999},
+      "optimal_timing": "Q1",
+      "valid_from": "2016-05-01",
+      "valid_until": "2099-12-31",
+      "source_doc": "财税〔2016〕36号",
+      "confidence": 0.97
+    }
+  },
+  {
+    "strategy_id": "RETAIL-002",
+    "title": "餐饮住宿业进项税抵扣范围",
+    "trigger_keywords": ["餐饮", "住宿", "进项抵扣", "餐费", "住宿费"],
+    "scenario": "餐饮、住宿企业增值税进项抵扣有严格限制，需规范处理",
+    "core_content": "餐饮服务：不得抵扣发生用于集体福利、个人消费的进项（员工餐、客户宴请均不得抵扣）。住宿服务：企业员工出差住宿取得增值税专用发票，可以抵扣进项。购置餐饮设备、装修工程（与应税收入相关）可正常抵扣进项。",
+    "action_suggestions": [
+      "餐饮设备采购（锅炉、冷链设备）坚持取得专用发票并抵扣",
+      "员工差旅住宿取得专票，在进项认证系统认证后抵扣",
+      "餐饮采购食材从农贸市场进货，可凭收购凭证按9%计算进项",
+      "明确区分经营用进项（可抵）和员工福利进项（不可抵）"
+    ],
+    "risk_notes": "餐饮接待用的进项税额不得抵扣，但餐饮企业自身经营的进项可抵扣，须严格区分",
+    "metadata": {
+      "applicable_taxpayer": ["GENERAL"],
+      "applicable_industry": ["餐饮", "住宿", "服务业"],
+      "region_scope": "NATIONAL",
+      "applicable_regions": [],
+      "profit_range": {"min": 0, "max": 99999999},
+      "optimal_timing": "ANY",
+      "valid_from": "2016-05-01",
+      "valid_until": "2099-12-31",
+      "source_doc": "财税〔2016〕36号附件1第27条",
+      "confidence": 0.98
+    }
+  },
+  {
+    "strategy_id": "RETAIL-003",
+    "title": "生活服务业增值税加计抵减15%",
+    "trigger_keywords": ["生活服务业", "加计抵减", "15%", "餐饮服务", "居民日常服务"],
+    "scenario": "提供生活服务的纳税人，进项税额可额外加计15%抵减应纳税额",
+    "core_content": "提供生活服务（餐饮、住宿、居民日常服务、娱乐服务）的纳税人，当期可计提进项税额加计抵减额（进项×15%），用于抵减应纳税额。须满足：四类服务收入占全部销售额≥50%。延续至2027年底。",
+    "action_suggestions": [
+      "统计生活服务收入占比（须≥50%），符合条件在增值税申报系统选择享受",
+      "每年初提交《适用加计抵减政策的声明》",
+      "每期申报时在申报表相应行次计提加计抵减额",
+      "监控收入结构变化，占比下降至50%以下须停止加计"
+    ],
+    "risk_notes": "出口服务不适用；享受加计抵减期间，对应进项转出须同步调减加计抵减额",
+    "metadata": {
+      "applicable_taxpayer": ["GENERAL"],
+      "applicable_industry": ["餐饮", "住宿", "服务业", "零售"],
+      "region_scope": "NATIONAL",
+      "applicable_regions": [],
+      "profit_range": {"min": 0, "max": 99999999},
+      "optimal_timing": "Q1",
+      "valid_from": "2019-10-01",
+      "valid_until": "2027-12-31",
+      "source_doc": "财税〔2019〕87号",
+      "confidence": 0.97
+    }
+  }
+]

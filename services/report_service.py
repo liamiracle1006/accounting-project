@@ -1,0 +1,815 @@
+"""
+AgentLedger — ReportService (Phase 4, Official Format)
+
+生成官方格式财务报表：
+  - 资产负债表 (会企01表): 期末余额 + 期初余额
+  - 利润表     (会企02表): 本期金额 + 上期金额
+
+科目余额计算规则（中国企业会计准则）：
+  借方科目余额 = Σ DEBIT - Σ CREDIT
+  贷方科目余额 = Σ CREDIT - Σ DEBIT
+"""
+import logging
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from datetime import date
+from decimal import Decimal
+
+from sqlalchemy import func
+from sqlalchemy.orm import Session
+
+from models.voucher_line import VoucherLine
+from models.voucher_header import VoucherHeader, VoucherReviewStatus
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass
+class BSLineItem:
+    """资产负债表行项目"""
+    code:      str            # 科目代码（空字符串 = 合计行）
+    name:      str            # 行项目名称
+    end_bal:   Decimal        # 期末余额
+    beg_bal:   Decimal        # 期初余额
+    is_total:  bool = False   # 是否为合计行
+
+
+@dataclass
+class ISLineItem:
+    """利润表行项目"""
+    code:      str
+    name:      str
+    cur_amt:   Decimal        # 本期金额（企业准则）或 本年累计金额（小企业准则）
+    prev_amt:  Decimal        # 上期金额（企业准则）或 本月金额（小企业准则）
+    is_total:  bool = False
+    row_num:   int  = 0       # 行次（小企业准则利润表使用）
+
+
+@dataclass
+class BalanceSheet:
+    as_of_date:    str
+    beg_of_year:   str        # 期初日期（年初）
+    assets:        list[BSLineItem] = field(default_factory=list)
+    liabilities:   list[BSLineItem] = field(default_factory=list)
+    equity:        list[BSLineItem] = field(default_factory=list)
+    balanced:      bool = True
+    diff:          Decimal = Decimal("0")
+
+
+@dataclass
+class IncomeStatement:
+    date_from:  str
+    date_to:    str
+    prev_from:  str
+    prev_to:    str
+    items:      list[ISLineItem] = field(default_factory=list)
+    col1_label: str = "本期金额"    # 第1数值列标题
+    col2_label: str = "上期金额"    # 第2数值列标题
+
+
+# ---------------------------------------------------------------------------
+# 科目余额计算辅助
+# ---------------------------------------------------------------------------
+
+def _build_balances(db: Session, as_of: date) -> dict[str, Decimal]:
+    """
+    计算截至 as_of 日期各科目累计余额。
+    余额 = Σ DEBIT - Σ CREDIT （正=借方余额，负=贷方余额）
+    """
+    rows = (
+        db.query(
+            VoucherLine.subject_code,
+            VoucherLine.direction,
+            func.sum(VoucherLine.amount).label("total"),
+        )
+        .join(VoucherHeader, VoucherLine.voucher_id == VoucherHeader.voucher_id)
+        .filter(
+            VoucherHeader.voucher_date <= as_of,
+            VoucherHeader.review_status == VoucherReviewStatus.POSTED,
+        )
+        .group_by(VoucherLine.subject_code, VoucherLine.direction)
+        .all()
+    )
+    balances: dict[str, Decimal] = {}
+    for code, direction, total in rows:
+        val = Decimal(str(total))
+        balances[code] = balances.get(code, Decimal("0")) + (
+            val if direction == "DEBIT" else -val
+        )
+    return balances
+
+
+def _sum_period(db: Session, code_prefix: str, direction: str,
+                date_from: date, date_to: date) -> Decimal:
+    row = (
+        db.query(func.sum(VoucherLine.amount))
+        .join(VoucherHeader, VoucherLine.voucher_id == VoucherHeader.voucher_id)
+        .filter(
+            VoucherLine.subject_code.like(f"{code_prefix}%"),
+            VoucherLine.direction == direction,
+            VoucherHeader.voucher_date >= date_from,
+            VoucherHeader.voucher_date <= date_to,
+            VoucherHeader.review_status == VoucherReviewStatus.POSTED,
+        )
+        .scalar()
+    )
+    return Decimal(str(row or 0))
+
+
+# ---------------------------------------------------------------------------
+# 多准则规范化辅助（小企业准则 → 企业会计准则）
+# ---------------------------------------------------------------------------
+
+# 小企业准则 5xxx/3xxx 前缀 → 企业准则 6xxx/4xxx 前缀
+_XIYE_TO_GAAP: dict[str, str] = {
+    "3001": "4001", "3002": "4002", "3101": "4101", "3103": "4103", "3104": "4104",
+    "5001": "6001", "5051": "6051", "5111": "6111", "5301": "6301",
+    "5401": "6401", "5402": "6402", "5403": "6403",
+    "5601": "6601", "5602": "6602", "5603": "6603",
+    "5711": "6711", "5801": "6801",
+}
+
+# 企业准则 6xxx 前缀 → 小企业准则 5xxx（仅损益类，用于 _sum_period 双查询）
+_GAAP_TO_XIYE_PL: dict[str, str] = {v: k for k, v in _XIYE_TO_GAAP.items() if k.startswith("5")}
+
+
+def normalize_balances(bal: dict[str, Decimal], standard: str) -> dict[str, Decimal]:
+    """将小企业准则余额字典的科目编码规范化为企业准则编码（用于资产负债表）。"""
+    if standard != "xiye":
+        return bal
+    result: dict[str, Decimal] = {}
+    for code, amount in bal.items():
+        new_code = code
+        for legacy, std in _XIYE_TO_GAAP.items():
+            if code.startswith(legacy):
+                new_code = std + code[len(legacy):]
+                break
+        result[new_code] = result.get(new_code, Decimal("0")) + amount
+    return result
+
+
+def _make_dual_fn(base_fn, standard: str):
+    """当使用小企业准则时，利润表取数同时查 5xxx 和 6xxx 前缀。"""
+    if standard != "xiye":
+        return base_fn
+    def fn(prefix: str, direction: str) -> Decimal:
+        result = base_fn(prefix, direction)
+        if prefix in _GAAP_TO_XIYE_PL:
+            result += base_fn(_GAAP_TO_XIYE_PL[prefix], direction)
+        return result
+    return fn
+
+
+def _asset_bal(balances: dict, *codes: str) -> Decimal:
+    """资产科目余额合计（允许负值红字）"""
+    return sum((balances.get(c, Decimal("0")) for c in codes), Decimal("0"))
+
+
+def _liab_bal(balances: dict, *codes: str) -> Decimal:
+    """负债/权益科目余额合计，取反后输出（允许红字）"""
+    return sum((-balances.get(c, Decimal("0")) for c in codes), Decimal("0"))
+
+
+def _net_asset(balances: dict, debit_code: str, credit_code: str) -> Decimal:
+    """净值 = 原值(借方) - 累计抵减(贷方余额取正)"""
+    gross = max(balances.get(debit_code, Decimal("0")), Decimal("0"))
+    contra = max(-balances.get(credit_code, Decimal("0")), Decimal("0"))
+    return gross - contra
+
+
+# ---------------------------------------------------------------------------
+# 纯映射函数（不依赖 DB，可复用于外部数据源如 Excel 导入验证）
+# ---------------------------------------------------------------------------
+
+def _map_balance_sheet(
+    end_bal: dict[str, Decimal],
+    beg_bal: dict[str, Decimal],
+    as_of_str: str,
+    beg_of_year_str: str,
+) -> BalanceSheet:
+    """
+    将预算好的余额字典映射为官方格式资产负债表。
+    端口说明：end_bal/beg_bal 格式 = {科目代码: Decimal}
+              正值 = 借方余额，负值 = 贷方余额（与 _build_balances 输出相同）
+    """
+    def E(*codes): return _asset_bal(end_bal, *codes)
+    def B(*codes): return _asset_bal(beg_bal, *codes)
+    def EL(*codes): return _liab_bal(end_bal, *codes)
+    def BL(*codes): return _liab_bal(beg_bal, *codes)
+
+    bs = BalanceSheet(as_of_date=as_of_str, beg_of_year=beg_of_year_str)
+
+    # ── 资产方 ──────────────────────────────────────────────────────────
+    def a(code, name, e, b):
+        bs.assets.append(BSLineItem(code=code, name=name, end_bal=e, beg_bal=b))
+
+    def atotal(name, e, b):
+        bs.assets.append(BSLineItem(code="", name=name, end_bal=e, beg_bal=b, is_total=True))
+
+    # 流动资产
+    a("1001+1002+1012", "货币资金",
+      E("1001","1002","1012"), B("1001","1002","1012"))
+    a("1101", "交易性金融资产",          E("1101"),  B("1101"))
+    a("1111", "应收票据",                E("1111"),  B("1111"))
+    a("1122", "应收账款",                E("1122"),  B("1122"))
+    a("1123", "预付款项",                E("1123"),  B("1123"))
+    a("1221", "其他应收款",
+      E("1121","1221"), B("1121","1221"))
+    a("1401+", "存货",
+      E("1401","1402","1403","1405","1406","1408"),
+      B("1401","1402","1403","1405","1406","1408"))
+
+    ca_end = sum(i.end_bal for i in bs.assets)
+    ca_beg = sum(i.beg_bal for i in bs.assets)
+    atotal("流动资产合计", ca_end, ca_beg)
+
+    # 非流动资产
+    a("1501", "长期股权投资",            E("1501"),  B("1501"))
+    a("1502", "投资性房地产",            E("1502"),  B("1502"))
+
+    fa_end = _net_asset(end_bal, "1601", "1602")
+    fa_beg = _net_asset(beg_bal, "1601", "1602")
+    a("1601", "固定资产",                fa_end, fa_beg)
+    a("1604", "在建工程",                E("1604"), B("1604"))
+
+    ia_end = E("1701") - EL("1703") - EL("1704")
+    ia_beg = B("1701") - BL("1703") - BL("1704")
+    a("1701", "无形资产",                ia_end,  ia_beg)
+    a("1702", "开发支出",                E("1702"),  B("1702"))
+    a("1801", "长期待摊费用",            E("1801"),  B("1801"))
+    a("1811", "递延所得税资产",          E("1811"),  B("1811"))
+
+    nca_end = (E("1501") + E("1502") + fa_end + E("1604")
+               + ia_end + E("1702") + E("1801") + E("1811"))
+    nca_beg = (B("1501") + B("1502") + fa_beg + B("1604")
+               + ia_beg + B("1702") + B("1801") + B("1811"))
+    atotal("非流动资产合计", nca_end, nca_beg)
+
+    ta_end = ca_end + nca_end
+    ta_beg = ca_beg + nca_beg
+    atotal("资产总计", ta_end, ta_beg)
+
+    # ── 负债和所有者权益方 ──────────────────────────────────────────────
+    def l(code, name, e, b):
+        bs.liabilities.append(BSLineItem(code=code, name=name, end_bal=e, beg_bal=b))
+
+    def ltotal(name, e, b):
+        bs.liabilities.append(BSLineItem(code="", name=name, end_bal=e, beg_bal=b, is_total=True))
+
+    # 流动负债
+    l("2001", "短期借款",               EL("2001"), BL("2001"))
+    l("2201", "应付票据",               EL("2201"), BL("2201"))
+    l("2202", "应付账款",               EL("2202"), BL("2202"))
+    l("2203", "预收款项",               EL("2203"), BL("2203"))
+    l("2205", "合同负债",               EL("2205"), BL("2205"))
+    l("2211", "应付职工薪酬",           EL("2211"), BL("2211"))
+    l("2221", "应交税费",               EL("2221"), BL("2221"))
+    l("2231", "应付利息",               EL("2231"), BL("2231"))
+    l("2232", "应付股利",               EL("2232"), BL("2232"))
+    l("2241", "其他应付款",             EL("2241"), BL("2241"))
+
+    cl_end = sum(i.end_bal for i in bs.liabilities)
+    cl_beg = sum(i.beg_bal for i in bs.liabilities)
+    ltotal("流动负债合计", cl_end, cl_beg)
+
+    # 非流动负债
+    l("2501", "长期借款",               EL("2501"), BL("2501"))
+    l("2502", "应付债券",               EL("2502"), BL("2502"))
+    l("2511", "长期应付款",             EL("2511"), BL("2511"))
+    l("2601", "预计负债",               EL("2601"), BL("2601"))
+    l("2401", "递延收益",               EL("2401"), BL("2401"))
+    l("2441", "递延所得税负债",         EL("2441"), BL("2441"))
+
+    ncl_end = (EL("2501") + EL("2502") + EL("2511")
+               + EL("2601") + EL("2401") + EL("2441"))
+    ncl_beg = (BL("2501") + BL("2502") + BL("2511")
+               + BL("2601") + BL("2401") + BL("2441"))
+    ltotal("非流动负债合计", ncl_end, ncl_beg)
+
+    tl_end = cl_end + ncl_end
+    tl_beg = cl_beg + ncl_beg
+    ltotal("负债合计", tl_end, tl_beg)
+
+    # 所有者权益
+    def e(code, name, end, beg):
+        bs.equity.append(BSLineItem(code=code, name=name, end_bal=end, beg_bal=beg))
+
+    def etotal(name, end, beg):
+        bs.equity.append(BSLineItem(code="", name=name, end_bal=end, beg_bal=beg, is_total=True))
+
+    e("4001", "实收资本（股本）",       EL("4001","3001"), BL("4001","3001"))
+    e("4002", "资本公积",               EL("4002"), BL("4002"))
+    e("4005", "其他综合收益",           EL("4005"), BL("4005"))
+    e("4101", "盈余公积",               EL("4101"), BL("4101"))
+
+    unclosed_pl_end = -sum(
+        v for k, v in end_bal.items() if "6001" <= k <= "6899"
+    )
+    unclosed_pl_beg = -sum(
+        v for k, v in beg_bal.items() if "6001" <= k <= "6899"
+    )
+    e("4103", "未分配利润",
+      EL("4103","4104") + unclosed_pl_end,
+      BL("4103","4104") + unclosed_pl_beg)
+
+    te_end = sum(i.end_bal for i in bs.equity)
+    te_beg = sum(i.beg_bal for i in bs.equity)
+    etotal("所有者权益合计", te_end, te_beg)
+
+    tl_e_end = tl_end + te_end
+    tl_e_beg = tl_beg + te_beg
+    etotal("负债和所有者权益总计", tl_e_end, tl_e_beg)
+
+    bs.diff     = ta_end - tl_e_end
+    bs.balanced = abs(bs.diff) < Decimal("1.00")
+
+    return bs
+
+
+def _map_income_statement(
+    cur_fn: Callable[[str, str], Decimal],
+    prev_fn: Callable[[str, str], Decimal],
+    date_from_str: str,
+    date_to_str: str,
+    prev_from_str: str,
+    prev_to_str: str,
+) -> IncomeStatement:
+    """
+    将两个取数函数映射为官方格式利润表。
+    cur_fn(code_prefix, direction) -> Decimal  本期发生额
+    prev_fn(code_prefix, direction) -> Decimal 上期发生额
+    """
+    is_ = IncomeStatement(
+        date_from=date_from_str,
+        date_to=date_to_str,
+        prev_from=prev_from_str,
+        prev_to=prev_to_str,
+    )
+
+    def row(code, name, cur, prev, is_total=False):
+        is_.items.append(ISLineItem(
+            code=code, name=name,
+            cur_amt=cur, prev_amt=prev,
+            is_total=is_total,
+        ))
+
+    # 一、营业收入
+    rev_c     = cur_fn("6001", "CREDIT")
+    rev_p     = prev_fn("6001", "CREDIT")
+    orev_c    = cur_fn("6051", "CREDIT")
+    orev_p    = prev_fn("6051", "CREDIT")
+    trev_c    = rev_c + orev_c
+    trev_p    = rev_p + orev_p
+    row("6001", "一、营业收入",                    trev_c, trev_p, True)
+
+    # 减：营业成本
+    cogs_c    = cur_fn("6401", "DEBIT")
+    cogs_p    = prev_fn("6401", "DEBIT")
+    row("6401", "减：营业成本",                    cogs_c, cogs_p)
+
+    # 减：税金及附加
+    tax_sur_c = cur_fn("6403", "DEBIT")
+    tax_sur_p = prev_fn("6403", "DEBIT")
+    row("6403", "减：税金及附加",                  tax_sur_c, tax_sur_p)
+
+    # 减：销售费用
+    sell_c    = cur_fn("6601", "DEBIT")
+    sell_p    = prev_fn("6601", "DEBIT")
+    row("6601", "减：销售费用",                    sell_c, sell_p)
+
+    # 减：管理费用
+    admin_c   = cur_fn("6602", "DEBIT")
+    admin_p   = prev_fn("6602", "DEBIT")
+    row("6602", "减：管理费用",                    admin_c, admin_p)
+
+    # 减：财务费用
+    fin_c     = cur_fn("6603", "DEBIT")
+    fin_p     = prev_fn("6603", "DEBIT")
+    row("6603", "减：财务费用",                    fin_c, fin_p)
+
+    # 减：研发费用
+    rd_c      = cur_fn("6604", "DEBIT")
+    rd_p      = prev_fn("6604", "DEBIT")
+    row("6604", "减：研发费用",                    rd_c, rd_p)
+
+    # 加：公允价值变动收益
+    fv_c      = cur_fn("6101", "CREDIT")
+    fv_p      = prev_fn("6101", "CREDIT")
+    row("6101", "加：公允价值变动收益",            fv_c, fv_p)
+
+    # 加：投资收益
+    inv_c     = cur_fn("6111", "CREDIT")
+    inv_p     = prev_fn("6111", "CREDIT")
+    row("6111", "加：投资收益",                    inv_c, inv_p)
+
+    # 加：其他收益
+    oth_c     = cur_fn("6117", "CREDIT")
+    oth_p     = prev_fn("6117", "CREDIT")
+    row("6117", "加：其他收益",                    oth_c, oth_p)
+
+    # 加：资产减值损失（转回为正，损失为负）
+    imp_c     = cur_fn("6701", "CREDIT") - cur_fn("6701", "DEBIT")
+    imp_p     = prev_fn("6701", "CREDIT") - prev_fn("6701", "DEBIT")
+    row("6701", "加：资产减值转回（减：损失）",    imp_c, imp_p)
+
+    # 加：信用减值损失（转回为正，损失为负）
+    cred_imp_c = cur_fn("6120", "CREDIT") - cur_fn("6120", "DEBIT")
+    cred_imp_p = prev_fn("6120", "CREDIT") - prev_fn("6120", "DEBIT")
+    row("6120", "加：信用减值转回（减：损失）",    cred_imp_c, cred_imp_p)
+
+    # 加：资产处置收益
+    disp_c    = cur_fn("6115", "CREDIT") - cur_fn("6115", "DEBIT")
+    disp_p    = prev_fn("6115", "CREDIT") - prev_fn("6115", "DEBIT")
+    row("6115", "加：资产处置收益",                disp_c, disp_p)
+
+    # 二、营业利润
+    op_c = (trev_c - cogs_c - tax_sur_c - sell_c - admin_c - fin_c - rd_c
+            + fv_c + inv_c + oth_c + imp_c + cred_imp_c + disp_c)
+    op_p = (trev_p - cogs_p - tax_sur_p - sell_p - admin_p - fin_p - rd_p
+            + fv_p + inv_p + oth_p + imp_p + cred_imp_p + disp_p)
+    row("", "二、营业利润",                        op_c, op_p, True)
+
+    # 加：营业外收入
+    nonop_in_c = cur_fn("6301", "CREDIT")
+    nonop_in_p = prev_fn("6301", "CREDIT")
+    row("6301", "加：营业外收入",                  nonop_in_c, nonop_in_p)
+
+    # 减：营业外支出
+    nonop_ex_c = cur_fn("6711", "DEBIT")
+    nonop_ex_p = prev_fn("6711", "DEBIT")
+    row("6711", "减：营业外支出",                  nonop_ex_c, nonop_ex_p)
+
+    # 三、利润总额
+    ebt_c = op_c + nonop_in_c - nonop_ex_c
+    ebt_p = op_p + nonop_in_p - nonop_ex_p
+    row("", "三、利润总额",                        ebt_c, ebt_p, True)
+
+    # 减：所得税费用
+    inc_tax_c = cur_fn("6801", "DEBIT")
+    inc_tax_p = prev_fn("6801", "DEBIT")
+    row("6801", "减：所得税费用",                  inc_tax_c, inc_tax_p)
+
+    # 四、净利润
+    np_c = ebt_c - inc_tax_c
+    np_p = ebt_p - inc_tax_p
+    row("", "四、净利润",                          np_c, np_p, True)
+
+    row("", "  归属于母公司所有者的净利润",        np_c, np_p)
+    row("", "五、其他综合收益",                    Decimal("0"), Decimal("0"), True)
+    row("", "六、综合收益总额",                    np_c, np_p, True)
+
+    return is_
+
+
+# ---------------------------------------------------------------------------
+# 小企业会计准则（2013）专用映射函数
+# ---------------------------------------------------------------------------
+
+def _map_balance_sheet_xiye(
+    end_bal: dict[str, Decimal],
+    beg_bal: dict[str, Decimal],
+    as_of_str: str,
+    beg_of_year_str: str,
+) -> BalanceSheet:
+    """小企业会计准则（2013）格式资产负债表。固定资产拆原价/折旧/账面价值三行。"""
+    def E(*codes): return _asset_bal(end_bal, *codes)
+    def B(*codes): return _asset_bal(beg_bal, *codes)
+    def EL(*codes): return _liab_bal(end_bal, *codes)
+    def BL(*codes): return _liab_bal(beg_bal, *codes)
+
+    bs = BalanceSheet(as_of_date=as_of_str, beg_of_year=beg_of_year_str)
+
+    def a(code, name, e, b, is_total=False):
+        bs.assets.append(BSLineItem(code=code, name=name, end_bal=e, beg_bal=b, is_total=is_total))
+
+    def l(code, name, e, b, is_total=False):
+        bs.liabilities.append(BSLineItem(code=code, name=name, end_bal=e, beg_bal=b, is_total=is_total))
+
+    def eq(code, name, e, b, is_total=False):
+        bs.equity.append(BSLineItem(code=code, name=name, end_bal=e, beg_bal=b, is_total=is_total))
+
+    # ── 流动资产 ──────────────────────────────────────────────────────────
+    cash_e = E("1001", "1002", "1012")
+    cash_b = B("1001", "1002", "1012")
+    a("1001", "货币资金", cash_e, cash_b)
+    a("1101", "短期投资", E("1101"), B("1101"))
+
+    ar_note_e = E("1111", "1121")
+    ar_note_b = B("1111", "1121")
+    a("1121", "应收票据", ar_note_e, ar_note_b)
+
+    ar_e = E("1122"); ar_b = B("1122")
+    a("1122", "应收账款", ar_e, ar_b)
+
+    pre_e = E("1123"); pre_b = B("1123")
+    a("1123", "预付账款", pre_e, pre_b)
+
+    divr_e = E("1131"); divr_b = B("1131")
+    a("1131", "应收股利", divr_e, divr_b)
+
+    intr_e = E("1132"); intr_b = B("1132")
+    a("1132", "应收利息", intr_e, intr_b)
+
+    othr_e = E("1221", "1211"); othr_b = B("1221", "1211")
+    a("1221", "其他应收款", othr_e, othr_b)
+
+    inv_e = E("1401","1402","1403","1404","1405","1406","1407","1408","1411","1421")
+    inv_b = B("1401","1402","1403","1404","1405","1406","1407","1408","1411","1421")
+    a("1401",  "存货",                inv_e, inv_b)
+    a("1401",  "  其中：原材料",      E("1401"),         B("1401"))
+    a("1405",  "        在产品",      E("1405"),         B("1405"))
+    a("1403",  "        库存商品",    E("1403","1402"),  B("1403","1402"))
+    a("1411",  "        周转材料",    E("1411","1404"),  B("1411","1404"))
+
+    oth_ca_e = Decimal("0"); oth_ca_b = Decimal("0")
+    a("", "其他流动资产", oth_ca_e, oth_ca_b)
+
+    ca_e = cash_e + E("1101") + ar_note_e + ar_e + pre_e + divr_e + intr_e + othr_e + inv_e
+    ca_b = cash_b + B("1101") + ar_note_b + ar_b + pre_b + divr_b + intr_b + othr_b + inv_b
+    a("", "流动资产合计", ca_e, ca_b, True)
+
+    # ── 非流动资产 ────────────────────────────────────────────────────────
+    ltbond_e = E("1511"); ltbond_b = B("1511")
+    a("1511", "长期债券投资", ltbond_e, ltbond_b)
+
+    lteq_e = E("1501","1521"); lteq_b = B("1501","1521")
+    a("1501", "长期股权投资", lteq_e, lteq_b)
+
+    # 固定资产：原价 / 减：累计折旧 / 账面价值（三行）
+    fa_gross_e = E("1601"); fa_gross_b = B("1601")
+    fa_dep_e   = EL("1602"); fa_dep_b  = BL("1602")
+    fa_net_e   = fa_gross_e - fa_dep_e
+    fa_net_b   = fa_gross_b - fa_dep_b
+    a("1601", "固定资产原价",       fa_gross_e, fa_gross_b)
+    a("1602", "减：累计折旧",       fa_dep_e,   fa_dep_b)
+    a("",     "固定资产账面价值",   fa_net_e,   fa_net_b,  True)
+
+    cip_e = E("1604"); cip_b = B("1604")
+    a("1604", "在建工程",       cip_e, cip_b)
+    a("1605", "工程物资",       E("1605"),  B("1605"))
+    a("1606", "固定资产清理",   E("1606"),  B("1606"))
+    a("1611", "生产性生物资产", E("1611"),  B("1611"))
+
+    ia_e = E("1701") - EL("1702") - EL("1703")
+    ia_b = B("1701") - BL("1702") - BL("1703")
+    a("1701", "无形资产",       ia_e, ia_b)
+    a("1802", "开发支出",       E("1702","1802"), B("1702","1802"))
+    a("1801", "长期待摊费用",   E("1801"),        B("1801"))
+    a("",     "其他非流动资产", Decimal("0"),     Decimal("0"))
+
+    nca_e = (ltbond_e + lteq_e + fa_net_e + cip_e + E("1605") + E("1606")
+             + E("1611") + ia_e + E("1702","1802") + E("1801"))
+    nca_b = (ltbond_b + lteq_b + fa_net_b + cip_b + B("1605") + B("1606")
+             + B("1611") + ia_b + B("1702","1802") + B("1801"))
+    a("", "非流动资产合计", nca_e, nca_b, True)
+
+    ta_e = ca_e + nca_e
+    ta_b = ca_b + nca_b
+    a("", "资产总计", ta_e, ta_b, True)
+
+    # ── 流动负债 ──────────────────────────────────────────────────────────
+    stloan_e = EL("2001"); stloan_b = BL("2001")
+    l("2001", "短期借款",       stloan_e, stloan_b)
+    l("2201", "应付票据",       EL("2201"), BL("2201"))
+
+    apar_e = EL("2202"); apar_b = BL("2202")
+    l("2202", "应付账款",       apar_e, apar_b)
+    l("2203", "预收款项",       EL("2203","2205"), BL("2203","2205"))
+
+    sal_e = EL("2211"); sal_b = BL("2211")
+    l("2211", "应付职工薪酬",   sal_e, sal_b)
+
+    tax_p_e = EL("2221"); tax_p_b = BL("2221")
+    l("2221", "应交税费",       tax_p_e, tax_p_b)
+
+    int_p_e = EL("2231"); int_p_b = BL("2231")
+    l("2231", "应付利息",       int_p_e, int_p_b)
+
+    div_p_e = EL("2232"); div_p_b = BL("2232")
+    l("2232", "应付利润",       div_p_e, div_p_b)   # 企业准则叫"应付股利"
+
+    oth_cl_e = EL("2241"); oth_cl_b = BL("2241")
+    l("2241", "其他应付款",     oth_cl_e, oth_cl_b)
+    l("",     "其他流动负债",   Decimal("0"), Decimal("0"))
+
+    cl_e = (stloan_e + EL("2201") + apar_e + EL("2203","2205")
+            + sal_e + tax_p_e + int_p_e + div_p_e + oth_cl_e)
+    cl_b = (stloan_b + BL("2201") + apar_b + BL("2203","2205")
+            + sal_b + tax_p_b + int_p_b + div_p_b + oth_cl_b)
+    l("", "流动负债合计", cl_e, cl_b, True)
+
+    # ── 非流动负债 ────────────────────────────────────────────────────────
+    ltloan_e = EL("2501"); ltloan_b = BL("2501")
+    l("2501", "长期借款",       ltloan_e, ltloan_b)
+    l("2511", "长期应付款",     EL("2511"), BL("2511"))
+    l("2401", "递延收益",       EL("2401"), BL("2401"))
+    l("",     "其他非流动负债", Decimal("0"), Decimal("0"))
+
+    ncl_e = ltloan_e + EL("2511") + EL("2401")
+    ncl_b = ltloan_b + BL("2511") + BL("2401")
+    l("", "非流动负债合计", ncl_e, ncl_b, True)
+
+    tl_e = cl_e + ncl_e
+    tl_b = cl_b + ncl_b
+    l("", "负债合计", tl_e, tl_b, True)
+
+    # ── 所有者权益（或股东权益）──────────────────────────────────────────
+    cap_e = EL("4001","3001"); cap_b = BL("4001","3001")
+    eq("4001", "实收资本（或股本）", cap_e, cap_b)
+
+    capres_e = EL("4002","3002"); capres_b = BL("4002","3002")
+    eq("4002", "资本公积",          capres_e, capres_b)
+
+    surres_e = EL("4101","3101"); surres_b = BL("4101","3101")
+    eq("4101", "盈余公积",          surres_e, surres_b)
+
+    unclosed_e = -sum(v for k, v in end_bal.items() if "6001" <= k <= "6899")
+    unclosed_b = -sum(v for k, v in beg_bal.items() if "6001" <= k <= "6899")
+    undist_e = EL("4103","4104","3103","3104") + unclosed_e
+    undist_b = BL("4103","4104","3103","3104") + unclosed_b
+    eq("4104", "未分配利润", undist_e, undist_b)
+
+    te_e = cap_e + capres_e + surres_e + undist_e
+    te_b = cap_b + capres_b + surres_b + undist_b
+    eq("", "所有者权益（或股东权益）合计", te_e, te_b, True)
+
+    tl_eq_e = tl_e + te_e
+    tl_eq_b = tl_b + te_b
+    eq("", "负债和所有者权益（或股东权益）总计", tl_eq_e, tl_eq_b, True)
+
+    bs.diff     = ta_e - tl_eq_e
+    bs.balanced = abs(bs.diff) < Decimal("1.00")
+    return bs
+
+
+def _map_income_statement_xiye(
+    ytd_fn: Callable[[str, str], Decimal],
+    cur_fn: Callable[[str, str], Decimal],
+    as_of_str: str,
+) -> IncomeStatement:
+    """
+    小企业会计准则（2013）格式利润表。
+    ytd_fn(prefix, direction) → 本年累计发生额
+    cur_fn(prefix, direction) → 本月发生额
+    """
+    is_ = IncomeStatement(
+        date_from=as_of_str, date_to=as_of_str,
+        prev_from="", prev_to="",
+        col1_label="本年累计金额",
+        col2_label="本月金额",
+    )
+
+    def row(code, name, ytd, cur, is_total=False, rn=0):
+        is_.items.append(ISLineItem(
+            code=code, name=name,
+            cur_amt=ytd, prev_amt=cur,
+            is_total=is_total, row_num=rn,
+        ))
+
+    def zero(): return Decimal("0")
+
+    # 一、营业收入（1）
+    rev_y = ytd_fn("6001", "CREDIT") + ytd_fn("6051", "CREDIT")
+    rev_c = cur_fn("6001", "CREDIT") + cur_fn("6051", "CREDIT")
+    row("6001", "一、营业收入", rev_y, rev_c, True, 1)
+
+    # 减：营业成本（2）
+    cogs_y = ytd_fn("6401", "DEBIT")
+    cogs_c = cur_fn("6401", "DEBIT")
+    row("6401", "减：营业成本", cogs_y, cogs_c, False, 2)
+
+    # 税金及附加（3）及明细（4-10）
+    tax_y = ytd_fn("6403", "DEBIT")
+    tax_c = cur_fn("6403", "DEBIT")
+    row("6403", "    税金及附加",             tax_y, tax_c, False, 3)
+    row("", "      其中：消费税",              zero(), zero(), False, 4)
+    row("", "            营业税",             zero(), zero(), False, 5)
+    row("", "            城市维护建设税",     zero(), zero(), False, 6)
+    row("", "            资源税",             zero(), zero(), False, 7)
+    row("", "            土地增值税",         zero(), zero(), False, 8)
+    row("", "            城镇土地使用税、房产税、车船税、印花税", zero(), zero(), False, 9)
+    row("", "            教育费附加、矿产资源补偿费、排污费",    zero(), zero(), False, 10)
+
+    # 销售费用（11）及明细（12-13）
+    sell_y = ytd_fn("6601", "DEBIT")
+    sell_c = cur_fn("6601", "DEBIT")
+    row("6601", "    销售费用",                  sell_y, sell_c, False, 11)
+    row("", "      其中：商品维修费",             zero(), zero(), False, 12)
+    row("", "            广告费和业务宣传费",     zero(), zero(), False, 13)
+
+    # 管理费用（14）及明细（15-17）
+    admin_y = ytd_fn("6602", "DEBIT")
+    admin_c = cur_fn("6602", "DEBIT")
+    row("6602", "    管理费用",                  admin_y, admin_c, False, 14)
+    row("", "      其中：开办费",                zero(), zero(), False, 15)
+    row("", "            业务招待费",            zero(), zero(), False, 16)
+    row("", "            研究费用",              zero(), zero(), False, 17)
+
+    # 财务费用（18）及明细（19）
+    # 只取借方：荆鹏 ytd 列含关账分录 Dr 3103/Cr 5603，贷方含关账导致净额=0；借方只含原始费用
+    fin_y = ytd_fn("6603", "DEBIT")
+    fin_c = cur_fn("6603", "DEBIT")
+    row("6603", "    财务费用",                  fin_y, fin_c, False, 18)
+    row("", '      其中：利息费用（收入以"-"号填列）', zero(), zero(), False, 19)
+
+    # 加：投资收益（20）
+    # 只取贷方：荆鹏 ytd 含关账分录 Dr 5111/Cr 3103，借方含关账导致净额=0；贷方只含原始收益
+    inv_y = ytd_fn("6111", "CREDIT")
+    inv_c = cur_fn("6111", "CREDIT")
+    row("6111", '加：投资收益（损失以"-"号填列）', inv_y, inv_c, False, 20)
+
+    # 二、营业利润（21）
+    op_y = rev_y - cogs_y - tax_y - sell_y - admin_y - fin_y + inv_y
+    op_c = rev_c - cogs_c - tax_c - sell_c - admin_c - fin_c + inv_c
+    row("", '二、营业利润（亏损以"-"号填列）', op_y, op_c, True, 21)
+
+    # 加：营业外收入（22）及明细（23）
+    nonop_in_y = ytd_fn("6301", "CREDIT")
+    nonop_in_c = cur_fn("6301", "CREDIT")
+    row("6301", "加：营业外收入",               nonop_in_y, nonop_in_c, False, 22)
+    row("", "      其中：政府补助",             zero(), zero(), False, 23)
+
+    # 减：营业外支出（24）及明细（25-29）
+    nonop_ex_y = ytd_fn("6711", "DEBIT")
+    nonop_ex_c = cur_fn("6711", "DEBIT")
+    row("6711", "减：营业外支出",               nonop_ex_y, nonop_ex_c, False, 24)
+    row("", "      其中：坏账损失",             zero(), zero(), False, 25)
+    row("", "            无法收回的长期债券投资损失",   zero(), zero(), False, 26)
+    row("", "            无法收回的长期股权投资损失",   zero(), zero(), False, 27)
+    row("", "            自然灾害等不可抗力因素造成的损失", zero(), zero(), False, 28)
+    row("", "            税收滞纳金",           zero(), zero(), False, 29)
+
+    # 三、利润总额（30）
+    ebt_y = op_y + nonop_in_y - nonop_ex_y
+    ebt_c = op_c + nonop_in_c - nonop_ex_c
+    row("", '三、利润总额（亏损总额以"-"号填列）', ebt_y, ebt_c, True, 30)
+
+    # 减：所得税费用（31）
+    tax_fee_y = ytd_fn("6801", "DEBIT")
+    tax_fee_c = cur_fn("6801", "DEBIT")
+    row("6801", "减：所得税费用",               tax_fee_y, tax_fee_c, False, 31)
+
+    # 四、净利润（32）
+    np_y = ebt_y - tax_fee_y
+    np_c = ebt_c - tax_fee_c
+    row("", '四、净利润（净亏损以"-"号填列）',  np_y, np_c, True, 32)
+
+    return is_
+
+
+# ---------------------------------------------------------------------------
+# ReportService
+# ---------------------------------------------------------------------------
+
+class ReportService:
+    def __init__(self, db: Session) -> None:
+        self._db = db
+
+    # ── Balance Sheet (会企01表) ────────────────────────────────────────────
+
+    def get_balance_sheet(self, as_of: date, standard: str = "gaap") -> BalanceSheet:
+        """官方格式资产负债表。standard: "gaap"（企业准则，默认）或 "xiye"（小企业准则）。"""
+        beg_date = date(as_of.year - 1, 12, 31)
+        end_bal  = normalize_balances(_build_balances(self._db, as_of), standard)
+        beg_bal  = normalize_balances(_build_balances(self._db, beg_date), standard)
+        if standard == "xiye":
+            return _map_balance_sheet_xiye(end_bal, beg_bal, str(as_of), str(beg_date))
+        return _map_balance_sheet(end_bal, beg_bal, str(as_of), str(beg_date))
+
+    # ── Income Statement ────────────────────────────────────────────────────
+
+    def get_income_statement(self, date_from: date, date_to: date, standard: str = "gaap") -> IncomeStatement:
+        """官方格式利润表。standard: "gaap"（企业准则，默认）或 "xiye"（小企业准则）。"""
+        import calendar
+
+        if standard == "xiye":
+            ytd_from = date(date_to.year, 1, 1)
+
+            def _base_ytd(prefix, direction):
+                return _sum_period(self._db, prefix, direction, ytd_from, date_to)
+
+            def _base_cur(prefix, direction):
+                return _sum_period(self._db, prefix, direction, date_from, date_to)
+
+            ytd_fn = _make_dual_fn(_base_ytd, standard)
+            cur_fn = _make_dual_fn(_base_cur, standard)
+            return _map_income_statement_xiye(ytd_fn, cur_fn, str(date_to))
+
+        prev_from = date(date_from.year - 1, date_from.month, date_from.day)
+        last_day  = calendar.monthrange(date_to.year - 1, date_to.month)[1]
+        prev_to   = date(date_to.year - 1, date_to.month, min(date_to.day, last_day))
+
+        def _base_cur(prefix, direction):
+            return _sum_period(self._db, prefix, direction, date_from, date_to)
+
+        def _base_prev(prefix, direction):
+            return _sum_period(self._db, prefix, direction, prev_from, prev_to)
+
+        cur_fn  = _make_dual_fn(_base_cur, standard)
+        prev_fn = _make_dual_fn(_base_prev, standard)
+
+        return _map_income_statement(
+            cur_fn, prev_fn,
+            str(date_from), str(date_to),
+            str(prev_from), str(prev_to),
+        )

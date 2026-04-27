@@ -1,0 +1,132 @@
+[
+  {
+    "strategy_id": "FA-001",
+    "title": "500万以下设备一次性税前扣除",
+    "trigger_keywords": ["固定资产", "一次性扣除", "500万", "设备器具", "当年扣除"],
+    "scenario": "企业购置单价不超过500万元的设备器具，当年一次性在税前扣除",
+    "core_content": "2018年1月1日至2027年12月31日，企业购置的单价（含税）不超过500万元的设备器具（不含房屋、建筑物），可选择在当年一次性全额税前扣除，不再按使用年限计提折旧。此为可选性优惠，企业自行决定是否采用。",
+    "action_suggestions": [
+      "采购前确认设备单价是否≤500万（含增值税）",
+      "汇算清缴时填报《固定资产加速折旧（扣除）优惠明细表》",
+      "账务上仍按正常折旧处理，税务上做加速折旧调整（税会差异）",
+      "若当年利润不足，可不选择一次性扣除，保留后续年度按正常折旧扣除"
+    ],
+    "risk_notes": "选择一次性扣除后，处置资产时已扣除折旧不再追溯；账面折旧和税务折旧产生暂时性差异需做递延所得税",
+    "metadata": {
+      "applicable_taxpayer": ["GENERAL", "SMALL_SCALE"],
+      "applicable_industry": ["ALL"],
+      "region_scope": "NATIONAL",
+      "applicable_regions": [],
+      "profit_range": {"min": 0, "max": 99999999},
+      "optimal_timing": "Q4",
+      "valid_from": "2018-01-01",
+      "valid_until": "2027-12-31",
+      "source_doc": "财税〔2018〕54号",
+      "confidence": 0.98
+    }
+  },
+  {
+    "strategy_id": "FA-002",
+    "title": "固定资产折旧方法选择策略",
+    "trigger_keywords": ["折旧方法", "双倍余额递减", "年数总和法", "直线法", "加速折旧节税"],
+    "scenario": "企业拥有大量固定资产，折旧方法的选择直接影响每年的税前扣除额",
+    "core_content": "税法允许三种折旧方法：①直线法（年限平均法）②双倍余额递减法③年数总和法。加速折旧方法（②③）在前期多扣，后期少扣，相当于获得延期纳税的时间价值。适用于：用于研发的设备；集成电路企业设备；生物药品、环保设备等。",
+    "action_suggestions": [
+      "对盈利期的资产采用加速折旧方法（前期多扣税少缴）",
+      "亏损期的资产反而不宜加速折旧（亏损弥补期限有限）",
+      "在购置资产当年选好方法，会计和税务可选不同方法（填报纳税调整）",
+      "集成电路、生物药品等特定行业设备可按最短3年折旧"
+    ],
+    "risk_notes": "折旧方法一旦确定不可随意变更；会计折旧与税务折旧差异需在申报表中调整",
+    "metadata": {
+      "applicable_taxpayer": ["GENERAL"],
+      "applicable_industry": ["ALL"],
+      "region_scope": "NATIONAL",
+      "applicable_regions": [],
+      "profit_range": {"min": 0, "max": 99999999},
+      "optimal_timing": "Q1",
+      "valid_from": "2008-01-01",
+      "valid_until": "2099-12-31",
+      "source_doc": "企业所得税法实施条例第59-61条",
+      "confidence": 0.99
+    }
+  },
+  {
+    "strategy_id": "FA-003",
+    "title": "融资租赁设备税务处理",
+    "trigger_keywords": ["融资租赁", "租赁", "使用权资产", "租赁期", "所有权转移"],
+    "scenario": "企业通过融资租赁取得大型设备，与直接购置在税务处理上有所不同",
+    "core_content": "融资租赁：承租方实质上取得资产所有权，承租方可按自有资产计提折旧（税前扣除）；利息费用可税前扣除。经营租赁：租赁费全额税前扣除。融资租赁一般适用于单价高且需要灵活融资的设备，可规避一次性大额资金占用。",
+    "action_suggestions": [
+      "设备价值高（>500万）时，比较融资租赁vs银行贷款的综合税务效益",
+      "融资租赁合同须明确约定所有权转移条款，否则税务认定为经营租赁",
+      "租赁期满取得所有权时，以剩余价款（名义价格）作为资产计税基础",
+      "关注新租赁准则下使用权资产的税会差异处理"
+    ],
+    "risk_notes": "经营租赁vs融资租赁的税务认定以合同实质为准，不以会计处理为准",
+    "metadata": {
+      "applicable_taxpayer": ["GENERAL"],
+      "applicable_industry": ["ALL"],
+      "region_scope": "NATIONAL",
+      "applicable_regions": [],
+      "profit_range": {"min": 0, "max": 99999999},
+      "optimal_timing": "ANY",
+      "valid_from": "2008-01-01",
+      "valid_until": "2099-12-31",
+      "source_doc": "企业所得税法实施条例第47、58条",
+      "confidence": 0.96
+    }
+  },
+  {
+    "strategy_id": "FA-004",
+    "title": "固定资产处置的税务规划",
+    "trigger_keywords": ["固定资产处置", "资产出售", "转让", "清理", "残值"],
+    "scenario": "企业处置旧设备或固定资产时，涉及企业所得税、增值税的合规处理",
+    "core_content": "企业处置固定资产收入（含以物换物）需并入应纳税所得额计税。处置收入 - 计税基础（原值-已计提税务折旧） - 处置费用 = 应税所得/损失。增值税：处置2009年前购入的固定资产，可按2%简易征收；之后购入的按适用税率计算销项。",
+    "action_suggestions": [
+      "处置前核查资产计税基础（税务折旧账）与账面价值的差异",
+      "2009年前购入的旧设备处置，可选2%简易计税，减少增值税负担",
+      "亏损处置的资产损失，及时在企业所得税申报中扣除",
+      "以旧换新时，分别核算处置收入和采购成本"
+    ],
+    "risk_notes": "固定资产损失需税务备案（超100万须专项申报），否则不得税前扣除",
+    "metadata": {
+      "applicable_taxpayer": ["GENERAL"],
+      "applicable_industry": ["ALL"],
+      "region_scope": "NATIONAL",
+      "applicable_regions": [],
+      "profit_range": {"min": 0, "max": 99999999},
+      "optimal_timing": "Q4",
+      "valid_from": "2009-01-01",
+      "valid_until": "2099-12-31",
+      "source_doc": "国税总局公告2011年第25号；财税〔2016〕36号",
+      "confidence": 0.97
+    }
+  },
+  {
+    "strategy_id": "FA-005",
+    "title": "节能环保设备投资额抵免税款",
+    "trigger_keywords": ["节能环保", "绿色设备", "投资抵免", "专用设备", "10%抵免"],
+    "scenario": "企业购置节能节水、环境保护、安全生产类专用设备，可按投资额10%抵税",
+    "core_content": "企业购置并实际使用国家规定的节能、节水、环保、安全生产专用设备，按设备投资额的10%直接抵免当年企业所得税应纳税额（不是扣除，是直接抵税）。当年不足抵免的，可结转5年内抵免。",
+    "action_suggestions": [
+      "购置前对照《专用设备目录》确认设备是否在目录内",
+      "保留设备发票、购销合同、验收报告、节能检测证书",
+      "汇算清缴时填报《税额抵免优惠明细表》",
+      "连续5年内不得转让或出租该设备，否则追回已抵税款"
+    ],
+    "risk_notes": "设备转让或出租后，税务机关将追回已抵免税款并加收利息；设备需实际投入使用",
+    "metadata": {
+      "applicable_taxpayer": ["GENERAL"],
+      "applicable_industry": ["ALL"],
+      "region_scope": "NATIONAL",
+      "applicable_regions": [],
+      "profit_range": {"min": 0, "max": 99999999},
+      "optimal_timing": "Q4",
+      "valid_from": "2008-01-01",
+      "valid_until": "2099-12-31",
+      "source_doc": "企业所得税法第34条；财税〔2008〕48号",
+      "confidence": 0.97
+    }
+  }
+]

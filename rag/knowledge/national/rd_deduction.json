@@ -1,0 +1,107 @@
+[
+  {
+    "strategy_id": "RD-001",
+    "title": "研发费用加计扣除（制造业100%）",
+    "trigger_keywords": ["研发加计扣除", "研发费用", "加计扣除", "100%", "制造业研发"],
+    "scenario": "制造业企业发生研发费用，可在据实扣除基础上再加计100%",
+    "core_content": "制造业企业（主营业务收入中制造业≥50%）开展研发活动发生的研发费用，可加计扣除100%，即1元研发费可抵扣2元应纳税所得额。自2023年起，制造业、科技型中小企业加计比例永久性确定为100%（其他行业75%）。",
+    "action_suggestions": [
+      "建立研发项目立项审批制度，立项文件须在年初或研发启动前完成",
+      "设立研发费用辅助账，按项目归集：人工、材料、折旧、委托研发、其他",
+      "委托境外研究机构的费用可加计扣除（不超过境内的2/3）",
+      "Q3（10月）预缴时可享受加计扣除优惠，无需等年度汇算"
+    ],
+    "risk_notes": "研发活动需符合定义（有明确目标、技术不确定性）；日常性改进不属于研发；研发人员需签考勤/工时记录",
+    "metadata": {
+      "applicable_taxpayer": ["GENERAL"],
+      "applicable_industry": ["制造业"],
+      "region_scope": "NATIONAL",
+      "applicable_regions": [],
+      "profit_range": {"min": 0, "max": 99999999},
+      "optimal_timing": "Q3",
+      "valid_from": "2023-01-01",
+      "valid_until": "2099-12-31",
+      "source_doc": "财税〔2023〕28号；国税总局公告2015年第97号",
+      "confidence": 0.99
+    }
+  },
+  {
+    "strategy_id": "RD-002",
+    "title": "研发费用加计扣除（其他行业75%）",
+    "trigger_keywords": ["研发加计扣除", "75%", "研发费用", "科技企业", "研发活动"],
+    "scenario": "非制造业的一般企业发生研发费用，享受75%加计扣除",
+    "core_content": "非制造业企业研发费用加计扣除比例为75%（即1元研发费抵扣1.75元），科技型中小企业同为100%（2023年后）。委托研发费用按实际发生额的80%作为加计扣除基数（委托境外按60%）。",
+    "action_suggestions": [
+      "核实是否满足科技型中小企业认定，若是则享受100%加计",
+      "对外委托研发合同须明确约定研发成果归属",
+      "费用辅助账中区分'允许加计'和'不允许加计'费用",
+      "享受加计扣除须填报《研发费用加计扣除优惠明细表》"
+    ],
+    "risk_notes": "烟草、娱乐、住宿餐饮、批发零售等行业不享受加计扣除；超范围归集研发费将被调整",
+    "metadata": {
+      "applicable_taxpayer": ["GENERAL"],
+      "applicable_industry": ["ALL"],
+      "region_scope": "NATIONAL",
+      "applicable_regions": [],
+      "profit_range": {"min": 0, "max": 99999999},
+      "optimal_timing": "Q3",
+      "valid_from": "2018-01-01",
+      "valid_until": "2099-12-31",
+      "source_doc": "财税〔2018〕99号",
+      "confidence": 0.98
+    }
+  },
+  {
+    "strategy_id": "RD-003",
+    "title": "科技型中小企业认定与研发加计100%",
+    "trigger_keywords": ["科技型中小企业", "科小", "认定", "100%加计", "评价"],
+    "scenario": "符合条件的中小企业申请科技型中小企业认定，享受100%研发加计扣除",
+    "core_content": "科技型中小企业标准：职工总数≤500人，年销售收入≤2亿元，资产总额≤2亿元，研发费用占比≥1%（收入<5000万），研发人员占比≥10%。认定后研发加计扣除比例为100%，且企业所得税亏损结转期延长至10年。",
+    "action_suggestions": [
+      "每年3-6月在'科技型中小企业评价系统'完成自评及填报",
+      "重点核查研发人员占比和研发费用占比指标",
+      "获得评价号后，汇算清缴时勾选科技型中小企业身份",
+      "若同时满足高新条件，优先申请高新（税率优惠更大）"
+    ],
+    "risk_notes": "认定为年度有效，每年须重新申请；弄虚作假申请有撤销资格和补税风险",
+    "metadata": {
+      "applicable_taxpayer": ["GENERAL", "SMALL_SCALE"],
+      "applicable_industry": ["ALL"],
+      "region_scope": "NATIONAL",
+      "applicable_regions": [],
+      "profit_range": {"min": 0, "max": 99999999},
+      "optimal_timing": "Q2",
+      "valid_from": "2017-01-01",
+      "valid_until": "2099-12-31",
+      "source_doc": "国科发政〔2017〕115号",
+      "confidence": 0.98
+    }
+  },
+  {
+    "strategy_id": "RD-004",
+    "title": "研发费用辅助账规范建立",
+    "trigger_keywords": ["研发辅助账", "费用归集", "研发台账", "合规", "人工费用分摊"],
+    "scenario": "企业发生研发费用但未建立规范辅助账，面临税务检查时被调整风险",
+    "core_content": "税务机关要求企业按研发项目分别建立辅助账，归集六类费用：①人员人工费（工资、社保）②直接投入费用（材料、能源）③折旧费④无形资产摊销⑤新产品设计、试制、检验费⑥其他相关费用（≤其他五类合计10%）。",
+    "action_suggestions": [
+      "按项目设立研发费用科目（6604）下的辅助核算",
+      "研发人员签署工时分配表，按比例分摊人工费",
+      "对外采购研发材料单独保存采购凭证",
+      "委托研发须签订合同并取得研究成果报告",
+      "年末汇总形成《研发项目情况说明》备查"
+    ],
+    "risk_notes": "辅助账缺失是税务稽查中最常见的被调整原因；建账要趁早，不要等到汇算前",
+    "metadata": {
+      "applicable_taxpayer": ["GENERAL"],
+      "applicable_industry": ["ALL"],
+      "region_scope": "NATIONAL",
+      "applicable_regions": [],
+      "profit_range": {"min": 0, "max": 99999999},
+      "optimal_timing": "Q1",
+      "valid_from": "2015-01-01",
+      "valid_until": "2099-12-31",
+      "source_doc": "国税总局公告2015年第97号第四条",
+      "confidence": 0.99
+    }
+  }
+]

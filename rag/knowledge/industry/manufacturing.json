@@ -1,0 +1,106 @@
+[
+  {
+    "strategy_id": "MFG-001",
+    "title": "制造业研发费用100%加计扣除",
+    "trigger_keywords": ["制造业", "研发加计", "100%", "生产制造", "工业企业"],
+    "scenario": "主营业务为制造业的企业，研发加计扣除比例高于其他行业",
+    "core_content": "制造业企业（按主营业务收入中制造业收入≥50%判定）研发费用加计扣除100%，自2021年起永久适用，无需年限限制。制造业研发含：新产品开发、工艺流程改进、材料配方研究等。",
+    "action_suggestions": [
+      "确认主营收入中制造业占比是否≥50%，保留收入分类证明",
+      "研发费用辅助账按产品线分项目归集",
+      "工艺改进、节能改造也可计入研发项目（需有技术不确定性）",
+      "与生产成本严格区分：日常生产费用≠研发费用"
+    ],
+    "risk_notes": "纯加工制造（无技术创新）不属于研发活动；品质检测非研发，但测试新产品性能属研发",
+    "metadata": {
+      "applicable_taxpayer": ["GENERAL"],
+      "applicable_industry": ["制造业"],
+      "region_scope": "NATIONAL",
+      "applicable_regions": [],
+      "profit_range": {"min": 0, "max": 99999999},
+      "optimal_timing": "Q3",
+      "valid_from": "2021-01-01",
+      "valid_until": "2099-12-31",
+      "source_doc": "财税〔2021〕13号",
+      "confidence": 0.99
+    }
+  },
+  {
+    "strategy_id": "MFG-002",
+    "title": "增值税进项税额加计抵减（制造业10%）",
+    "trigger_keywords": ["加计抵减", "进项加计", "制造业抵减", "10%加计", "生产性服务业"],
+    "scenario": "生产性服务业纳税人提供部分现代服务，可对进项税额额外加计10%抵减",
+    "core_content": "提供邮政、电信、现代服务、生活服务的纳税人，当期可计提进项税额加计抵减额（进项×10%），用于抵减应纳税额。2019年4月起实施，生产性服务业加计10%，生活性服务业加计15%。需满足：四项服务收入占全部销售额≥50%。",
+    "action_suggestions": [
+      "统计四项服务（邮政、电信、现代服务、生活服务）收入占比",
+      "每年初在增值税申报系统确认加计抵减资格（填报《声明》）",
+      "每月计提加计抵减额，在申报表第19行填报",
+      "年末如收入结构变化导致占比不足50%，须停止享受"
+    ],
+    "risk_notes": "出口服务不适用加计抵减；进项转出后，对应的加计抵减额也须转出",
+    "metadata": {
+      "applicable_taxpayer": ["GENERAL"],
+      "applicable_industry": ["制造业", "服务业"],
+      "region_scope": "NATIONAL",
+      "applicable_regions": [],
+      "profit_range": {"min": 0, "max": 99999999},
+      "optimal_timing": "Q1",
+      "valid_from": "2019-04-01",
+      "valid_until": "2027-12-31",
+      "source_doc": "财税〔2019〕13号",
+      "confidence": 0.97
+    }
+  },
+  {
+    "strategy_id": "MFG-003",
+    "title": "原材料采购进项税优化",
+    "trigger_keywords": ["原材料", "采购进项", "农产品扣除", "原材料进项", "13%进项"],
+    "scenario": "制造业企业大量采购原材料，进项税额抵扣是降低税负的核心手段",
+    "core_content": "制造业采购原材料（金属、塑料、化工原料等）取得13%专票，可全额抵扣。采购农产品（农业初级产品）：无专票时可按9%扣除率计算进项；有专票按票面税额。部分加工制造企业采购农产品可申请核定扣除。",
+    "action_suggestions": [
+      "建立供应商分级：优先选择可开13%专票的一般纳税人供应商",
+      "农产品采购：与供货方协商开具农产品收购凭证（可9%抵扣）",
+      "核定扣除申请：食品、纺织等行业可申请农产品增值税进项核定扣除",
+      "月末核查专票认证情况，超180天未认证将丧失抵扣权"
+    ],
+    "risk_notes": "供应商资质变化（小规模转一般纳税人）须重新核查开票能力；虚开进项票刑事责任",
+    "metadata": {
+      "applicable_taxpayer": ["GENERAL"],
+      "applicable_industry": ["制造业"],
+      "region_scope": "NATIONAL",
+      "applicable_regions": [],
+      "profit_range": {"min": 0, "max": 99999999},
+      "optimal_timing": "ANY",
+      "valid_from": "2016-05-01",
+      "valid_until": "2099-12-31",
+      "source_doc": "财税〔2016〕36号；财税〔2012〕75号",
+      "confidence": 0.98
+    }
+  },
+  {
+    "strategy_id": "MFG-004",
+    "title": "出口制造企业免抵退税优化",
+    "trigger_keywords": ["免抵退", "出口制造", "免抵税额", "外销", "退税率"],
+    "scenario": "既有内销又有外销的制造企业，通过免抵退税方案降低增值税税负",
+    "core_content": "生产型出口企业适用免、抵、退税办法：出口货物免征增值税；生产耗用的进项税额抵减内销应纳税额；不足抵减的部分退还。退税率按货物HS编码确定，退税率<征税率时，差额部分转入成本。",
+    "action_suggestions": [
+      "按退税率高低区分产品组合，优先出口退税率高的产品",
+      "合理安排内外销比例，确保进项税充分抵减",
+      "每月15日前完成上月出口退税申报（电子口岸数据须匹配）",
+      "委托外贸代理出口的，及时提供报关单、核销单等退税凭证"
+    ],
+    "risk_notes": "出口报关信息与申报信息不一致将导致退税被拒；退税率调整须关注海关公告",
+    "metadata": {
+      "applicable_taxpayer": ["GENERAL"],
+      "applicable_industry": ["制造业"],
+      "region_scope": "NATIONAL",
+      "applicable_regions": [],
+      "profit_range": {"min": 0, "max": 99999999},
+      "optimal_timing": "ANY",
+      "valid_from": "2012-07-01",
+      "valid_until": "2099-12-31",
+      "source_doc": "财税〔2012〕39号",
+      "confidence": 0.97
+    }
+  }
+]

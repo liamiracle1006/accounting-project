@@ -1,0 +1,262 @@
+[
+  {
+    "strategy_id": "CIT-001",
+    "title": "小微企业应纳税所得额阶梯优惠税率",
+    "trigger_keywords": ["小微企业", "所得税", "利润", "税率", "减免"],
+    "scenario": "企业年度应纳税所得额较低，符合小微企业认定标准时",
+    "core_content": "年应纳税所得额100万元以下部分，实际税率5%（25%×20%）；100万至300万元部分，实际税率10%（25%×40%）。前提：从业人数≤300人，资产总额≤5000万元（工业企业：从业人数≤100人，资产总额≤3000万元）。",
+    "action_suggestions": [
+      "Q4前确认全年利润是否接近100万或300万临界点",
+      "若接近上限，可适当加大费用预提（如固定资产折旧、员工福利）",
+      "确保从业人数和资产总额满足认定条件",
+      "年底前向主管税务机关核实认定状态"
+    ],
+    "risk_notes": "关联企业合并判断小微资格；季度预缴时可按小微税率预缴，年度汇算时调整",
+    "metadata": {
+      "applicable_taxpayer": ["GENERAL", "SMALL_SCALE"],
+      "applicable_industry": ["ALL"],
+      "region_scope": "NATIONAL",
+      "applicable_regions": [],
+      "profit_range": {"min": 0, "max": 3000000},
+      "optimal_timing": "Q4",
+      "valid_from": "2023-01-01",
+      "valid_until": "2027-12-31",
+      "source_doc": "财税〔2023〕6号",
+      "confidence": 0.98
+    }
+  },
+  {
+    "strategy_id": "CIT-002",
+    "title": "高新技术企业15%优惠税率",
+    "trigger_keywords": ["高新技术", "HNTE", "15%税率", "研发", "科技企业"],
+    "scenario": "企业研发投入占比高、拥有自主知识产权，可申请高新技术企业认定",
+    "core_content": "取得高新技术企业证书的企业，企业所得税税率由25%降至15%，节税比例达40%。认定有效期3年，需每年满足研发费用比例要求（收入<5000万：研发费/营收≥5%；5000万~2亿：≥4%；>2亿：≥3%）。",
+    "action_suggestions": [
+      "每年9-10月评估是否满足重新认定条件",
+      "建立研发费用辅助账，归集人员、设备、材料等研发支出",
+      "知识产权申请与研发项目同步推进",
+      "到期前6个月启动重新认定申报流程"
+    ],
+    "risk_notes": "认定到期未续期将按25%补税；研发费用归集不规范是被取消认定的主要原因",
+    "metadata": {
+      "applicable_taxpayer": ["GENERAL"],
+      "applicable_industry": ["ALL"],
+      "region_scope": "NATIONAL",
+      "applicable_regions": [],
+      "profit_range": {"min": 0, "max": 99999999},
+      "optimal_timing": "Q3",
+      "valid_from": "2008-01-01",
+      "valid_until": "2099-12-31",
+      "source_doc": "国税发〔2008〕116号；财税〔2016〕52号",
+      "confidence": 0.99
+    }
+  },
+  {
+    "strategy_id": "CIT-003",
+    "title": "西部大开发企业所得税15%优惠",
+    "trigger_keywords": ["西部", "西部大开发", "15%", "区域优惠", "注册地"],
+    "scenario": "企业注册在西部地区，且主营业务收入占比≥60%属于国家鼓励类产业",
+    "core_content": "在西部地区（12省市区）注册并实际经营，主营业务收入占总收入60%以上属鼓励类目录的企业，企业所得税税率15%，延续至2030年底。",
+    "action_suggestions": [
+      "核实注册地是否在西部12省市区范围内",
+      "确认主营业务是否在《西部地区鼓励类产业目录》中",
+      "统计主营业务收入占比，确保≥60%",
+      "在年度汇算清缴时申报享受优惠"
+    ],
+    "risk_notes": "若主营收入占比下降至60%以下，当年不得享受；异地经营需在注册地纳税",
+    "metadata": {
+      "applicable_taxpayer": ["GENERAL"],
+      "applicable_industry": ["ALL"],
+      "region_scope": "PROVINCIAL",
+      "applicable_regions": ["四川省", "重庆市", "贵州省", "云南省", "西藏自治区", "陕西省", "甘肃省", "青海省", "宁夏回族自治区", "新疆维吾尔自治区", "内蒙古自治区", "广西壮族自治区"],
+      "profit_range": {"min": 0, "max": 99999999},
+      "optimal_timing": "Q4",
+      "valid_from": "2021-01-01",
+      "valid_until": "2030-12-31",
+      "source_doc": "财税〔2020〕23号",
+      "confidence": 0.97
+    }
+  },
+  {
+    "strategy_id": "CIT-004",
+    "title": "企业所得税年度汇算清缴亏损弥补",
+    "trigger_keywords": ["亏损", "弥补亏损", "结转", "5年", "10年"],
+    "scenario": "企业历史年度存在税务亏损，可在后续年度税前弥补",
+    "core_content": "一般企业税务亏损可向后结转弥补，期限5年。高新技术企业、科技型中小企业的亏损结转期限延长至10年。弥补顺序按亏损发生年度由远到近。",
+    "action_suggestions": [
+      "梳理过去5（10）年税务亏损台账，确认可弥补余额",
+      "年度汇算时优先弥补最早年度亏损",
+      "高新/科技中小企业维持资质以保留10年弥补权",
+      "注意资产重组或股权变更后亏损弥补资格的变化"
+    ],
+    "risk_notes": "会计亏损≠税务亏损，需单独计算；股权收购超50%可能影响亏损弥补资格",
+    "metadata": {
+      "applicable_taxpayer": ["GENERAL"],
+      "applicable_industry": ["ALL"],
+      "region_scope": "NATIONAL",
+      "applicable_regions": [],
+      "profit_range": {"min": 0, "max": 99999999},
+      "optimal_timing": "Q1",
+      "valid_from": "2018-01-01",
+      "valid_until": "2099-12-31",
+      "source_doc": "财税〔2018〕76号",
+      "confidence": 0.98
+    }
+  },
+  {
+    "strategy_id": "CIT-005",
+    "title": "公益捐赠税前扣除",
+    "trigger_keywords": ["捐赠", "公益", "慈善", "扣除", "基金会"],
+    "scenario": "企业向具有公益性捐赠资质的机构捐款，可在税前扣除",
+    "core_content": "企业通过公益性社会组织或县级以上政府的公益性捐赠，在年度利润总额12%以内部分税前扣除，超额部分结转三年。向特定基金会（如中国红十字会）的捐赠可全额扣除。",
+    "action_suggestions": [
+      "确认受捐机构是否具备税务局认定的公益捐赠资格",
+      "索取捐赠票据（必须是财政部门监制的非税收入票据）",
+      "计算12%上限：基数为会计利润总额（税前）",
+      "超限捐赠额在汇算时填写结转表，后三年度继续扣除"
+    ],
+    "risk_notes": "捐赠给非认定机构不得扣除；票据不合规将被全额调增",
+    "metadata": {
+      "applicable_taxpayer": ["GENERAL"],
+      "applicable_industry": ["ALL"],
+      "region_scope": "NATIONAL",
+      "applicable_regions": [],
+      "profit_range": {"min": 0, "max": 99999999},
+      "optimal_timing": "Q4",
+      "valid_from": "2008-01-01",
+      "valid_until": "2099-12-31",
+      "source_doc": "企业所得税法第9条；财税〔2018〕15号",
+      "confidence": 0.97
+    }
+  },
+  {
+    "strategy_id": "CIT-006",
+    "title": "技术转让所得减免税",
+    "trigger_keywords": ["技术转让", "知识产权", "专利", "许可", "免税500万"],
+    "scenario": "企业转让或许可使用自有技术（专利、非专利）取得收入",
+    "core_content": "居民企业技术转让所得：500万元以内部分免征企业所得税；超500万元部分减半（12.5%）征收。技术许可使用费也适用本优惠。需向主管税务机关备案。",
+    "action_suggestions": [
+      "将专利许可和技术服务合同分开签署，区分技术转让所得和服务收入",
+      "确认技术是否属于免税范围（5+N类技术：专利、计算机软著、集成电路布图、植物新品种、生物医药新品种）",
+      "向主管税务局进行技术转让所得减免备案",
+      "保留完整技术开发文档作为合规证明"
+    ],
+    "risk_notes": "纯技术咨询、服务不属于技术转让；转让给关联方需特别注意定价合理性",
+    "metadata": {
+      "applicable_taxpayer": ["GENERAL"],
+      "applicable_industry": ["ALL"],
+      "region_scope": "NATIONAL",
+      "applicable_regions": [],
+      "profit_range": {"min": 0, "max": 99999999},
+      "optimal_timing": "ANY",
+      "valid_from": "2015-01-01",
+      "valid_until": "2099-12-31",
+      "source_doc": "企业所得税法第27条；国税函〔2009〕212号",
+      "confidence": 0.97
+    }
+  },
+  {
+    "strategy_id": "CIT-007",
+    "title": "创业投资企业抵扣应纳税所得额",
+    "trigger_keywords": ["创业投资", "天使投资", "股权投资", "抵扣", "初创科技"],
+    "scenario": "企业或个人投资未上市中小高新技术企业，满2年可按投资额70%抵扣所得",
+    "core_content": "有限合伙制创投企业的法人合伙人，投资初创科技型企业满2年，可按投资额70%抵扣该法人合伙人从合伙企业分得的所得，当年不足抵扣的，可结转以后年度。",
+    "action_suggestions": [
+      "核实被投资企业是否符合初创科技型企业条件",
+      "满2年后在汇算清缴时填报抵扣明细",
+      "保留股权转让协议、验资证明等材料",
+      "注意70%计算基数为实际缴付的出资额"
+    ],
+    "risk_notes": "被投资企业上市前必须持有满2年；退出后不可追溯抵扣",
+    "metadata": {
+      "applicable_taxpayer": ["GENERAL"],
+      "applicable_industry": ["ALL"],
+      "region_scope": "NATIONAL",
+      "applicable_regions": [],
+      "profit_range": {"min": 0, "max": 99999999},
+      "optimal_timing": "Q1",
+      "valid_from": "2019-01-01",
+      "valid_until": "2027-12-31",
+      "source_doc": "财税〔2018〕55号",
+      "confidence": 0.95
+    }
+  },
+  {
+    "strategy_id": "CIT-008",
+    "title": "残疾人员工资加计扣除100%",
+    "trigger_keywords": ["残疾人", "残疾职工", "加计扣除", "安置残疾"],
+    "scenario": "企业安置残疾人就业，工资可加计100%在税前扣除",
+    "core_content": "企业安置残疾职工，按实际支付残疾职工工资的100%加计扣除（即1元工资可抵扣2元）。同时可享受增值税即征即退政策（每人每月退税额度由地方税务局核定）。",
+    "action_suggestions": [
+      "与残疾职工签订劳动合同，缴纳社保",
+      "保留残疾证复印件和劳动合同",
+      "向税务局申报残疾人员工资加计扣除（附残疾证号码）",
+      "同步向税务局申请增值税即征即退资格"
+    ],
+    "risk_notes": "残疾职工需实际到岗工作，挂名不可；增值税退税需单独申请",
+    "metadata": {
+      "applicable_taxpayer": ["GENERAL", "SMALL_SCALE"],
+      "applicable_industry": ["ALL"],
+      "region_scope": "NATIONAL",
+      "applicable_regions": [],
+      "profit_range": {"min": 0, "max": 99999999},
+      "optimal_timing": "ANY",
+      "valid_from": "2008-01-01",
+      "valid_until": "2099-12-31",
+      "source_doc": "财税〔2009〕70号",
+      "confidence": 0.99
+    }
+  },
+  {
+    "strategy_id": "CIT-009",
+    "title": "固定资产加速折旧与一次性扣除",
+    "trigger_keywords": ["固定资产", "加速折旧", "一次性扣除", "500万", "设备"],
+    "scenario": "企业购置单价500万元以下设备器具，当年可一次性税前扣除",
+    "core_content": "企业在2018年1月1日至2027年12月31日购置的单价不超过500万元的设备器具（不含不动产），允许一次性计入当年成本费用在税前扣除，不再分年度计算折旧。单价超500万元可采用双倍余额递减法或年数总和法加速折旧。",
+    "action_suggestions": [
+      "购置设备时确认单价是否≤500万元（含税价）",
+      "在当年汇算清缴时填报固定资产加速折旧优惠明细表",
+      "建立固定资产台账区分一次性扣除和正常折旧资产",
+      "超500万元资产选择双倍余额递减法以前期多扣"
+    ],
+    "risk_notes": "一次性扣除后若处置资产，已扣除金额不得再追溯；需按国税总局要求留存台账备查",
+    "metadata": {
+      "applicable_taxpayer": ["GENERAL", "SMALL_SCALE"],
+      "applicable_industry": ["ALL"],
+      "region_scope": "NATIONAL",
+      "applicable_regions": [],
+      "profit_range": {"min": 0, "max": 99999999},
+      "optimal_timing": "Q4",
+      "valid_from": "2018-01-01",
+      "valid_until": "2027-12-31",
+      "source_doc": "财税〔2018〕54号；财税〔2022〕12号",
+      "confidence": 0.98
+    }
+  },
+  {
+    "strategy_id": "CIT-010",
+    "title": "企业所得税预缴多退少补机制",
+    "trigger_keywords": ["预缴", "汇算清缴", "多退少补", "季度预缴", "年度调整"],
+    "scenario": "企业季度预缴税款与年度应缴税款存在差异，年度汇算时统一清算",
+    "core_content": "企业按季（或月）预缴企业所得税，次年5月31日前完成年度汇算清缴。预缴多于年度应缴可申请退税，少于则补缴。季度预缴时可选按上年税额1/4预缴（稳健型）或按当期利润预缴（精确型）。",
+    "action_suggestions": [
+      "Q4预判全年利润，选择合适预缴方式避免资金占压",
+      "预缴不足会产生滞纳金（日万分之五），应尽量准确预缴",
+      "5月31日前完成汇算，超期未申报有罚款风险",
+      "退税申请需提交完整财务报表和年度申报表"
+    ],
+    "risk_notes": "注意汇算清缴截止日期5月31日；境外所得汇算时间可申请延期",
+    "metadata": {
+      "applicable_taxpayer": ["GENERAL", "SMALL_SCALE"],
+      "applicable_industry": ["ALL"],
+      "region_scope": "NATIONAL",
+      "applicable_regions": [],
+      "profit_range": {"min": 0, "max": 99999999},
+      "optimal_timing": "Q1",
+      "valid_from": "2008-01-01",
+      "valid_until": "2099-12-31",
+      "source_doc": "企业所得税法第54条；国税发〔2008〕31号",
+      "confidence": 0.99
+    }
+  }
+]
