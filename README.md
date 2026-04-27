@@ -1,96 +1,89 @@
-# AgentLedger — 小微企业智能业财融合系统
+# AgentLedger — AI-Powered Accounting System for Small Businesses
 
-基于 AI 的复式记账系统，支持自然语言生成凭证、多级审核、财务报表生成及报表验证。
+A full-stack double-entry bookkeeping system with AI-assisted voucher generation, multi-role review workflows, financial statement generation, and trial balance validation.
 
-## 技术栈
+## Tech Stack
 
-| 层 | 技术 |
+| Layer | Technology |
 |---|---|
-| 前端 | React 18 + TypeScript + Vite + Tailwind CSS |
-| 后端 | Python 3.12 + FastAPI + SQLAlchemy |
-| 数据库 | MySQL 8.4 |
-| AI | Claude API（凭证生成双轨模型） |
+| Frontend | React 18 + TypeScript + Vite + Tailwind CSS |
+| Backend | Python 3.12 + FastAPI + SQLAlchemy |
+| Database | MySQL 8.4 |
+| AI | Claude API (dual-track voucher generation) |
 
-## 快速启动
+## Quick Start
+
+Open two terminals:
 
 ```
-终端 1（后端）                    终端 2（前端）
-─────────────────────────────     ─────────────
-py -3.12 -m uvicorn main:app      cd frontend
-  --reload                        npm run dev
+Terminal 1 (Backend)                  Terminal 2 (Frontend)
+────────────────────────────────      ────────────────────
+py -3.12 -m uvicorn main:app          cd frontend
+  --reload                            npm run dev
 ```
 
-| 地址 | 用途 |
+| URL | Purpose |
 |---|---|
-| http://localhost:5173 | 前端界面 |
-| http://localhost:8000/docs | 后端 API 文档 |
+| http://localhost:5173 | Web UI |
+| http://localhost:8000/docs | API docs (Swagger) |
 
-默认账号：`accountant` / `boss` / `manager`，密码均为 `123456`
+Default credentials: username `accountant` / `boss` / `manager`, password `123456`
 
-## 功能模块
+## Features
 
-### 凭证管理
-- 自然语言描述 → AI 自动生成借贷分录（双轨模型：习惯规则 + AI 规则）
-- 凭证审核工作流：草稿 → 待审 → 已过账 / 驳回
-- 批量导入（Excel / 图片 / 混合解析）
+### Voucher Management
+- Natural language input → AI-generated double-entry journal (dual-track: habit rules + AI rules)
+- Review workflow: Draft → Pending Review → Posted / Rejected
+- Bulk import via Excel, scanned images, or mixed sources
 
-### 账簿查询
-- **科目余额表**：多级科目展示，借贷平衡校验
-- **明细账**：Running Balance 引擎，支持穿透查账
+### Ledger & Reports
+- **Trial Balance**: Multi-level account tree with debit/credit balance validation
+- **General Ledger**: Running balance engine with drill-through to source vouchers
+- **Balance Sheet**: Enterprise GAAP and Small Business Standards (小企业准则) versions
+- **Income Statement**: Both standards, monthly query
 
-### 财务报表
-- **资产负债表**：企业准则 / 小企业准则双版本
-- **利润表**：企业准则 / 小企业准则双版本，按月查询
+### Validation Tool
+- Upload a trial balance Excel exported from any accounting software (e.g. Jingpeng/荆鹏)
+- Automatically parses and computes Balance Sheet and Income Statement
+- Line-by-line diff comparison against a user-uploaded reference report (green = match, red = difference)
+- Automatic account code normalization across standards (Small Business 5xxx/3xxx → Standard 6xxx/4xxx)
+- Fuzzy name matching to handle prefix variations (e.g. "应交城市维护建设税" → IS line "城市维护建设税")
 
-### 报表验证工具
-- 上传荆鹏等软件导出的科目余额表 Excel
-- 自动解析并计算资产负债表和利润表
-- 与用户上传的参考报表进行逐行 diff 对比（绿色=吻合 / 红色=差异）
-- 支持多版本会计制度科目编码自动规范化（小企业 5xxx / 3xxx → 标准 6xxx / 4xxx）
+### Other Modules
+- Period closing (month-end close, P&L transfer)
+- Fixed asset register
+- Expense request & approval
+- Habit rule management for recurring journal entries
 
-### 其他
-- 期间结账（月结、结转损益）
-- 固定资产台账
-- 费用申请审批
-- 习惯规则管理
-
-## 项目结构
+## Project Structure
 
 ```
 accounting-project/
-├── main.py                        # FastAPI 入口
-├── api/                           # 路由层
-│   ├── auth_routes.py
-│   ├── voucher_routes.py
+├── main.py                        # FastAPI entry point
+├── api/                           # Route handlers
 │   ├── report_routes.py
-│   ├── validate_routes.py         # 报表验证接口
+│   ├── validate_routes.py         # Validation tool API
 │   └── ...
-├── services/                      # 业务逻辑
-│   ├── report_service.py          # 报表生成引擎
-│   ├── validation_service.py      # Excel 解析 + 报表验证
-│   ├── voucher_service.py
+├── services/                      # Business logic
+│   ├── report_service.py          # Financial statement engine
+│   ├── validation_service.py      # Excel parsing + validation
 │   └── ...
-├── models/                        # ORM 实体
+├── models/                        # SQLAlchemy ORM models
 ├── database/
-│   ├── ddl.sql
-│   └── seed_local.sql
+│   ├── ddl.sql                    # Schema
+│   └── seed_local.sql             # Local seed data
 └── frontend/
     └── src/
         ├── features/
-        │   ├── vouchers/          # 凭证管理
-        │   ├── reports/           # 财务报表
-        │   │   ├── BalanceSheetPage.tsx
-        │   │   └── IncomeStatementPage.tsx
-        │   ├── validate/          # 报表验证工具
-        │   │   └── ValidatePage.tsx
-        │   ├── ledger/            # 明细账
-        │   └── trial-balance/     # 科目余额表
+        │   ├── reports/           # Balance sheet, income statement, ledger
+        │   ├── validate/          # Validation tool UI
+        │   └── vouchers/          # Voucher workbench
         └── api/
 ```
 
-## 设计原则
+## Design Principles
 
-- **LLM 只做文本理解**，不参与数值计算和科目选择
-- **复式记账强制平衡**：`Σ借 ≠ Σ贷` 时拒绝入账并回滚
-- **双准则兼容**：所有报表支持企业会计准则与小企业会计准则切换
-- **科目编码多制度自动对齐**：上传任意会计软件导出文件，系统自动规范化编码
+- **LLM handles language, not numbers** — AI only parses intent; all accounting logic is deterministic backend code
+- **Strict double-entry enforcement** — any voucher where Σdebit ≠ Σcredit is rejected with a full transaction rollback
+- **Dual-standard support** — all reports support both Enterprise GAAP (企业会计准则) and Small Business Standards (小企业会计准则)
+- **Cross-software compatibility** — trial balance files from different accounting software are automatically normalized before computation
