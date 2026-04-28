@@ -195,6 +195,7 @@ function FileInput({
 
 export default function ValidatePage() {
   const [tbFile,    setTbFile]    = useState<File | null>(null)
+  const [monthFile, setMonthFile] = useState<File | null>(null)
   const [bsRefFile, setBsRefFile] = useState<File | null>(null)
   const [isRefFile, setIsRefFile] = useState<File | null>(null)
   const [standard,  setStandard]  = useState<'xiye' | 'gaap'>('xiye')
@@ -209,6 +210,7 @@ export default function ValidatePage() {
     try {
       const form = new FormData()
       form.append('file', tbFile)
+      if (monthFile) form.append('month_file', monthFile)
       if (bsRefFile) form.append('bs_ref', bsRefFile)
       if (isRefFile) form.append('is_ref', isRefFile)
       form.append('standard', standard)
@@ -248,10 +250,16 @@ export default function ValidatePage() {
       {/* Upload Toolbar */}
       <div className="bg-white rounded-xl border border-gray-200 px-4 py-4 flex flex-wrap items-end gap-5">
         <FileInput
-          label="科目余额表 Excel（必填）"
-          hint="系统从此文件计算报表"
+          label="年度余额表 1-12月（必填）"
+          hint="提供 BS 余额、IS 本年累计"
           value={tbFile}
           onChange={setTbFile}
+        />
+        <FileInput
+          label="单月余额表（可选）"
+          hint="提供 IS 本月金额，如 12 月单月"
+          value={monthFile}
+          onChange={setMonthFile}
         />
         <div className="flex flex-col gap-1">
           <label className="text-xs text-gray-500">会计准则</label>

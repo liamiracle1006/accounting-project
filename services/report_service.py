@@ -362,9 +362,9 @@ def _map_income_statement(
     trev_p    = rev_p + orev_p
     row("6001", "一、营业收入",                    trev_c, trev_p, True)
 
-    # 减：营业成本
-    cogs_c    = cur_fn("6401", "DEBIT")
-    cogs_p    = prev_fn("6401", "DEBIT")
+    # 减：营业成本（主营业务成本 6401 + 其他业务成本 6402）
+    cogs_c    = cur_fn("6401", "DEBIT") + cur_fn("6402", "DEBIT")
+    cogs_p    = prev_fn("6401", "DEBIT") + prev_fn("6402", "DEBIT")
     row("6401", "减：营业成本",                    cogs_c, cogs_p)
 
     # 减：税金及附加
@@ -673,9 +673,9 @@ def _map_income_statement_xiye(
     rev_c = cur_fn("6001", "CREDIT") + cur_fn("6051", "CREDIT")
     row("6001", "一、营业收入", rev_y, rev_c, True, 1)
 
-    # 减：营业成本（2）
-    cogs_y = ytd_fn("6401", "DEBIT")
-    cogs_c = cur_fn("6401", "DEBIT")
+    # 减：营业成本（2）（主营业务成本 6401 + 其他业务成本 6402）
+    cogs_y = ytd_fn("6401", "DEBIT") + ytd_fn("6402", "DEBIT")
+    cogs_c = cur_fn("6401", "DEBIT") + cur_fn("6402", "DEBIT")
     row("6401", "减：营业成本", cogs_y, cogs_c, False, 2)
 
     # 税金及附加（3）及明细（4-10）

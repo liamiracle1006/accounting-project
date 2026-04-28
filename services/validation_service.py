@@ -58,10 +58,14 @@ _IS_DETAIL_KEYWORDS: dict[int, list[str]] = {
     15: ["开办费"],
     16: ["业务招待费"],
     17: ["研究费用", "研发费用"],
+    19: ["利息费用", "利息支出", "利息净支出"],
     23: ["政府补助"],
     25: ["坏账损失"],
     29: ["税收滞纳金", "滞纳金"],
 }
+
+# 走借方字典回填的 row（费用科目下的明细，金额在借方而非贷方）
+_IS_DETAIL_DEBIT_ROWS: set[int] = {15, 16, 17, 19, 25, 29}
 
 # ── 科目编码规范化（多版本会计制度兼容）──────────────────────────────────────
 # 科目名称 → 企业会计准则2006标准编码（名称跨制度稳定，优先于编码规则）
@@ -264,10 +268,13 @@ def parse_trial_balance(file_bytes: bytes, standard: str = "xiye") -> dict:
             "yd": get(row, "ytd_debit"),  "yc": get(row, "ytd_credit"),
         }
 
-    # ── 第1.5步：构建名称→ytd/cur 贷方映射（去重前，保留子科目级别名称） ──────────
-    # 用于IS明细行回填（如"应交城市维护建设税"的ytd贷方 → IS行6城建税）
+    # ── 第1.5步：构建名称→ytd/cur 借/贷方映射（去重前，保留子科目级别名称） ──────────
+    # 贷方：用于税金附加等明细回填（如"应交城建税"贷方 → IS城建税行）
+    # 借方：用于费用类明细回填（如"利息费用"借方 → IS利息费用行）
     name_ytd_credit: dict[str, Decimal] = {}
     name_cur_credit: dict[str, Decimal] = {}
+    name_ytd_debit:  dict[str, Decimal] = {}
+    name_cur_debit:  dict[str, Decimal] = {}
     for d in raw_data.values():
         raw_name = re.sub(r"\s+", "", d["name"])
         clean_name = _STRIP_NAME_PREFIX.sub("", raw_name)
@@ -275,6 +282,10 @@ def parse_trial_balance(file_bytes: bytes, standard: str = "xiye") -> dict:
             name_ytd_credit[clean_name] = name_ytd_credit.get(clean_name, Decimal("0")) + d["yc"]
         if d["cc"]:
             name_cur_credit[clean_name] = name_cur_credit.get(clean_name, Decimal("0")) + d["cc"]
+        if d["yd"]:
+            name_ytd_debit[clean_name]  = name_ytd_debit.get(clean_name,  Decimal("0")) + d["yd"]
+        if d["cd"]:
+            name_cur_debit[clean_name]  = name_cur_debit.get(clean_name,  Decimal("0")) + d["cd"]
 
     # ── 第二步：去重清洗————删除父科目存在且有数据时的子科目行 ──────────────────
     # 荆鹏同时导出父行和子行时会造成重复计数。
@@ -338,6 +349,8 @@ def parse_trial_balance(file_bytes: bytes, standard: str = "xiye") -> dict:
         "ytd_credit_map":  ytd_credit_map,
         "name_ytd_credit": name_ytd_credit,
         "name_cur_credit": name_cur_credit,
+        "name_ytd_debit":  name_ytd_debit,
+        "name_cur_debit":  name_cur_debit,
         "raw_rows":        raw_rows,
         "column_mapping":  col_mapping,
         "row_count":       len(raw_rows),
@@ -427,6 +440,22 @@ def _merge_maps(ytd: dict, cur: dict) -> dict:
     return merged
 
 
+def merge_yearly_and_monthly(yearly: dict, monthly: dict) -> dict:
+    """
+    把年度文件（1-12月导出）与月度文件（单月导出，如12月）的解析结果合并。
+    - 年度文件提供：BS 期末/年初余额、IS 本年累计发生额
+    - 月度文件提供：IS 当月发生额（覆盖 cur_*）
+    其余字段以年度文件为准。
+    """
+    merged = dict(yearly)  # 浅拷贝年度结果
+    # 用月度文件的"本期发生额"覆盖年度文件的（年度文件里 cur=全年，没用）
+    merged["cur_debit_map"]   = monthly["cur_debit_map"]
+    merged["cur_credit_map"]  = monthly["cur_credit_map"]
+    merged["name_cur_credit"] = monthly.get("name_cur_credit", {})
+    merged["name_cur_debit"]  = monthly.get("name_cur_debit",  {})
+    return merged
+
+
 def compute_is_from_trial_balance(parsed: dict, standard: str = "xiye") -> IncomeStatement:
     """用本年累计发生额（优先）或本期发生额计算利润表。"""
     ytd_d = parsed.get("ytd_debit_map", {})
@@ -442,24 +471,32 @@ def compute_is_from_trial_balance(parsed: dict, standard: str = "xiye") -> Incom
         cur_fn = _make_xiye_fn(cur_d, cur_c)
         is_stmt = _map_income_statement_xiye(ytd_fn, cur_fn, as_of_str="（来自Excel）")
 
-        # 回填IS明细行：用名称贷方字典（如"应交城建税"→城建税行）
-        name_ytd = parsed.get("name_ytd_credit", {})
-        name_cur = parsed.get("name_cur_credit", {})
-        if name_ytd or name_cur:
-            for item in is_stmt.items:
-                if item.is_total or item.row_num not in _IS_DETAIL_KEYWORDS:
-                    continue
-                keywords = _IS_DETAIL_KEYWORDS[item.row_num]
-                ytd_val = sum(
-                    v for k, v in name_ytd.items() if any(kw in k for kw in keywords)
-                )
-                cur_val = sum(
-                    v for k, v in name_cur.items() if any(kw in k for kw in keywords)
-                )
-                if ytd_val:
-                    item.cur_amt = ytd_val
-                if cur_val:
-                    item.prev_amt = cur_val
+        # 回填IS明细行：根据 row 类型选借方或贷方字典
+        # - 费用类明细（利息/招待费/坏账等）走借方字典（_IS_DETAIL_DEBIT_ROWS）
+        # - 税金附加等计提类走贷方字典
+        name_ytd_credit = parsed.get("name_ytd_credit", {})
+        name_cur_credit = parsed.get("name_cur_credit", {})
+        name_ytd_debit  = parsed.get("name_ytd_debit",  {})
+        name_cur_debit  = parsed.get("name_cur_debit",  {})
+        for item in is_stmt.items:
+            if item.is_total or item.row_num not in _IS_DETAIL_KEYWORDS:
+                continue
+            use_debit = item.row_num in _IS_DETAIL_DEBIT_ROWS
+            name_ytd  = name_ytd_debit  if use_debit else name_ytd_credit
+            name_cur  = name_cur_debit  if use_debit else name_cur_credit
+            if not (name_ytd or name_cur):
+                continue
+            keywords = _IS_DETAIL_KEYWORDS[item.row_num]
+            ytd_val = sum(
+                v for k, v in name_ytd.items() if any(kw in k for kw in keywords)
+            )
+            cur_val = sum(
+                v for k, v in name_cur.items() if any(kw in k for kw in keywords)
+            )
+            if ytd_val:
+                item.cur_amt = ytd_val
+            if cur_val:
+                item.prev_amt = cur_val
         return is_stmt
 
     # 企业准则：本期 vs 上期（无上期数据）
