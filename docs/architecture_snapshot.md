@@ -207,7 +207,146 @@ INSERT INTO account_set (account_set_id, tenant_id, account_set_name, status)
 
 ---
 
-## 6. 待办：Sprint 1（Habit RAG）接口约定
+## 6. Sprint 1 交付：智能账套管理系统
+
+> 完成时间：2026-04-02  
+> 涉及文件：`models/account_set.py` · `services/account_set_service.py` · `services/crypto_utils.py` · `api/account_set_routes.py`
+
+---
+
+### 6.1 `account_set` 表完整字段（V4.0 Sprint 1）
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `account_set_id` | BIGINT PK AUTO | — | 账套唯一标识 |
+| `tenant_id` | BIGINT FK→tenant | — | 顶层租户隔离，有索引 |
+| `account_set_name` | VARCHAR(200) | — | 账套显示名称 |
+| `company_name` | VARCHAR(200) | — | 公司全称（来自营业执照） |
+| `start_period` | VARCHAR(7) | — | 启用年月 `YYYY-MM`，**铁律二保护字段** |
+| `fiscal_year_start_month` | INT | `1` | 会计年度起始月（中国默认1月） |
+| `accounting_standard` | VARCHAR(30) | `小企业会计准则` | 枚举：`小企业会计准则` / `企业会计准则`，**铁律二保护字段** |
+| `taxpayer_type` | VARCHAR(20) | `小规模纳税人` | 枚举：`小规模纳税人` / `一般纳税人` |
+| `uscc` | VARCHAR(18) NULL | — | 统一社会信用代码，AI 查验发票合规的核心依据 |
+| `tax_bureau_region` | VARCHAR(100) NULL | — | 报税地区 |
+| `tax_password` | VARCHAR(500) NULL | — | 电子申报密码（**Fernet AES-128 加密存储**） |
+| `module_settings` | TEXT NULL | — | JSON 功能开关，如 `{"asset_module":true,"decimals":2}` |
+| `status` | VARCHAR(30) | `ONBOARDING` | `ONBOARDING` / `ACTIVE` / `RECYCLED` / `SUSPENDED` |
+| `is_deleted` | BOOLEAN | `False` | **软删除标记**，True = 在回收站 |
+| `deleted_at` | DATETIME NULL | — | 进入回收站的时间戳 |
+| `activated_at` | DATETIME NULL | — | 正式启用时间（切为 ACTIVE 时写入） |
+| `created_at` / `updated_at` | DATETIME | `NOW()` | 审计时间戳 |
+
+**账套生命周期（扩展版）：**
+```
+ONBOARDING  ──► ACTIVE  ──► SUSPENDED
+    │               │
+    │    软删除      │    软删除
+    └──────────────►┴──────► RECYCLED ──► (restore) ──► ACTIVE / ONBOARDING
+```
+
+---
+
+### 6.2 软删除机制（Recycle Bin）
+
+**核心原则：绝不执行 `SQL DELETE`。**
+
+| 操作 | 行为 |
+|------|------|
+| `DELETE /api/account-sets/{id}` | `is_deleted=True`, `status=RECYCLED`, `deleted_at=now()` |
+| `POST /api/account-sets/{id}/restore` | `is_deleted=False`, `deleted_at=NULL`, `status` 恢复为删除前值 |
+| 所有业务查询（凭证、报表） | Service 层 `filter(is_deleted=False)` 自动防穿透 |
+
+**查询防穿透实现位置：**
+- `services/account_set_service.py` → `_get_active_account_set()` — 单账套查询强制验证 `is_deleted=False`
+- `services/account_set_service.py` → `list_account_sets(include_recycled=False)` — 列表默认过滤
+- TenantSession 拦截器（`database/connection.py`）— 在 `account_set_id` 层面自动隔离
+
+---
+
+### 6.3 铁律二守门逻辑（Financial Continuity）
+
+`start_period` 和 `accounting_standard` 一旦账套产生有效凭证后不可修改。
+
+**代码位置：** `services/account_set_service.py:update_account_set()`
+
+```python
+if (data.start_period or data.accounting_standard) and _has_vouchers(db, account_set_id):
+    raise AccountSetLockedError(...)  # → HTTP 409 Conflict
+```
+
+`_has_vouchers()` 查询 `voucher_header` 表是否存在该 `account_set_id` 的记录。
+
+---
+
+### 6.4 铁律一落点（Habit RAG — 营业执照解析）
+
+**代码位置：** `services/account_set_service.py:parse_license()`
+
+```
+POST /api/account-sets/parse-license (UploadFile)
+    │
+    ▼
+① _retrieve_tenant_account_habits(db, tenant_id)
+    └─ 查询该租户历史 AccountSet，统计 accounting_standard / taxpayer_type 多数派
+    │
+    ▼
+② _build_license_prompt(habits)
+    └─ 将历史多数派作为 few-shot 强约束嵌入 Vision LLM prompt
+    │
+    ▼
+③ Vision LLM（Qwen-VL-Max / GPT-4V）
+    └─ 提取 company_name / uscc / registered_capital / 推荐值
+    │
+    ▼
+④ 返回 ParsedLicenseData → 前端表单预填，用户确认后调用 POST /api/account-sets
+```
+
+---
+
+### 6.5 `tax_password` Fernet 加密（`services/crypto_utils.py`）
+
+**算法：** Fernet = AES-128-CBC + HMAC-SHA256（`cryptography` 库）
+
+#### 必须配置的 .env 环境变量
+
+```dotenv
+# ── 账套税务密码字段加密密钥 ────────────────────────────────────────
+# 算法：Fernet（AES-128-CBC + HMAC-SHA256）
+# 生成命令：
+#   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+# 将输出的 44 字符 base64url 字符串填入此处。
+# ⚠️  生产环境必填。未配置时退化为明文存储（前缀 "plain:"），有安全风险。
+FIELD_ENCRYPTION_KEY=your-fernet-key-here
+```
+
+**降级行为（开发环境）：**
+- `FIELD_ENCRYPTION_KEY` 未设置 → `tax_password` 以 `plain:xxx` 前缀明文存储，并打印 WARNING 日志
+- 加密/解密函数（`encrypt_field` / `decrypt_field`）自动识别前缀，向后兼容
+
+**API 脱敏：** `GET /api/account-sets/{id}` 响应中 `tax_password` 字段替换为 `has_tax_password: bool`，原文永不出现在 HTTP 响应体中。
+
+---
+
+### 6.6 Sprint 1 API 路由总表
+
+**Router 前缀：** `/api/account-sets`（注册于 `main.py`，受 JWT 鉴权保护）
+
+| 方法 | 路径 | 功能 | 关键逻辑 |
+|------|------|------|----------|
+| `POST` | `/parse-license` | 营业执照 Vision LLM 解析 | Iron Law 1 Habit RAG |
+| `GET` | `` | 账套列表 | `include_recycled` 参数 |
+| `POST` | `` | 创建账套 | `start_period` 格式校验 |
+| `GET` | `/recycle-bin` | 回收站列表 | `is_deleted=True` 专属查询 |
+| `GET` | `/{id}` | 查询单账套 | 脱敏 `tax_password` |
+| `PATCH` | `/{id}` | 更新账套 | Iron Law 2 守门 → 409 |
+| `POST` | `/{id}/activate` | 激活账套 | ONBOARDING → ACTIVE |
+| `DELETE` | `/{id}` | 软删除（进回收站） | 只写标记，不 DELETE |
+| `POST` | `/{id}/restore` | 从回收站恢复 | 状态自动推断 |
+| `POST` | `/{id}/clone` | 账套克隆 | `settings` / `accounting_subjects`（Sprint 2 落地） |
+
+---
+
+## 7. 待办：Sprint 1（Habit RAG）接口约定
 
 下一步在 `services/habit_retrieval_service.py` 实现，调用方签名预留：
 
