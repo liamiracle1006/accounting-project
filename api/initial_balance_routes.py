@@ -34,6 +34,8 @@ from services.initial_balance_service import (
     InitialBalanceService,
 )
 from services.subject_service import SubjectNotFoundError
+from models.user_account import UserAccount
+from services.auth_service import get_current_user
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/initial-balances", tags=["initial-balances"])
@@ -41,15 +43,13 @@ router = APIRouter(prefix="/api/initial-balances", tags=["initial-balances"])
 
 # ── Context helper ──────────────────────────────────────────────────────────────
 
-def _get_ctx(db: Session = Depends(get_db)) -> tuple[int, int]:
-    """从 TenantContext ContextVar 读取 (tenant_id, account_set_id)。"""
-    from database.tenant_context import get_current_tenant
-    ctx = get_current_tenant()
-    if ctx is None:
-        raise HTTPException(status_code=400, detail="未设置租户上下文，请先登录")
-    if ctx.account_set_id is None:
-        raise HTTPException(status_code=400, detail="请先选择账套（account_set_id 未设置）")
-    return ctx.tenant_id, ctx.account_set_id
+def _get_ctx(
+    user: UserAccount = Depends(get_current_user),
+    db:   Session     = Depends(get_db),
+) -> tuple[int, int]:
+    """从已登录 user 解析 (tenant_id, account_set_id)。"""
+    from services.tenant_resolver import resolve_tenant_ctx
+    return resolve_tenant_ctx(db, user)
 
 
 def _svc_error(exc: Exception) -> HTTPException:

@@ -60,47 +60,12 @@ app.add_middleware(
 )
 
 
-@app.middleware("http")
-async def setup_tenant_context_middleware(request, call_next):
-    """
-    在请求入口处（async 上下文）从 JWT token 解析用户 → 设置 TenantContext。
-    这样所有 sync dependency / endpoint 在 worker thread 里都能正确读到 ContextVar
-    （anyio.to_thread.run_sync 会自动复制当前 context 到 worker thread）。
-    """
-    auth_header = request.headers.get("authorization", "")
-    if auth_header.startswith("Bearer "):
-        token = auth_header[7:]
-        try:
-            from jose import jwt as jose_jwt
-            from sqlalchemy import text
-            from config.settings import JWT_SECRET_KEY, JWT_ALGORITHM
-            from database.connection import SessionLocal
-            from database.tenant_context import set_current_tenant, TenantContext
-
-            payload = jose_jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
-            user_id = int(payload.get("sub", 0))
-
-            db = SessionLocal()
-            try:
-                row = db.execute(text("""
-                    SELECT u.tenant_id, a.account_set_id
-                    FROM user_account u
-                    LEFT JOIN account_set a ON a.tenant_id = u.tenant_id
-                    WHERE u.user_id = :uid AND u.is_active = 1
-                    LIMIT 1
-                """), {"uid": user_id}).first()
-                if row:
-                    set_current_tenant(TenantContext(
-                        tenant_id      = row[0],
-                        account_set_id = row[1],
-                    ))
-            finally:
-                db.close()
-        except Exception:
-            # token 无效 / 解析失败 → 让后续 get_current_user 处理鉴权错误
-            pass
-
-    return await call_next(request)
+# 注意：之前尝试过用 async middleware 在请求入口设置 TenantContext，但会触发
+# database/connection.py 里 SQLAlchemy interceptor 给所有 ORM SELECT 注入
+# tenant 过滤——这跟历史代码（一直在 ctx=None 状态下运行）的 SQL 行为不兼容，
+# 多个路由变 500。
+# 改为：每个用 _get_ctx() 的路由直接从 current_user.tenant_id 查 account_set_id，
+# 见 services/tenant_resolver.py。
 
 # auth_router 不需要鉴权（它就是登录入口）
 app.include_router(auth_router)

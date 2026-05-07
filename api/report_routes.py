@@ -35,14 +35,10 @@ router = APIRouter(prefix="/api/reports", tags=["reports"])
 FINANCE_ROLES = (UserRole.BOSS, UserRole.ACCOUNTANT)
 
 
-def _get_ctx() -> tuple[int, int]:
-    from database.tenant_context import get_current_tenant
-    ctx = get_current_tenant()
-    if ctx is None:
-        raise HTTPException(status_code=400, detail="未设置租户上下文，请先登录")
-    if ctx.account_set_id is None:
-        raise HTTPException(status_code=400, detail="请先选择账套")
-    return ctx.tenant_id, ctx.account_set_id
+def _get_ctx(db: Session, user: UserAccount) -> tuple[int, int]:
+    """从已登录 user 解析 (tenant_id, account_set_id)。直接调用，不通过 Depends。"""
+    from services.tenant_resolver import resolve_tenant_ctx
+    return resolve_tenant_ctx(db, user)
 
 
 # ── Trial Balance (科目余额表 Sprint 4.1) ──────────────────────────────────
@@ -70,7 +66,7 @@ def get_trial_balance(
     except ValueError:
         raise HTTPException(status_code=422, detail="日期格式应为 YYYY-MM-DD")
 
-    tenant_id, account_set_id = _get_ctx()
+    tenant_id, account_set_id = _get_ctx(db, current_user)
     svc   = LedgerService(db)
     items = svc.calculate_period_balances(
         tenant_id          = tenant_id,
@@ -164,7 +160,7 @@ def get_detailed_ledger(
     except ValueError:
         raise HTTPException(status_code=422, detail="日期格式应为 YYYY-MM-DD")
 
-    tenant_id, account_set_id = _get_ctx()
+    tenant_id, account_set_id = _get_ctx(db, current_user)
     svc = LedgerDetailService(db)
     try:
         rows = svc.get_detailed_ledger(

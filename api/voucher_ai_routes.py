@@ -44,14 +44,12 @@ router = APIRouter(prefix="/api/voucher-ai", tags=["voucher-ai"])
 
 # ── Context helper ────────────────────────────────────────────────────────────
 
-def _get_ctx(db: Session = Depends(get_db)) -> tuple[int, int]:
-    from database.tenant_context import get_current_tenant
-    ctx = get_current_tenant()
-    if ctx is None:
-        raise HTTPException(status_code=400, detail="未设置租户上下文，请先登录")
-    if ctx.account_set_id is None:
-        raise HTTPException(status_code=400, detail="请先选择账套（account_set_id 未设置）")
-    return ctx.tenant_id, ctx.account_set_id
+def _get_ctx(
+    user: UserAccount = Depends(get_current_user),
+    db:   Session     = Depends(get_db),
+) -> tuple[int, int]:
+    from services.tenant_resolver import resolve_tenant_ctx
+    return resolve_tenant_ctx(db, user)
 
 
 def _svc_error(exc: Exception) -> HTTPException:
