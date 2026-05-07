@@ -440,6 +440,113 @@ def _merge_maps(ytd: dict, cur: dict) -> dict:
     return merged
 
 
+def aggregate_voucher_period(
+    db,
+    tenant_id: int,
+    account_set_id: int,
+    date_from,
+    date_to,
+) -> tuple[dict[str, Decimal], dict[str, Decimal]]:
+    """
+    聚合 [date_from, date_to] 期间所有 POSTED 凭证的借/贷方发生额（按 subject_code 4 位母科目分组）。
+    返回 (cur_debit_map, cur_credit_map)。
+    """
+    from sqlalchemy import text
+
+    rows = db.execute(text("""
+        SELECT vl.subject_code, vl.direction, SUM(vl.amount) AS total
+        FROM voucher_line vl
+        INNER JOIN voucher_header vh ON vh.voucher_id = vl.voucher_id
+        WHERE vh.tenant_id = :tid
+          AND vh.account_set_id = :asid
+          AND vh.review_status = 'POSTED'
+          AND vh.voucher_date >= :df
+          AND vh.voucher_date <= :dt
+        GROUP BY vl.subject_code, vl.direction
+    """), {
+        "tid": tenant_id, "asid": account_set_id,
+        "df":  date_from, "dt":  date_to,
+    }).fetchall()
+
+    cur_debit_map: dict[str, Decimal] = {}
+    cur_credit_map: dict[str, Decimal] = {}
+    for code, direction, total in rows:
+        amt = Decimal(str(total))
+        if direction == "DEBIT":
+            cur_debit_map[code] = amt
+        elif direction == "CREDIT":
+            cur_credit_map[code] = amt
+    return cur_debit_map, cur_credit_map
+
+
+def compute_from_baseline_and_vouchers(
+    db,
+    baseline_parsed: dict,
+    date_from,
+    date_to,
+    tenant_id: int,
+    account_set_id: int,
+    standard: str = "xiye",
+) -> dict:
+    """
+    用"上期期末科目表（基准）+ 本期 POSTED 凭证发生额"反推本期科目表数据。
+    返回与 parse_trial_balance() 输出格式兼容的字典，可直接喂给
+    compute_bs_from_trial_balance / compute_is_from_trial_balance。
+
+    数学关系：
+      本期期末 = 上期期末 + 本期借 - 本期贷
+      本期 YTD = 上期 YTD + 本期发生（借/贷各自累加）
+      → BS 反推的"年初余额" = 本期期末 - 本期 YTD 净 = 上期期末 - 上期 YTD 净
+        = 上期反推出的同一个年初 ✓
+    """
+    # 1. 上期期末 = 本期期初（净额形式：debit - credit）
+    baseline_end_bal = baseline_parsed.get("end_bal", {})
+
+    # 2. 本期 POSTED 凭证聚合
+    cur_debit_map, cur_credit_map = aggregate_voucher_period(
+        db, tenant_id, account_set_id, date_from, date_to
+    )
+
+    # 3. 本期期末（净额）= 上期期末 + 本期净发生
+    all_codes = (set(baseline_end_bal.keys())
+                 | set(cur_debit_map.keys())
+                 | set(cur_credit_map.keys()))
+    end_bal: dict[str, Decimal] = {}
+    for code in all_codes:
+        val = (baseline_end_bal.get(code, Decimal("0"))
+               + cur_debit_map.get(code, Decimal("0"))
+               - cur_credit_map.get(code, Decimal("0")))
+        if val != 0:
+            end_bal[code] = val
+
+    # 4. YTD = 上期 YTD（截至上期末的本年累计）+ 本期发生额
+    baseline_ytd_d = baseline_parsed.get("ytd_debit_map", {})
+    baseline_ytd_c = baseline_parsed.get("ytd_credit_map", {})
+    ytd_debit_map: dict[str, Decimal] = dict(baseline_ytd_d)
+    ytd_credit_map: dict[str, Decimal] = dict(baseline_ytd_c)
+    for code, v in cur_debit_map.items():
+        ytd_debit_map[code] = ytd_debit_map.get(code, Decimal("0")) + v
+    for code, v in cur_credit_map.items():
+        ytd_credit_map[code] = ytd_credit_map.get(code, Decimal("0")) + v
+
+    return {
+        "end_bal":         end_bal,
+        "beg_bal":         baseline_end_bal,  # 期初 = 上期期末（不参与 BS 计算，BS 自己反推）
+        "cur_debit_map":   cur_debit_map,
+        "cur_credit_map":  cur_credit_map,
+        "ytd_debit_map":   ytd_debit_map,
+        "ytd_credit_map":  ytd_credit_map,
+        # IS 明细行回填用：复用基准表的 name 字典（本期凭证按 4 位母科目聚合，没有名称维度）
+        "name_ytd_credit": baseline_parsed.get("name_ytd_credit", {}),
+        "name_cur_credit": {},
+        "name_ytd_debit":  baseline_parsed.get("name_ytd_debit", {}),
+        "name_cur_debit":  {},
+        "raw_rows":        [],
+        "column_mapping":  baseline_parsed.get("column_mapping", {}),
+        "row_count":       len(end_bal),
+    }
+
+
 def merge_yearly_and_monthly(yearly: dict, monthly: dict) -> dict:
     """
     把年度文件（1-12月导出）与月度文件（单月导出，如12月）的解析结果合并。

@@ -64,7 +64,7 @@ accounting-project/
 - **数据库字符集**：DDL 没指定 charset，旧数据用非 UTF-8 连接导入会变 `????`（字节已损坏不可恢复）。新建表/列必须显式 `CHARACTER SET utf8mb4`
 - **useToast 不稳定引用**：toast 函数若每次渲染都新建，会让 `useCallback([..., error])` 无限循环。`useToast.ts` 已用 `useCallback` 包装
 - **401 vs 400**：前端 `api/client.ts` 在收到 401 时自动登出。后端业务错误（如"未设置租户上下文"）必须用 400，不能用 401
-- **租户上下文**：`set_current_tenant()` 之前从未被调用——现在在 `get_current_user` 里用原生 SQL 查 `account_set_id` 后注入（绕过 ORM 与 DDL 不匹配）
+- **租户上下文**：`set_current_tenant()` 必须在 **async middleware** 里设置（main.py 已加），不能只放在 sync `get_current_user` 里——sync 函数跑在 worker thread，那里 set 的 ContextVar 回不到主 event loop，endpoint 处理时拿不到
 - **ORM 与 DDL 不同步**：`AccountSet` 模型有 `is_deleted/company_name` 等字段，实际表里没有 → ORM 查询会 500。涉及该表时用原生 SQL
 - **Windows 终端 cp1252**：`py -3.12 -c "..."` 里直接含中文 print 会 `UnicodeEncodeError`。中文脚本写到 `.py` 文件再运行；或用 HEX/repr 输出
 - **种子文件没流水数据**：`operational_record` 的内容是用户输入的，重置后需要从前端重录

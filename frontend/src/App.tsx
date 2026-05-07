@@ -29,6 +29,7 @@ const AuditLogPage       = lazy(() => import('@/features/audit/AuditLogPage'))
 const InvoicePage        = lazy(() => import('@/features/invoices/InvoicePage'))
 const AdvisorPage        = lazy(() => import('@/features/advisor/AdvisorPage'))
 const KnowledgePage      = lazy(() => import('@/features/knowledge/KnowledgePage'))
+const DaybookImportPage  = lazy(() => import('@/features/daybook/DaybookImportPage'))
 
 export default function App() {
   return (
@@ -63,6 +64,7 @@ export default function App() {
               <Route path="invoices"   element={<InvoicePage />} />
               <Route path="advisor"    element={<AdvisorPage />} />
               <Route path="knowledge"  element={<KnowledgePage />} />
+              <Route path="daybook"    element={<DaybookImportPage />} />
             </Route>
           </Route>
 

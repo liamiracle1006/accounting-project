@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { api } from '@/api/client'
 import type { BalanceSheet, BSLineItem, IncomeStatement } from '@/types'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -12,12 +13,24 @@ interface DiffRow {
 }
 
 interface ValidateResult {
-  balance_sheet:    BalanceSheet
-  income_statement: IncomeStatement
-  parsed_row_count: number
-  column_mapping:   Record<string, string>
-  bs_diff:          DiffRow[]
-  is_diff:          DiffRow[]
+  balance_sheet:      BalanceSheet
+  income_statement:   IncomeStatement
+  parsed_row_count?:  number       // 模式 A
+  baseline_row_count?: number      // 模式 B
+  voucher_count?:     number       // 模式 B
+  date_from?:         string       // 模式 B
+  date_to?:           string       // 模式 B
+  column_mapping:     Record<string, string>
+  bs_diff:            DiffRow[]
+  is_diff:            DiffRow[]
+}
+
+type ValidateMode = 'A' | 'B'
+
+const todayStr = (): string => new Date().toISOString().slice(0, 10)
+const firstOfMonthStr = (): string => {
+  const d = new Date(); d.setDate(1)
+  return d.toISOString().slice(0, 10)
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -194,10 +207,13 @@ function FileInput({
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function ValidatePage() {
+  const [mode,      setMode]      = useState<ValidateMode>('A')
   const [tbFile,    setTbFile]    = useState<File | null>(null)
   const [monthFile, setMonthFile] = useState<File | null>(null)
   const [bsRefFile, setBsRefFile] = useState<File | null>(null)
   const [isRefFile, setIsRefFile] = useState<File | null>(null)
+  const [dateFrom,  setDateFrom]  = useState<string>(firstOfMonthStr())
+  const [dateTo,    setDateTo]    = useState<string>(todayStr())
   const [standard,  setStandard]  = useState<'xiye' | 'gaap'>('xiye')
   const [loading,   setLoading]   = useState(false)
   const [error,     setError]     = useState<string | null>(null)
@@ -209,18 +225,31 @@ export default function ValidatePage() {
     setError(null)
     try {
       const form = new FormData()
-      form.append('file', tbFile)
-      if (monthFile) form.append('month_file', monthFile)
-      if (bsRefFile) form.append('bs_ref', bsRefFile)
-      if (isRefFile) form.append('is_ref', isRefFile)
-      form.append('standard', standard)
+      if (mode === 'A') {
+        form.append('file', tbFile)
+        if (monthFile) form.append('month_file', monthFile)
+        if (bsRefFile) form.append('bs_ref', bsRefFile)
+        if (isRefFile) form.append('is_ref', isRefFile)
+        form.append('standard', standard)
 
-      const resp = await fetch('/api/validate/trial-balance', { method: 'POST', body: form })
-      if (!resp.ok) {
-        const body = await resp.json().catch(() => ({}))
-        throw new Error(body.detail ?? `HTTP ${resp.status}`)
+        const resp = await fetch('/api/validate/trial-balance', { method: 'POST', body: form })
+        if (!resp.ok) {
+          const body = await resp.json().catch(() => ({}))
+          throw new Error(body.detail ?? `HTTP ${resp.status}`)
+        }
+        setResult(await resp.json())
+      } else {
+        // 模式 B：基准 + 系统凭证（需鉴权，用 api.post 自动带 token）
+        if (!dateFrom || !dateTo) { setError('请填写日期范围'); return }
+        form.append('baseline_file', tbFile)
+        form.append('date_from', dateFrom)
+        form.append('date_to',   dateTo)
+        if (bsRefFile) form.append('bs_ref', bsRefFile)
+        if (isRefFile) form.append('is_ref', isRefFile)
+        form.append('standard', standard)
+        const resp = await api.post<ValidateResult>('/api/validate/from-vouchers', form)
+        setResult(resp)
       }
-      setResult(await resp.json())
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -244,23 +273,69 @@ export default function ValidatePage() {
       <div className="flex items-center gap-2">
         <span className="bg-yellow-100 text-yellow-800 text-xs font-semibold px-2 py-0.5 rounded">DEV</span>
         <h1 className="text-base font-bold text-gray-800">报表验证工具</h1>
-        <span className="text-xs text-gray-400">上传科目余额表，可选上传参考报表进行自动差异对比</span>
+        <span className="text-xs text-gray-400">
+          {mode === 'A'
+            ? '上传科目余额表 → 算 BS/IS（可对比参考报表）'
+            : '上传上期期末科目表 + 选日期范围 → 用系统已过账凭证算本期 BS/IS'}
+        </span>
+      </div>
+
+      {/* Mode toggle */}
+      <div className="flex items-center gap-2 text-sm">
+        <span className="text-xs text-gray-500">验证模式：</span>
+        {([
+          ['A', '模式 A · 单文件科目表'],
+          ['B', '模式 B · 基准 + 系统凭证'],
+        ] as const).map(([m, label]) => (
+          <button
+            key={m}
+            onClick={() => { setMode(m); setResult(null); setError(null) }}
+            className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
+              mode === m ? 'bg-blue-600 text-white' : 'bg-white border border-gray-200 text-gray-600 hover:border-blue-400'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
       {/* Upload Toolbar */}
       <div className="bg-white rounded-xl border border-gray-200 px-4 py-4 flex flex-wrap items-end gap-5">
-        <FileInput
-          label="年度余额表 1-12月（必填）"
-          hint="提供 BS 余额、IS 本年累计"
-          value={tbFile}
-          onChange={setTbFile}
-        />
-        <FileInput
-          label="单月余额表（可选）"
-          hint="提供 IS 本月金额，如 12 月单月"
-          value={monthFile}
-          onChange={setMonthFile}
-        />
+        {mode === 'A' ? (
+          <>
+            <FileInput
+              label="年度余额表 1-12月（必填）"
+              hint="提供 BS 余额、IS 本年累计"
+              value={tbFile}
+              onChange={setTbFile}
+            />
+            <FileInput
+              label="单月余额表（可选）"
+              hint="提供 IS 本月金额，如 12 月单月"
+              value={monthFile}
+              onChange={setMonthFile}
+            />
+          </>
+        ) : (
+          <>
+            <FileInput
+              label="上期期末科目表（必填）"
+              hint="如 11 月期末，作为本期期初基准"
+              value={tbFile}
+              onChange={setTbFile}
+            />
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-gray-500">本期起始日</label>
+              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)}
+                className="border border-gray-200 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <label className="text-xs text-gray-500">本期截止日</label>
+              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
+                className="border border-gray-200 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+            </div>
+          </>
+        )}
         <div className="flex flex-col gap-1">
           <label className="text-xs text-gray-500">会计准则</label>
           <div className="flex gap-3 items-center h-8">
@@ -301,6 +376,15 @@ export default function ValidatePage() {
         </button>
       </div>
 
+      {/* Mode B 计算说明 */}
+      {mode === 'B' && result && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2 text-xs text-blue-800 flex items-center gap-3 flex-wrap">
+          <span>📅 本期：{result.date_from} → {result.date_to}</span>
+          <span>📋 基准科目数：{result.baseline_row_count}</span>
+          <span>📜 聚合凭证数：{result.voucher_count}（仅 POSTED 状态）</span>
+        </div>
+      )}
+
       {/* Column Mapping Debug */}
       {result && (
         <div className="bg-gray-50 border border-gray-200 rounded-lg px-4 py-2 text-xs text-gray-500 flex flex-wrap gap-3">
@@ -312,7 +396,7 @@ export default function ValidatePage() {
               <span className="text-gray-700">"{col}"</span>
             </span>
           ))}
-          <span className="text-gray-400">· 识别到 {result.parsed_row_count} 条科目</span>
+          <span className="text-gray-400">· 识别到 {result.parsed_row_count ?? result.baseline_row_count} 条科目</span>
         </div>
       )}
 

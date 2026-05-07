@@ -16,6 +16,7 @@ const navItems: NavItem[] = [
   { to: '/vouchers',    label: '凭证管理',   financeOnly: true },
   { to: '/ai-voucher',  label: 'AI 记账',    financeOnly: true },
   { to: '/batch',       label: '批量导入',   financeOnly: true },
+  { to: '/daybook',    label: '[Dev] 序时账导入', financeOnly: true },
   { to: '/closing',     label: '月末结账',   financeOnly: true },
   { to: '/reports',        label: '财务报表',   financeOnly: true },
   { to: '/trial-balance',  label: '科目余额表', financeOnly: true },
