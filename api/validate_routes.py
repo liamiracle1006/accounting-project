@@ -231,6 +231,61 @@ async def validate_from_vouchers(
         except Exception as exc:
             logger.warning("解析参考利润表失败: %s", exc)
 
+    # 组装系统反推的科目余额表（六列：期初借/贷、本期借/贷、期末借/贷）
+    from decimal import Decimal as _D
+    beg_bal_net = derived.get("beg_bal", {})
+    end_bal_net = derived.get("end_bal", {})
+    cur_d       = derived.get("cur_debit_map",  {})
+    cur_c       = derived.get("cur_credit_map", {})
+
+    # 拿科目名（从 account_subject 表 join）
+    name_rows = db.execute(text(
+        "SELECT subject_code, subject_name FROM account_subject"
+    )).fetchall()
+    name_map = {r[0]: r[1] for r in name_rows}
+
+    all_codes = sorted(set(beg_bal_net) | set(end_bal_net) | set(cur_d) | set(cur_c))
+
+    def _split_signed(v: _D) -> tuple[float, float]:
+        """net 形式（debit - credit）拆成 (debit_col, credit_col) 两列"""
+        if v > 0:  return (float(v), 0.0)
+        if v < 0:  return (0.0, float(-v))
+        return (0.0, 0.0)
+
+    tb_items = []
+    tot = {"opening_debit": 0.0, "opening_credit": 0.0,
+           "current_debit": 0.0, "current_credit": 0.0,
+           "closing_debit": 0.0, "closing_credit": 0.0}
+    for code in all_codes:
+        beg = beg_bal_net.get(code, _D("0"))
+        end = end_bal_net.get(code, _D("0"))
+        cur_dd = float(cur_d.get(code, _D("0")))
+        cur_cc = float(cur_c.get(code, _D("0")))
+        beg_dd, beg_cc = _split_signed(beg)
+        end_dd, end_cc = _split_signed(end)
+        if not (beg_dd or beg_cc or cur_dd or cur_cc or end_dd or end_cc):
+            continue
+        tb_items.append({
+            "code":           code,
+            "name":           name_map.get(code, ""),
+            "opening_debit":  beg_dd, "opening_credit": beg_cc,
+            "current_debit":  cur_dd, "current_credit": cur_cc,
+            "closing_debit":  end_dd, "closing_credit": end_cc,
+        })
+        tot["opening_debit"]  += beg_dd; tot["opening_credit"] += beg_cc
+        tot["current_debit"]  += cur_dd; tot["current_credit"] += cur_cc
+        tot["closing_debit"]  += end_dd; tot["closing_credit"] += end_cc
+
+    trial_balance = {
+        "items":  tb_items,
+        "totals": tot,
+        "balanced": {
+            "opening": abs(tot["opening_debit"] - tot["opening_credit"]) < 1.0,
+            "current": abs(tot["current_debit"] - tot["current_credit"]) < 1.0,
+            "closing": abs(tot["closing_debit"] - tot["closing_credit"]) < 1.0,
+        },
+    }
+
     # 凭证统计（透明度信息：让用户知道聚合了多少条凭证）
     voucher_count = db.execute(text("""
         SELECT COUNT(*) FROM voucher_header
@@ -244,6 +299,7 @@ async def validate_from_vouchers(
     return {
         "balance_sheet":    asdict(bs),
         "income_statement": asdict(is_),
+        "trial_balance":    trial_balance,
         "voucher_count":    voucher_count,
         "date_from":        str(df),
         "date_to":          str(dt),

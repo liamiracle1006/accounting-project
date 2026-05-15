@@ -12,9 +12,31 @@ interface DiffRow {
   match:     boolean
 }
 
+interface TBItem {
+  code:           string
+  name:           string
+  opening_debit:  number
+  opening_credit: number
+  current_debit:  number
+  current_credit: number
+  closing_debit:  number
+  closing_credit: number
+}
+
+interface TrialBalance {
+  items:  TBItem[]
+  totals: {
+    opening_debit:  number; opening_credit: number
+    current_debit:  number; current_credit: number
+    closing_debit:  number; closing_credit: number
+  }
+  balanced: { opening: boolean; current: boolean; closing: boolean }
+}
+
 interface ValidateResult {
   balance_sheet:      BalanceSheet
   income_statement:   IncomeStatement
+  trial_balance?:     TrialBalance  // 模式 B 才有
   parsed_row_count?:  number       // 模式 A
   baseline_row_count?: number      // 模式 B
   voucher_count?:     number       // 模式 B
@@ -44,6 +66,75 @@ function fmtDiff(n: number): string {
   if (Math.abs(n) < 0.01) return '✓'
   const s = Math.abs(n).toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
   return n > 0 ? `+${s}` : `-${s}`
+}
+
+// ── Trial Balance Table ───────────────────────────────────────────────────────
+
+function TBTable({ tb }: { tb: TrialBalance }) {
+  const fmtCell = (n: number) => n === 0
+    ? <span className="text-gray-300">—</span>
+    : n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const t = tb.totals
+  const balRow = (label: string, ok: boolean) =>
+    <span className={`text-xs px-2 py-0.5 rounded font-medium ${ok ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+      {label}{ok ? ' ✓' : ' ✗'}
+    </span>
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="px-4 py-3 border-b border-gray-100 bg-gray-50 flex items-center gap-2 flex-wrap">
+        <h3 className="text-sm font-bold text-gray-700">系统反推科目余额表</h3>
+        {balRow('期初平衡', tb.balanced.opening)}
+        {balRow('本期平衡', tb.balanced.current)}
+        {balRow('期末平衡', tb.balanced.closing)}
+        <span className="text-xs text-gray-400 ml-auto">共 {tb.items.length} 个科目</span>
+      </div>
+      <div className="overflow-auto max-h-[600px]">
+        <table className="w-full text-xs border-collapse">
+          <thead className="sticky top-0 bg-gray-50 z-10">
+            <tr className="text-gray-500">
+              <th rowSpan={2} className="border border-gray-200 px-2 py-1 text-left">科目</th>
+              <th colSpan={2} className="border border-gray-200 px-2 py-1 text-center">期初余额</th>
+              <th colSpan={2} className="border border-gray-200 px-2 py-1 text-center">本期发生额</th>
+              <th colSpan={2} className="border border-gray-200 px-2 py-1 text-center">期末余额</th>
+            </tr>
+            <tr className="text-gray-500">
+              <th className="border border-gray-200 px-2 py-1 text-right">借方</th>
+              <th className="border border-gray-200 px-2 py-1 text-right">贷方</th>
+              <th className="border border-gray-200 px-2 py-1 text-right">借方</th>
+              <th className="border border-gray-200 px-2 py-1 text-right">贷方</th>
+              <th className="border border-gray-200 px-2 py-1 text-right">借方</th>
+              <th className="border border-gray-200 px-2 py-1 text-right">贷方</th>
+            </tr>
+          </thead>
+          <tbody>
+            {tb.items.map(it => (
+              <tr key={it.code} className="hover:bg-gray-50">
+                <td className="border border-gray-200 px-2 py-1">
+                  <span className="font-mono text-gray-500 mr-1">{it.code}</span>
+                  <span className="text-gray-800">{it.name}</span>
+                </td>
+                <td className="border border-gray-200 px-2 py-1 text-right tabular-nums">{fmtCell(it.opening_debit)}</td>
+                <td className="border border-gray-200 px-2 py-1 text-right tabular-nums">{fmtCell(it.opening_credit)}</td>
+                <td className="border border-gray-200 px-2 py-1 text-right tabular-nums">{fmtCell(it.current_debit)}</td>
+                <td className="border border-gray-200 px-2 py-1 text-right tabular-nums">{fmtCell(it.current_credit)}</td>
+                <td className="border border-gray-200 px-2 py-1 text-right tabular-nums">{fmtCell(it.closing_debit)}</td>
+                <td className="border border-gray-200 px-2 py-1 text-right tabular-nums">{fmtCell(it.closing_credit)}</td>
+              </tr>
+            ))}
+            <tr className="bg-gray-100 font-semibold sticky bottom-0">
+              <td className="border border-gray-300 px-2 py-1.5">合计</td>
+              <td className="border border-gray-300 px-2 py-1.5 text-right tabular-nums">{fmtCell(t.opening_debit)}</td>
+              <td className="border border-gray-300 px-2 py-1.5 text-right tabular-nums">{fmtCell(t.opening_credit)}</td>
+              <td className="border border-gray-300 px-2 py-1.5 text-right tabular-nums">{fmtCell(t.current_debit)}</td>
+              <td className="border border-gray-300 px-2 py-1.5 text-right tabular-nums">{fmtCell(t.current_credit)}</td>
+              <td className="border border-gray-300 px-2 py-1.5 text-right tabular-nums">{fmtCell(t.closing_debit)}</td>
+              <td className="border border-gray-300 px-2 py-1.5 text-right tabular-nums">{fmtCell(t.closing_credit)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
 }
 
 // ── Diff Table ────────────────────────────────────────────────────────────────
@@ -430,6 +521,9 @@ export default function ValidatePage() {
               <DiffTable title="利润表" rows={result.is_diff} />
             </div>
           )}
+
+          {/* 系统反推科目余额表（仅模式 B 有） */}
+          {result.trial_balance && <TBTable tb={result.trial_balance} />}
 
           {/* Computed reports */}
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
