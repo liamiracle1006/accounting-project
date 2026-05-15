@@ -35,7 +35,10 @@ def audit(
     写入一条审计日志。调用方负责在外层 commit。
     此函数只做 db.add，不自行 commit，避免干扰调用方的事务边界。
     """
+    # AuditLog.tenant_id 是 NOT NULL：从 user 拿，user 没有则降级到默认租户
+    tenant_id = getattr(user, "tenant_id", None) or 1
     entry = AuditLog(
+        tenant_id    = tenant_id,
         table_name   = table_name,
         record_id    = str(record_id),
         action       = action,
