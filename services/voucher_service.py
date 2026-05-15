@@ -307,6 +307,10 @@ class VoucherService:
                 extract("month", VoucherHeader.voucher_date) == q.period_month
             )
 
+        # 审核状态过滤（DRAFT / PENDING_REVIEW / POSTED / REJECTED）
+        if q.review_status:
+            query = query.filter(VoucherHeader.review_status == q.review_status.upper())
+
         # 凭证字精确匹配
         if q.voucher_word:
             query = query.filter(VoucherHeader.voucher_word == q.voucher_word)

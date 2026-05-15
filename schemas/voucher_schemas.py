@@ -177,6 +177,7 @@ class VoucherQuery(BaseModel):
 
     period_year:     Optional[int]   = Field(None, description="会计年度，如 2024")
     period_month:    Optional[int]   = Field(None, ge=1, le=12, description="会计月份 1-12")
+    review_status:   Optional[str]   = Field(None, description="审核状态：DRAFT / PENDING_REVIEW / POSTED / REJECTED")
     voucher_word:    Optional[str]   = Field(None, description="凭证字精确匹配，如 '记'")
     summary_keyword: Optional[str]   = Field(None, description="摘要关键词模糊搜索")
     subject_code:    Optional[str]   = Field(None, description="科目编码前缀匹配（如 1002 匹配 100201）")

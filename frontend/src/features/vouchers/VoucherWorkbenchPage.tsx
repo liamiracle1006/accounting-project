@@ -171,7 +171,7 @@ export default function VoucherWorkbenchPage() {
             <div className="grid grid-cols-2 gap-3 mb-4 text-sm text-slate-600">
               <div>日期：{selected.voucher_date}</div>
               <div>凭证字号：{selected.voucher_word}{selected.voucher_number ?? '-'}</div>
-              <div className="col-span-2">摘要：{selected.description}</div>
+              <div className="col-span-2">摘要：{(selected as any).memo ?? (selected as any).description ?? ''}</div>
             </div>
             <table className="w-full text-xs">
               <thead className="bg-slate-50"><tr className="text-slate-500">
