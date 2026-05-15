@@ -23,7 +23,39 @@ export default function VoucherWorkbenchPage() {
   const [reorgYear, setReorgYear] = useState(new Date().getFullYear())
   const [reorgMonth, setReorgMonth] = useState(new Date().getMonth() + 1)
   const [deleteTarget, setDeleteTarget] = useState<number | null>(null)
+  const [batchPosting, setBatchPosting] = useState(false)
+  const [batchProgress, setBatchProgress] = useState({ done: 0, total: 0 })
   const { success, error } = useToast()
+
+  // 一键把当前账套所有 DRAFT 凭证过账（不经过 PENDING_REVIEW，因为后端 post 端点接受 DRAFT）
+  const postAllDrafts = async () => {
+    setBatchPosting(true)
+    setBatchProgress({ done: 0, total: 0 })
+    try {
+      const drafts = await vouchersApi.list({ review_status: 'DRAFT' })
+      if (drafts.length === 0) { error('没有 DRAFT 状态的凭证'); return }
+      if (!confirm(`确定要把 ${drafts.length} 张 DRAFT 凭证全部过账吗？`)) return
+      setBatchProgress({ done: 0, total: drafts.length })
+      let okCount = 0, failCount = 0
+      for (const v of drafts) {
+        try {
+          await workbenchApi.post(v.voucher_id)
+          okCount++
+        } catch {
+          failCount++
+        }
+        setBatchProgress(p => ({ ...p, done: p.done + 1 }))
+      }
+      if (failCount === 0) success(`全部过账成功：${okCount} 张`)
+      else error(`完成：成功 ${okCount} / 失败 ${failCount}（失败的凭证可能借贷不平衡）`)
+      load()
+    } catch (e) {
+      error((e as Error).message)
+    } finally {
+      setBatchPosting(false)
+      setBatchProgress({ done: 0, total: 0 })
+    }
+  }
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -97,6 +129,10 @@ export default function VoucherWorkbenchPage() {
       <div className="flex items-center justify-between mb-5">
         <h1 className="text-xl font-bold text-slate-800">凭证管理</h1>
         <div className="flex gap-2">
+          <button onClick={postAllDrafts} disabled={batchPosting}
+            className="px-3 py-1.5 text-xs border border-green-500 text-green-600 rounded-lg hover:bg-green-50 disabled:opacity-50">
+            {batchPosting ? `过账中…(${batchProgress.done}/${batchProgress.total})` : '🚀 一键全部过账'}
+          </button>
           <button onClick={openTrash} className="px-3 py-1.5 text-xs border border-slate-300 rounded-lg hover:bg-slate-50">🗑 回收站</button>
           <button onClick={() => setReorgOpen(true)} className="px-3 py-1.5 text-xs border border-slate-300 rounded-lg hover:bg-slate-50">🔢 断号整理</button>
         </div>
