@@ -188,17 +188,25 @@ export default function VoucherWorkbenchPage() {
       <Modal open={detailOpen} onClose={() => setDetailOpen(false)} title={`凭证详情 #${selected?.voucher_id}`} width="max-w-2xl"
         footer={selected && (
           <>
-            {selected.review_status === 'DRAFT' && (
-              <button onClick={() => handleAction('submit', selected.voucher_id)}
-                className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700">提交审核</button>
-            )}
-            {selected.review_status === 'PENDING_REVIEW' && (
+            <span className="text-xs text-slate-400 mr-auto self-center">
+              状态：<code className="font-mono text-slate-600">{selected.review_status ?? '(未知)'}</code>
+            </span>
+            {(selected.review_status === 'DRAFT' || selected.review_status === 'PENDING_REVIEW') && (
               <>
-                <button onClick={() => handleAction('reject', selected.voucher_id)}
-                  className="px-3 py-1.5 text-sm border border-red-400 text-red-600 rounded-lg hover:bg-red-50">驳回</button>
+                {selected.review_status === 'DRAFT' && (
+                  <button onClick={() => handleAction('submit', selected.voucher_id)}
+                    className="px-3 py-1.5 text-sm border border-primary-400 text-primary-600 rounded-lg hover:bg-primary-50">提交审核</button>
+                )}
+                {selected.review_status === 'PENDING_REVIEW' && (
+                  <button onClick={() => handleAction('reject', selected.voucher_id)}
+                    className="px-3 py-1.5 text-sm border border-red-400 text-red-600 rounded-lg hover:bg-red-50">驳回</button>
+                )}
                 <button onClick={() => handleAction('post', selected.voucher_id)}
-                  className="px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700">过账</button>
+                  className="px-3 py-1.5 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700">直接过账</button>
               </>
+            )}
+            {selected.review_status === 'POSTED' && (
+              <span className="text-xs text-green-600 font-medium">✓ 已过账（不可修改）</span>
             )}
           </>
         )}>
