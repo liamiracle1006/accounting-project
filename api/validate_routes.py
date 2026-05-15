@@ -231,12 +231,15 @@ async def validate_from_vouchers(
         except Exception as exc:
             logger.warning("解析参考利润表失败: %s", exc)
 
-    # 组装系统反推的科目余额表（六列：期初借/贷、本期借/贷、期末借/贷）
+    # 组装系统反推的科目余额表 —— 年累视图（与原系统 1-12 月 TB 格式对齐）
+    # - 期初列     = 年初余额（来自 baseline 的"期初余额"列）
+    # - 本期发生额 = 全年累计（baseline.ytd + 当期凭证发生额）
+    # - 期末列     = 12 月末（baseline.end_bal + 当期凭证净发生）
     from decimal import Decimal as _D
-    beg_bal_net = derived.get("beg_bal", {})
-    end_bal_net = derived.get("end_bal", {})
-    cur_d       = derived.get("cur_debit_map",  {})
-    cur_c       = derived.get("cur_credit_map", {})
+    year_start_net = baseline_parsed.get("beg_bal",        {})  # 年初余额（净额）
+    end_bal_net    = derived.get("end_bal",                {})  # 当期期末（净额）
+    ytd_d          = derived.get("ytd_debit_map",          {})  # 全年累计借
+    ytd_c          = derived.get("ytd_credit_map",         {})  # 全年累计贷
 
     # 拿科目名（从 account_subject 表 join）
     name_rows = db.execute(text(
@@ -244,7 +247,7 @@ async def validate_from_vouchers(
     )).fetchall()
     name_map = {r[0]: r[1] for r in name_rows}
 
-    all_codes = sorted(set(beg_bal_net) | set(end_bal_net) | set(cur_d) | set(cur_c))
+    all_codes = sorted(set(year_start_net) | set(end_bal_net) | set(ytd_d) | set(ytd_c))
 
     def _split_signed(v: _D) -> tuple[float, float]:
         """net 形式（debit - credit）拆成 (debit_col, credit_col) 两列"""
@@ -257,23 +260,23 @@ async def validate_from_vouchers(
            "current_debit": 0.0, "current_credit": 0.0,
            "closing_debit": 0.0, "closing_credit": 0.0}
     for code in all_codes:
-        beg = beg_bal_net.get(code, _D("0"))
+        ys  = year_start_net.get(code, _D("0"))
         end = end_bal_net.get(code, _D("0"))
-        cur_dd = float(cur_d.get(code, _D("0")))
-        cur_cc = float(cur_c.get(code, _D("0")))
-        beg_dd, beg_cc = _split_signed(beg)
+        ytd_dd = float(ytd_d.get(code, _D("0")))
+        ytd_cc = float(ytd_c.get(code, _D("0")))
+        beg_dd, beg_cc = _split_signed(ys)
         end_dd, end_cc = _split_signed(end)
-        if not (beg_dd or beg_cc or cur_dd or cur_cc or end_dd or end_cc):
+        if not (beg_dd or beg_cc or ytd_dd or ytd_cc or end_dd or end_cc):
             continue
         tb_items.append({
             "code":           code,
             "name":           name_map.get(code, ""),
             "opening_debit":  beg_dd, "opening_credit": beg_cc,
-            "current_debit":  cur_dd, "current_credit": cur_cc,
+            "current_debit":  ytd_dd, "current_credit": ytd_cc,
             "closing_debit":  end_dd, "closing_credit": end_cc,
         })
         tot["opening_debit"]  += beg_dd; tot["opening_credit"] += beg_cc
-        tot["current_debit"]  += cur_dd; tot["current_credit"] += cur_cc
+        tot["current_debit"]  += ytd_dd; tot["current_credit"] += ytd_cc
         tot["closing_debit"]  += end_dd; tot["closing_credit"] += end_cc
 
     trial_balance = {

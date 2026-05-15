@@ -82,7 +82,8 @@ function TBTable({ tb }: { tb: TrialBalance }) {
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
       <div className="px-4 py-3 border-b border-gray-100 bg-gray-50 flex items-center gap-2 flex-wrap">
-        <h3 className="text-sm font-bold text-gray-700">系统反推科目余额表</h3>
+        <h3 className="text-sm font-bold text-gray-700">系统反推科目余额表（年累视图）</h3>
+        <span className="text-xs text-gray-400">期初=年初 · 本期发生额=全年累计 · 期末=当期末</span>
         {balRow('期初平衡', tb.balanced.opening)}
         {balRow('本期平衡', tb.balanced.current)}
         {balRow('期末平衡', tb.balanced.closing)}
