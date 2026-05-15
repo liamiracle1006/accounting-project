@@ -133,8 +133,8 @@ export default function VoucherWorkbenchPage() {
               <tr key={v.voucher_id} className="border-t border-slate-100 hover:bg-slate-50/50 cursor-pointer" onClick={() => openDetail(v)}>
                 <td className="px-4 py-3 font-medium">{v.voucher_word}{v.voucher_number ?? '-'}</td>
                 <td className="px-4 py-3 text-slate-500">{v.voucher_date}</td>
-                <td className="px-4 py-3 truncate max-w-xs">{v.description}</td>
-                <td className="px-4 py-3 text-right font-mono">¥{fmt(v.total_debit)}</td>
+                <td className="px-4 py-3 truncate max-w-xs">{(v as any).memo ?? (v as any).description ?? ''}</td>
+                <td className="px-4 py-3 text-right font-mono">¥{fmt((v as any).total_amount ?? (v as any).total_debit ?? 0)}</td>
                 <td className="px-4 py-3 text-center"><ReviewStatusBadge status={v.review_status} /></td>
                 <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
                   {v.review_status === 'DRAFT' && (
