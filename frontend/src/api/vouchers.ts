@@ -18,12 +18,15 @@ export const vouchersApi = {
   get: (id: number): Promise<VoucherOut> =>
     api.get(`/api/vouchers/${id}`),
 
-  list: (params?: { review_status?: string; year?: number; month?: number }): Promise<VoucherOut[]> => {
+  list: async (params?: { review_status?: string; year?: number; month?: number }): Promise<VoucherOut[]> => {
     const q = new URLSearchParams()
     if (params?.review_status) q.set('review_status', params.review_status)
     if (params?.year)          q.set('year', String(params.year))
     if (params?.month)         q.set('month', String(params.month))
-    return api.get(`/api/vouchers?${q}`)
+    // 后端返回 PaginatedVouchers = { total, page, page_size, items: VoucherOut[] }
+    // 这里解构 .items 让前端使用方拿到数组
+    const resp = await api.get<{ items: VoucherOut[] }>(`/api/vouchers?${q}`)
+    return resp.items ?? []
   },
 
   create: (data: Omit<ConfirmVoucherInput, 'habit_rule_id'>): Promise<VoucherOut> =>
