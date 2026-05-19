@@ -146,6 +146,7 @@ async def validate_from_vouchers(
     date_to:       str        = Form(..., description="本期截止日 YYYY-MM-DD"),
     bs_ref:        Optional[UploadFile] = File(None),
     is_ref:        Optional[UploadFile] = File(None),
+    tb_ref:        Optional[UploadFile] = File(None, description="当期参考科目余额表 Excel（可选，逐科目对比）"),
     standard:      str        = Form("xiye"),
     current_user:  UserAccount = Depends(get_current_user),
     db:            Session     = Depends(get_db),
@@ -353,6 +354,17 @@ async def validate_from_vouchers(
         },
     }
 
+    # 可选：上传当期参考科目余额表 → 逐科目对比
+    tb_diff_rows: list[dict] = []
+    tb_ref_bytes = await _read_optional_file(tb_ref)
+    if tb_ref_bytes:
+        try:
+            from services.validation_service import compute_tb_diff
+            ref_tb_parsed = parse_trial_balance(tb_ref_bytes, standard=standard)
+            tb_diff_rows  = compute_tb_diff(tb_items, ref_tb_parsed)
+        except Exception as exc:
+            logger.warning("解析参考科目余额表失败: %s", exc)
+
     # 凭证统计（透明度信息：让用户知道聚合了多少条凭证）
     voucher_count = db.execute(text("""
         SELECT COUNT(*) FROM voucher_header
@@ -374,4 +386,5 @@ async def validate_from_vouchers(
         "column_mapping":   baseline_parsed["column_mapping"],
         "bs_diff":          bs_diff_rows,
         "is_diff":          is_diff_rows,
+        "tb_diff":          tb_diff_rows,
     }

@@ -545,6 +545,45 @@ def aggregate_voucher_period_by_sub(
     return result
 
 
+def compute_tb_diff(system_tb_items: list[dict], ref_parsed: dict) -> list[dict]:
+    """
+    系统反推科目余额表 vs 参考科目余额表 Excel 的逐科目对比（只比母科目级 level==0）。
+    用净额（借-贷）对比三个维度：期初 / 本期发生 / 期末。差额 ≥ 1 元算不匹配。
+    返回每科目一行；前端可只展示 match=False 的行。
+    """
+    TOL = Decimal("1.00")
+    ref_end   = ref_parsed.get("end_bal", {})
+    ref_beg   = ref_parsed.get("beg_bal", {})
+    ref_ytd_d = ref_parsed.get("ytd_debit_map", {})
+    ref_ytd_c = ref_parsed.get("ytd_credit_map", {})
+
+    sys_rows = {it["code"]: it for it in system_tb_items if (it.get("level") or 0) == 0}
+    all_codes = (set(sys_rows) | set(ref_end) | set(ref_beg)
+                 | set(ref_ytd_d) | set(ref_ytd_c))
+
+    out: list[dict] = []
+    for code in sorted(all_codes):
+        sit = sys_rows.get(code)
+        sys_close = Decimal(str((sit["closing_debit"] - sit["closing_credit"]) if sit else 0))
+        sys_open  = Decimal(str((sit["opening_debit"] - sit["opening_credit"]) if sit else 0))
+        sys_cur   = Decimal(str((sit["current_debit"] - sit["current_credit"]) if sit else 0))
+        ref_close = ref_end.get(code, Decimal("0"))
+        ref_open  = ref_beg.get(code, Decimal("0"))
+        ref_cur   = ref_ytd_d.get(code, Decimal("0")) - ref_ytd_c.get(code, Decimal("0"))
+        open_ok  = abs(sys_open  - ref_open)  < TOL
+        cur_ok   = abs(sys_cur   - ref_cur)   < TOL
+        close_ok = abs(sys_close - ref_close) < TOL
+        out.append({
+            "code":          code,
+            "name":          sit["name"] if sit else "",
+            "sys_opening":   float(sys_open),  "ref_opening": float(ref_open),  "opening_match": open_ok,
+            "sys_current":   float(sys_cur),   "ref_current": float(ref_cur),   "current_match": cur_ok,
+            "sys_closing":   float(sys_close), "ref_closing": float(ref_close), "closing_match": close_ok,
+            "match":         open_ok and cur_ok and close_ok,
+        })
+    return out
+
+
 def compute_from_baseline_and_vouchers(
     db,
     baseline_parsed: dict,

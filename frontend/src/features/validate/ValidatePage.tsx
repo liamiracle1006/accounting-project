@@ -36,6 +36,15 @@ interface TrialBalance {
   balanced: { opening: boolean; current: boolean; closing: boolean }
 }
 
+interface TBDiffRow {
+  code:          string
+  name:          string
+  sys_opening:   number; ref_opening: number; opening_match: boolean
+  sys_current:   number; ref_current: number; current_match: boolean
+  sys_closing:   number; ref_closing: number; closing_match: boolean
+  match:         boolean
+}
+
 interface ValidateResult {
   balance_sheet:      BalanceSheet
   income_statement:   IncomeStatement
@@ -48,6 +57,7 @@ interface ValidateResult {
   column_mapping:     Record<string, string>
   bs_diff:            DiffRow[]
   is_diff:            DiffRow[]
+  tb_diff?:           TBDiffRow[]   // 模式 B 上传参考科目余额表后才有
 }
 
 type ValidateMode = 'A' | 'B'
@@ -179,6 +189,59 @@ function TBTable({ tb }: { tb: TrialBalance }) {
           </tbody>
         </table>
       </div>
+    </div>
+  )
+}
+
+// ── Trial Balance Diff Table ──────────────────────────────────────────────────
+
+function TBDiffTable({ rows }: { rows: TBDiffRow[] }) {
+  if (rows.length === 0) return null
+  const mismatches = rows.filter(r => !r.match)
+  const f = (n: number) => n.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const cell = (v: number, ok: boolean, bold = false) =>
+    <td className={`border border-gray-200 px-2 py-1 text-right tabular-nums ${
+      ok ? 'text-gray-700' : `bg-red-50 text-red-700 ${bold ? 'font-semibold' : ''}`}`}>{f(v)}</td>
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+      <div className="px-4 py-3 border-b border-gray-100 bg-gray-50 flex items-center gap-3">
+        <h3 className="text-sm font-bold text-gray-700">科目余额表 — 与参考表差异对比</h3>
+        {mismatches.length === 0
+          ? <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">全部一致 ✓</span>
+          : <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">{mismatches.length} 个科目对不上</span>}
+        <span className="text-xs text-gray-400 ml-auto">共比对 {rows.length} 个科目（净额，差 ≥1 元标红）</span>
+      </div>
+      {mismatches.length > 0 && (
+        <div className="overflow-auto max-h-[500px]">
+          <table className="w-full text-xs border-collapse">
+            <thead className="sticky top-0 bg-gray-50 z-10">
+              <tr className="text-gray-500">
+                <th rowSpan={2} className="border border-gray-200 px-2 py-1 text-left">科目</th>
+                <th colSpan={2} className="border border-gray-200 px-2 py-1 text-center">期初净额</th>
+                <th colSpan={2} className="border border-gray-200 px-2 py-1 text-center">本期发生净额</th>
+                <th colSpan={2} className="border border-gray-200 px-2 py-1 text-center">期末净额</th>
+              </tr>
+              <tr className="text-gray-400">
+                <th className="border border-gray-200 px-2 py-1">系统</th><th className="border border-gray-200 px-2 py-1">参考</th>
+                <th className="border border-gray-200 px-2 py-1">系统</th><th className="border border-gray-200 px-2 py-1">参考</th>
+                <th className="border border-gray-200 px-2 py-1">系统</th><th className="border border-gray-200 px-2 py-1">参考</th>
+              </tr>
+            </thead>
+            <tbody>
+              {mismatches.map(r => (
+                <tr key={r.code}>
+                  <td className="border border-gray-200 px-2 py-1">
+                    <span className="font-mono text-gray-500 mr-1">{r.code}</span>{r.name}
+                  </td>
+                  {cell(r.sys_opening, r.opening_match, true)}{cell(r.ref_opening, r.opening_match)}
+                  {cell(r.sys_current, r.current_match, true)}{cell(r.ref_current, r.current_match)}
+                  {cell(r.sys_closing, r.closing_match, true)}{cell(r.ref_closing, r.closing_match)}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   )
 }
@@ -349,6 +412,7 @@ export default function ValidatePage() {
   const [monthFile, setMonthFile] = useState<File | null>(null)
   const [bsRefFile, setBsRefFile] = useState<File | null>(null)
   const [isRefFile, setIsRefFile] = useState<File | null>(null)
+  const [tbRefFile, setTbRefFile] = useState<File | null>(null)
   const [dateFrom,  setDateFrom]  = useState<string>(firstOfMonthStr())
   const [dateTo,    setDateTo]    = useState<string>(todayStr())
   const [standard,  setStandard]  = useState<'xiye' | 'gaap'>('xiye')
@@ -384,6 +448,7 @@ export default function ValidatePage() {
         form.append('date_to',   dateTo)
         if (bsRefFile) form.append('bs_ref', bsRefFile)
         if (isRefFile) form.append('is_ref', isRefFile)
+        if (tbRefFile) form.append('tb_ref', tbRefFile)
         form.append('standard', standard)
         const resp = await api.post<ValidateResult>('/api/validate/from-vouchers', form)
         setResult(resp)
@@ -472,6 +537,12 @@ export default function ValidatePage() {
               <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)}
                 className="border border-gray-200 rounded-lg px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
+            <FileInput
+              label="参考科目余额表 Excel（可选）"
+              hint="当期原系统科目余额表，逐科目对比标红差异"
+              value={tbRefFile}
+              onChange={setTbRefFile}
+            />
           </>
         )}
         <div className="flex flex-col gap-1">
@@ -568,6 +639,9 @@ export default function ValidatePage() {
               <DiffTable title="利润表" rows={result.is_diff} />
             </div>
           )}
+
+          {/* 科目余额表与参考表差异（上传参考科目余额表后才有） */}
+          {result.tb_diff && result.tb_diff.length > 0 && <TBDiffTable rows={result.tb_diff} />}
 
           {/* 系统反推科目余额表（仅模式 B 有） */}
           {result.trial_balance && <TBTable tb={result.trial_balance} />}
