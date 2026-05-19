@@ -18,6 +18,9 @@ class VoucherLine(TenantMixin, Base):
     auxiliary_entity_id: Mapped[int | None] = mapped_column(
                              ForeignKey("auxiliary_entity.entity_id"), nullable=True)
     memo: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    # 序时账导入保留的原始子科目码 + 名称（subject_code 是归一后的 4 位母码）
+    sub_code: Mapped[str | None] = mapped_column(String(40),  nullable=True)
+    sub_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
 
     voucher = relationship("VoucherHeader", back_populates="lines")
 

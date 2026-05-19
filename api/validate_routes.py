@@ -176,7 +176,7 @@ async def validate_from_vouchers(
         "ytd_debit_map": {}, "ytd_credit_map": {},
         "name_ytd_credit": {}, "name_cur_credit": {},
         "name_ytd_debit": {}, "name_cur_debit": {},
-        "raw_rows": [], "column_mapping": {}, "row_count": 0,
+        "raw_rows": [], "sub_rows": [], "column_mapping": {}, "row_count": 0,
     }
     if baseline_file is not None and baseline_file.filename:
         if not baseline_file.filename.lower().endswith((".xlsx", ".xls")):
@@ -257,14 +257,62 @@ async def validate_from_vouchers(
     )).fetchall()
     name_map = {r[0]: r[1] for r in name_rows}
 
-    all_codes = sorted(set(year_start_net) | set(end_bal_net) | set(ytd_d) | set(ytd_c))
-
     def _split_signed(v: _D) -> tuple[float, float]:
         """net 形式（debit - credit）拆成 (debit_col, credit_col) 两列"""
         if v > 0:  return (float(v), 0.0)
         if v < 0:  return (0.0, float(-v))
         return (0.0, 0.0)
 
+    # ── A8：子科目级明细（只取 code 长度 > 4 的明细行）────────────────────────────
+    from services.validation_service import aggregate_voucher_period_by_sub
+    sub_voucher = aggregate_voucher_period_by_sub(db, tenant_id, account_set_id, df, dt)
+
+    baseline_sub: dict[str, dict] = {}
+    for sr in baseline_parsed.get("sub_rows", []):
+        if len(str(sr["sub_code"])) > 4:
+            baseline_sub[str(sr["sub_code"])] = sr
+
+    all_sub_codes = set(baseline_sub) | {sc for sc in sub_voucher if len(str(sc)) > 4}
+    children_by_parent: dict[str, list] = {}
+    for sc in all_sub_codes:
+        bsr = baseline_sub.get(sc)
+        vsr = sub_voucher.get(sc)
+        parent = (bsr["parent_code"] if bsr else None) or (vsr["parent"] if vsr else "")
+        sname  = (bsr["name"] if bsr and bsr.get("name") else None) \
+                 or (vsr["name"] if vsr else "") or ""
+        beg     = _D(str(bsr["beg_net"]))    if bsr else _D("0")
+        bse     = _D(str(bsr["end_net"]))    if bsr else _D("0")
+        b_ytd_d = _D(str(bsr["ytd_debit"]))  if bsr else _D("0")
+        b_ytd_c = _D(str(bsr["ytd_credit"])) if bsr else _D("0")
+        v_d     = vsr["debit"]  if vsr else _D("0")
+        v_c     = vsr["credit"] if vsr else _D("0")
+        closing = bse + v_d - v_c
+        cur_d   = float(b_ytd_d + v_d)
+        cur_c   = float(b_ytd_c + v_c)
+        beg_dd, beg_cc = _split_signed(beg)
+        end_dd, end_cc = _split_signed(closing)
+        if not (beg_dd or beg_cc or cur_d or cur_c or end_dd or end_cc):
+            continue
+        children_by_parent.setdefault(parent, []).append({
+            "code":           sc,
+            "name":           sname,
+            "level":          1,
+            "parent_code":    parent,
+            "has_children":   False,
+            "opening_debit":  beg_dd, "opening_credit": beg_cc,
+            "current_debit":  cur_d,  "current_credit": cur_c,
+            "closing_debit":  end_dd, "closing_credit": end_cc,
+        })
+    for kids in children_by_parent.values():
+        kids.sort(key=lambda x: x["code"])
+
+    # 母科目码全集 = 母科目级数据 ∪ 有子科目的 parent
+    all_codes = sorted(
+        set(year_start_net) | set(end_bal_net) | set(ytd_d) | set(ytd_c)
+        | set(children_by_parent.keys())
+    )
+
+    # ── 母科目行 + 其下子科目行（扁平列表，母行紧跟子行）──────────────────────────
     tb_items = []
     tot = {"opening_debit": 0.0, "opening_credit": 0.0,
            "current_debit": 0.0, "current_credit": 0.0,
@@ -276,15 +324,21 @@ async def validate_from_vouchers(
         ytd_cc = float(ytd_c.get(code, _D("0")))
         beg_dd, beg_cc = _split_signed(ys)
         end_dd, end_cc = _split_signed(end)
-        if not (beg_dd or beg_cc or ytd_dd or ytd_cc or end_dd or end_cc):
+        kids = children_by_parent.get(code, [])
+        if not (beg_dd or beg_cc or ytd_dd or ytd_cc or end_dd or end_cc or kids):
             continue
         tb_items.append({
             "code":           code,
             "name":           name_map.get(code, ""),
+            "level":          0,
+            "parent_code":    None,
+            "has_children":   bool(kids),
             "opening_debit":  beg_dd, "opening_credit": beg_cc,
             "current_debit":  ytd_dd, "current_credit": ytd_cc,
             "closing_debit":  end_dd, "closing_credit": end_cc,
         })
+        tb_items.extend(kids)  # 子科目行紧跟母科目
+        # 合计只累加母科目行（数值与无子科目时一致）
         tot["opening_debit"]  += beg_dd; tot["opening_credit"] += beg_cc
         tot["current_debit"]  += ytd_dd; tot["current_credit"] += ytd_cc
         tot["closing_debit"]  += end_dd; tot["closing_credit"] += end_cc

@@ -287,6 +287,23 @@ def parse_trial_balance(file_bytes: bytes, standard: str = "xiye") -> dict:
         if d["cd"]:
             name_cur_debit[clean_name]  = name_cur_debit.get(clean_name,  Decimal("0")) + d["cd"]
 
+    # ── 第1.6步：提取子科目级数据（A8）——去重前、保留所有层级行 ────────────────────
+    # 只读 raw_data，不影响后续去重逻辑和母科目级 end_bal/ytd 输出。
+    # parent_code 归一到 GAAP 4 位母码（与 BS/IS 母科目、凭证 subject_code 对齐）。
+    sub_rows: list[dict] = []
+    for _raw_code, _d in raw_data.items():
+        _parent4 = _raw_code[:4]
+        _parent_code = _resolve_code(_parent4, "") if standard == "xiye" else _parent4
+        sub_rows.append({
+            "sub_code":    _raw_code,
+            "parent_code": _parent_code,
+            "name":        _d["name"],
+            "end_net":     _d["ed"] - _d["ec"],
+            "beg_net":     _d["bd"] - _d["bc"],
+            "ytd_debit":   _d["yd"],
+            "ytd_credit":  _d["yc"],
+        })
+
     # ── 第二步：去重清洗————删除父科目存在且有数据时的子科目行 ──────────────────
     # 荆鹏同时导出父行和子行时会造成重复计数。
     # 对于 BS 账户：期末余额非零即可判断父行为汇总行。
@@ -352,6 +369,7 @@ def parse_trial_balance(file_bytes: bytes, standard: str = "xiye") -> dict:
         "name_ytd_debit":  name_ytd_debit,
         "name_cur_debit":  name_cur_debit,
         "raw_rows":        raw_rows,
+        "sub_rows":        sub_rows,        # A8：子科目级明细（去重前全量）
         "column_mapping":  col_mapping,
         "row_count":       len(raw_rows),
     }
@@ -477,6 +495,54 @@ def aggregate_voucher_period(
         elif direction == "CREDIT":
             cur_credit_map[code] = amt
     return cur_debit_map, cur_credit_map
+
+
+def aggregate_voucher_period_by_sub(
+    db,
+    tenant_id: int,
+    account_set_id: int,
+    date_from,
+    date_to,
+) -> dict[str, dict]:
+    """
+    子科目级聚合：按原始子科目码（sub_code，缺失时回退 4 位 subject_code）聚合
+    [date_from, date_to] 期间 POSTED 凭证的借/贷发生额。
+    返回 {sub_code: {"parent": 4位母码, "name": 子科目名, "debit": Decimal, "credit": Decimal}}。
+    不影响 aggregate_voucher_period（BS/IS 仍用那个）。
+    """
+    from sqlalchemy import text
+
+    rows = db.execute(text("""
+        SELECT COALESCE(NULLIF(vl.sub_code, ''), vl.subject_code) AS scode,
+               vl.subject_code AS parent,
+               MAX(vl.sub_name)                                  AS sname,
+               vl.direction,
+               SUM(vl.amount)                                    AS total
+        FROM voucher_line vl
+        INNER JOIN voucher_header vh ON vh.voucher_id = vl.voucher_id
+        WHERE vh.tenant_id = :tid
+          AND vh.account_set_id = :asid
+          AND vh.review_status = 'POSTED'
+          AND vh.voucher_date >= :df
+          AND vh.voucher_date <= :dt
+        GROUP BY scode, vl.subject_code, vl.direction
+    """), {
+        "tid": tenant_id, "asid": account_set_id,
+        "df":  date_from, "dt":  date_to,
+    }).fetchall()
+
+    result: dict[str, dict] = {}
+    for scode, parent, sname, direction, total in rows:
+        amt = Decimal(str(total))
+        entry = result.setdefault(scode, {
+            "parent": parent, "name": sname or "",
+            "debit": Decimal("0"), "credit": Decimal("0"),
+        })
+        if direction == "DEBIT":
+            entry["debit"] += amt
+        elif direction == "CREDIT":
+            entry["credit"] += amt
+    return result
 
 
 def compute_from_baseline_and_vouchers(

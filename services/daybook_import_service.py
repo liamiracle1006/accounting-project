@@ -287,12 +287,19 @@ def _create_one_voucher(
             debit_amt += (-credit_amt)
             credit_amt = Decimal("0")
 
+        # sub_code = 原始完整子科目码（如 1122012），sub_name = 子科目名
+        # 用于科目余额表展开往来单位明细；subject_code 仍是归一后的 4 位母码
+        sub_code = raw_code
+        sub_name = raw_name[:120]
+
         if debit_amt > 0:
             line_specs.append({
                 "subject_code": subject_code,
                 "direction":    "DEBIT",
                 "amount":       debit_amt,
                 "memo":         line_memo,
+                "sub_code":     sub_code,
+                "sub_name":     sub_name,
             })
             total_debit += debit_amt
         if credit_amt > 0:
@@ -301,6 +308,8 @@ def _create_one_voucher(
                 "direction":    "CREDIT",
                 "amount":       credit_amt,
                 "memo":         line_memo,
+                "sub_code":     sub_code,
+                "sub_name":     sub_name,
             })
             total_credit += credit_amt
 
@@ -358,4 +367,6 @@ def _create_one_voucher(
             direction      = spec["direction"],
             amount         = spec["amount"],
             memo           = spec["memo"],
+            sub_code       = spec.get("sub_code"),
+            sub_name       = spec.get("sub_name"),
         ))

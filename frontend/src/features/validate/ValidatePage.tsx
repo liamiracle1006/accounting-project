@@ -15,6 +15,9 @@ interface DiffRow {
 interface TBItem {
   code:           string
   name:           string
+  level?:         number          // 0=母科目 1=子科目
+  parent_code?:   string | null
+  has_children?:  boolean
   opening_debit:  number
   opening_credit: number
   current_debit:  number
@@ -79,6 +82,24 @@ function TBTable({ tb }: { tb: TrialBalance }) {
     <span className={`text-xs px-2 py-0.5 rounded font-medium ${ok ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
       {label}{ok ? ' ✓' : ' ✗'}
     </span>
+
+  // 树形展开：默认全部折叠，记录已展开的母科目码
+  const parentsWithKids = tb.items.filter(it => it.has_children).map(it => it.code)
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const allExpanded = parentsWithKids.length > 0 && expanded.size === parentsWithKids.length
+  const toggle = (code: string) => setExpanded(prev => {
+    const next = new Set(prev)
+    next.has(code) ? next.delete(code) : next.add(code)
+    return next
+  })
+  const toggleAll = () => setExpanded(allExpanded ? new Set() : new Set(parentsWithKids))
+
+  // 只显示母科目行 + 已展开母科目下的子行
+  const visibleItems = tb.items.filter(it =>
+    (it.level ?? 0) === 0 || expanded.has(it.parent_code ?? ''))
+  const parentCount = tb.items.filter(it => (it.level ?? 0) === 0).length
+  const subCount    = tb.items.length - parentCount
+
   return (
     <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
       <div className="px-4 py-3 border-b border-gray-100 bg-gray-50 flex items-center gap-2 flex-wrap">
@@ -87,7 +108,13 @@ function TBTable({ tb }: { tb: TrialBalance }) {
         {balRow('期初平衡', tb.balanced.opening)}
         {balRow('本期平衡', tb.balanced.current)}
         {balRow('期末平衡', tb.balanced.closing)}
-        <span className="text-xs text-gray-400 ml-auto">共 {tb.items.length} 个科目</span>
+        {parentsWithKids.length > 0 && (
+          <button onClick={toggleAll}
+            className="text-xs px-2 py-0.5 rounded border border-gray-300 text-gray-600 hover:bg-gray-100">
+            {allExpanded ? '收起全部子科目' : '展开全部子科目'}
+          </button>
+        )}
+        <span className="text-xs text-gray-400 ml-auto">{parentCount} 个母科目 · {subCount} 个子科目</span>
       </div>
       <div className="overflow-auto max-h-[600px]">
         <table className="w-full text-xs border-collapse">
@@ -108,20 +135,38 @@ function TBTable({ tb }: { tb: TrialBalance }) {
             </tr>
           </thead>
           <tbody>
-            {tb.items.map(it => (
-              <tr key={it.code} className="hover:bg-gray-50">
-                <td className="border border-gray-200 px-2 py-1">
-                  <span className="font-mono text-gray-500 mr-1">{it.code}</span>
-                  <span className="text-gray-800">{it.name}</span>
-                </td>
-                <td className="border border-gray-200 px-2 py-1 text-right tabular-nums">{fmtCell(it.opening_debit)}</td>
-                <td className="border border-gray-200 px-2 py-1 text-right tabular-nums">{fmtCell(it.opening_credit)}</td>
-                <td className="border border-gray-200 px-2 py-1 text-right tabular-nums">{fmtCell(it.current_debit)}</td>
-                <td className="border border-gray-200 px-2 py-1 text-right tabular-nums">{fmtCell(it.current_credit)}</td>
-                <td className="border border-gray-200 px-2 py-1 text-right tabular-nums">{fmtCell(it.closing_debit)}</td>
-                <td className="border border-gray-200 px-2 py-1 text-right tabular-nums">{fmtCell(it.closing_credit)}</td>
-              </tr>
-            ))}
+            {visibleItems.map(it => {
+              const isChild = (it.level ?? 0) > 0
+              return (
+                <tr key={it.code} className={isChild ? 'bg-slate-50/60' : 'hover:bg-gray-50'}>
+                  <td className="border border-gray-200 px-2 py-1">
+                    {isChild ? (
+                      <span className="pl-6 text-gray-600">
+                        <span className="font-mono text-gray-400 mr-1">{it.code}</span>
+                        {it.name}
+                      </span>
+                    ) : (
+                      <span>
+                        {it.has_children ? (
+                          <button onClick={() => toggle(it.code)}
+                            className="mr-1 text-gray-400 hover:text-gray-700 w-3 inline-block">
+                            {expanded.has(it.code) ? '▼' : '▶'}
+                          </button>
+                        ) : <span className="mr-1 w-3 inline-block" />}
+                        <span className="font-mono text-gray-500 mr-1">{it.code}</span>
+                        <span className="text-gray-800 font-medium">{it.name}</span>
+                      </span>
+                    )}
+                  </td>
+                  <td className="border border-gray-200 px-2 py-1 text-right tabular-nums">{fmtCell(it.opening_debit)}</td>
+                  <td className="border border-gray-200 px-2 py-1 text-right tabular-nums">{fmtCell(it.opening_credit)}</td>
+                  <td className="border border-gray-200 px-2 py-1 text-right tabular-nums">{fmtCell(it.current_debit)}</td>
+                  <td className="border border-gray-200 px-2 py-1 text-right tabular-nums">{fmtCell(it.current_credit)}</td>
+                  <td className="border border-gray-200 px-2 py-1 text-right tabular-nums">{fmtCell(it.closing_debit)}</td>
+                  <td className="border border-gray-200 px-2 py-1 text-right tabular-nums">{fmtCell(it.closing_credit)}</td>
+                </tr>
+              )
+            })}
             <tr className="bg-gray-100 font-semibold sticky bottom-0">
               <td className="border border-gray-300 px-2 py-1.5">合计</td>
               <td className="border border-gray-300 px-2 py-1.5 text-right tabular-nums">{fmtCell(t.opening_debit)}</td>
