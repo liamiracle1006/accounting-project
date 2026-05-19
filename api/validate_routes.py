@@ -141,7 +141,7 @@ def _resolve_account_set(db: Session, user: UserAccount) -> int:
 
 @router.post("/from-vouchers")
 async def validate_from_vouchers(
-    baseline_file: UploadFile = File(..., description="上期期末科目表 Excel"),
+    baseline_file: Optional[UploadFile] = File(None, description="上期期末科目表 Excel（开账首月可不传，期初当 0）"),
     date_from:     str        = Form(..., description="本期起始日 YYYY-MM-DD"),
     date_to:       str        = Form(..., description="本期截止日 YYYY-MM-DD"),
     bs_ref:        Optional[UploadFile] = File(None),
@@ -155,6 +155,7 @@ async def validate_from_vouchers(
 
     工作流：
     1. 解析 baseline_file → 拿到上期期末（=本期期初）+ 上期 YTD
+       —— 若不传 baseline_file（开账首月场景），期初一律当 0
     2. 从 voucher_line+voucher_header 聚合 [date_from, date_to] 期间 POSTED 凭证发生额
     3. 期末余额 = 期初 + 本期净发生
     4. 复用现有 BS/IS 映射逻辑，并跟参考报表 diff 对比
@@ -168,21 +169,30 @@ async def validate_from_vouchers(
     if df > dt:
         raise HTTPException(status_code=422, detail="date_from 不能晚于 date_to")
 
-    # 校验基准文件
-    if not baseline_file.filename or not baseline_file.filename.lower().endswith((".xlsx", ".xls")):
-        raise HTTPException(status_code=400, detail="基准文件请上传 .xlsx / .xls")
-    baseline_bytes = await baseline_file.read()
-    if len(baseline_bytes) > 10 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="基准文件不能超过 10MB")
-
-    # 解析基准
-    try:
-        baseline_parsed = parse_trial_balance(baseline_bytes, standard=standard)
-    except ValueError as exc:
-        raise HTTPException(status_code=422, detail=f"基准文件解析失败：{exc}")
-    except Exception as exc:
-        logger.exception("解析基准科目表失败")
-        raise HTTPException(status_code=500, detail=f"基准解析失败：{exc}")
+    # 解析基准 —— 不传则用空结构（开账首月：期初余额全部为 0）
+    _EMPTY_BASELINE = {
+        "end_bal": {}, "beg_bal": {},
+        "cur_debit_map": {}, "cur_credit_map": {},
+        "ytd_debit_map": {}, "ytd_credit_map": {},
+        "name_ytd_credit": {}, "name_cur_credit": {},
+        "name_ytd_debit": {}, "name_cur_debit": {},
+        "raw_rows": [], "column_mapping": {}, "row_count": 0,
+    }
+    if baseline_file is not None and baseline_file.filename:
+        if not baseline_file.filename.lower().endswith((".xlsx", ".xls")):
+            raise HTTPException(status_code=400, detail="基准文件请上传 .xlsx / .xls")
+        baseline_bytes = await baseline_file.read()
+        if len(baseline_bytes) > 10 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="基准文件不能超过 10MB")
+        try:
+            baseline_parsed = parse_trial_balance(baseline_bytes, standard=standard)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=f"基准文件解析失败：{exc}")
+        except Exception as exc:
+            logger.exception("解析基准科目表失败")
+            raise HTTPException(status_code=500, detail=f"基准解析失败：{exc}")
+    else:
+        baseline_parsed = _EMPTY_BASELINE
 
     # 解析租户 + 账套
     tenant_id      = current_user.tenant_id

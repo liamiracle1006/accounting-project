@@ -312,13 +312,14 @@ export default function ValidatePage() {
   const [result,    setResult]    = useState<ValidateResult | null>(null)
 
   async function handleCompute() {
-    if (!tbFile) return
+    // 模式 A 必须有科目表文件；模式 B 基准表可选（开账首月留空）
+    if (mode === 'A' && !tbFile) return
     setLoading(true)
     setError(null)
     try {
       const form = new FormData()
       if (mode === 'A') {
-        form.append('file', tbFile)
+        form.append('file', tbFile!)
         if (monthFile) form.append('month_file', monthFile)
         if (bsRefFile) form.append('bs_ref', bsRefFile)
         if (isRefFile) form.append('is_ref', isRefFile)
@@ -333,7 +334,7 @@ export default function ValidatePage() {
       } else {
         // 模式 B：基准 + 系统凭证（需鉴权，用 api.post 自动带 token）
         if (!dateFrom || !dateTo) { setError('请填写日期范围'); return }
-        form.append('baseline_file', tbFile)
+        if (tbFile) form.append('baseline_file', tbFile)  // 不传=开账首月，期初当 0
         form.append('date_from', dateFrom)
         form.append('date_to',   dateTo)
         if (bsRefFile) form.append('bs_ref', bsRefFile)
@@ -411,8 +412,8 @@ export default function ValidatePage() {
         ) : (
           <>
             <FileInput
-              label="上期期末科目表（必填）"
-              hint="如 11 月期末，作为本期期初基准"
+              label="上期期末科目表（开账首月可不传）"
+              hint="如 11 月期末作基准；首月留空则期初=0"
               value={tbFile}
               onChange={setTbFile}
             />
@@ -461,7 +462,7 @@ export default function ValidatePage() {
         />
         <button
           onClick={handleCompute}
-          disabled={!tbFile || loading}
+          disabled={loading || (mode === 'A' && !tbFile)}
           className="px-4 py-2 rounded bg-blue-600 text-white text-sm font-medium hover:bg-blue-700 transition-colors disabled:opacity-50"
         >
           {loading ? '计算中…' : '计算报表'}
