@@ -181,9 +181,11 @@ def get_record(record_id: int, db: Session = Depends(get_db)) -> Any:
     return _make_record_resp(record, voucher.voucher_id if voucher else None)
 
 
-@router.get("/vouchers/{voucher_id}", response_model=VoucherResponse)
+@router.get("/vouchers/{voucher_id:int}", response_model=VoucherResponse)
 def get_voucher(voucher_id: int, db: Session = Depends(get_db)) -> Any:
-    """查询凭证主表 + 借贷明细（支持穿透审计）。"""
+    """查询凭证主表 + 借贷明细（支持穿透审计）。
+    注意 {voucher_id:int} 转换器：非整数路径（如 /vouchers/trash）不匹配此路由，
+    会落到 voucher_routes.py 的 /trash 等静态路由。"""
     voucher = db.get(VoucherHeader, voucher_id)
     if not voucher:
         raise HTTPException(status_code=404, detail=f"Voucher {voucher_id} not found")

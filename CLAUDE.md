@@ -43,34 +43,37 @@ accounting-project/
 ## 当前进展
 **已完成**：
 - **前端 React 全量迁移**：21+ feature 页（dashboard / vouchers / reports / records / assets / advisor / knowledge / audit / invoice / daybook…）
-- **凭证流程**：流水→AI 生成→审核→过账→月末结账
+- **凭证流程**：流水→AI 生成→审核→过账→月末结账；凭证管理页支持「🚀 一键全部过账」（A7）
 - **报表**：试算平衡 / 明细账 / BS / IS（双标准）+ 验证工具
-- **Phase A 序时账验证链路**（commit `7372e5a`）：
-  - A1-A3：序时账 Excel → DRAFT 凭证（合并单元格 ffill、红字记账翻方向、10 位子码归一到 4 位母科目）
-  - A4-A6：上传"上期期末科目表 + 日期范围" → 用本期 POSTED 凭证反推 BS/IS + 跟参考报表 diff
+- **Phase A 序时账验证链路**：
+  - A1-A3：序时账 Excel → DRAFT 凭证（合并单元格 ffill、红字记账翻方向、子码归一到 4 位母科目）
+  - A4-A6：ValidatePage 模式 B——上传「上期期末科目表 + 日期范围」→ 用本期 POSTED 凭证反推 BS/IS/科目余额表；基准表可不传（开账首月期初=0）
+  - A8：科目余额表保留**子科目明细**——`voucher_line` 存原始子科目码（`sub_code`/`sub_name`），模式 B 输出树形多级科目表，可展开往来单位明细。BS/IS 计算不受影响（仍 4 位母科目）
+  - TB diff：模式 B 可上传当期参考科目余额表，逐科目（净额）对比、标红差异
 - **租户上下文统一**：8 个路由的 `_get_ctx` 走 `resolve_tenant_ctx(db, user)`，绕开 ContextVar
-- **DB schema 修补**：`voucher_header` 表加了 voucher_number / voucher_word / creator_id / is_deleted 4 列与 ORM 对齐
+- **DB schema 修补**：`voucher_header`（+voucher_number/word/creator_id/is_deleted）、`voucher_line`（+sub_code/sub_name）ALTER 加列与 ORM 对齐
 
 **待实现 / TODO**：
-- **A4-A6 端到端验证**（用户手动操作）：把 12 月 DRAFT 凭证全部 POSTED → 在 ValidatePage 模式 B 上传 11 月期末科目表 → 比对 12 月参考 BS/IS
+- **A8 端到端验证**（用户操作）：重新导入序时账（旧凭证无 sub_code，A8 只对新导入生效）→ 一键过账 → 模式 B 上传基准+参考科目余额表 → 看子科目树 + TB diff
 - **Phase B 银行回单 / 发票 OCR**：用户已确认能提供 jpg/png 银行回单 + PDF/图片增值税发票；需 Vision API key + 样例
 - 现金流量表 / 权益变动表前端页面（后端 API 已存在）
 - 账套向导（涉及多租户激活，暂缓）
 
 ## 踩过的坑
 - **租户上下文 ContextVar/middleware**：设计存在但从未接入 JWT。**不要再尝试加 middleware 设 ContextVar**——会触发 `database/connection.py` 的 SQLAlchemy interceptor 给所有 ORM SELECT 注入 `with_loader_criteria`，跟历史 SQL 不兼容直接 500。每个需要 ctx 的路由用 `services/tenant_resolver.py:resolve_tenant_ctx(db, user)` 从 `current_user.tenant_id` 直接查
-- **ORM 与 DDL 不同步**：`VoucherHeader`、`AccountSet` 等模型字段比实际表多。`voucher_header` 已经 ALTER 加列对齐；`account_set` 涉及该表查询请用原生 SQL（`SELECT account_set_id FROM account_set WHERE tenant_id=?`）
+- **ORM 与 DDL 不同步**：`VoucherHeader`、`AccountSet` 等模型字段比实际表多。`voucher_header`/`voucher_line` 已 ALTER 加列对齐；`account_set` 涉及该表查询请用原生 SQL（`SELECT account_set_id FROM account_set WHERE tenant_id=?`）
+- **FastAPI 路由顺序**：`api/routes.py`（聚合路由）比各业务 router 先 include，它的动态路由 `/vouchers/{voucher_id}` 会抢占 `/vouchers/trash` 等静态路径 → 422。动态路由要加 `:int` 转换器（`{voucher_id:int}`）
+- **audit_log.tenant_id NOT NULL**：`services/audit_service.py:audit()` 写审计日志必须带 tenant_id（从 user 取），否则凭证过账/状态变更 500
 - **数据库字符集**：DDL 没指定 charset，旧数据用非 UTF-8 连接导入会变 `????`（字节已损坏不可恢复）。新建列显式 `CHARACTER SET utf8mb4`
-- **useToast 不稳定引用**：toast 函数若每次渲染都新建，会让 `useCallback([..., error])` 无限循环。`useToast.ts` 已用 `useCallback` 包装稳定下来
+- **useToast 不稳定引用**：toast 函数若每次渲染都新建会让 `useCallback` 无限循环。`useToast.ts` 已用 `useCallback` 包装
 - **401 vs 400**：前端 `api/client.ts` 收 401 自动登出。后端业务错误（"未设置租户上下文"等）必须用 **400**
 - **序时账红字记账**：Excel 中负数金额表示反方向记账（"贷方 -5.20" = "借方 +5.20"）。`daybook_import_service.py` 已处理：负数翻到对方
-- **序时账子科目码归一**：荆鹏导出 5-10 位子码（如 5401004），voucher_line FK 只接受 4 位母科目码。导入时取前 4 位 → `_resolve_code` → GAAP 6xxx/4xxx；原始码+名保留到 `voucher_line.memo`
+- **后端返回分页对象 vs 数组**：`/api/vouchers` 返回 `{total,page,items}`，前端 `vouchersApi.list` 内部解构 `.items`
 - **Windows 终端 cp1252**：`py -3.12 -c "..."` 含中文 print 会 `UnicodeEncodeError`。中文脚本写到 `.py` 文件再运行；或用 HEX/repr 输出
 - **种子文件没流水数据**：`operational_record` 是用户输入，重置后需要重新录或导序时账
-- **凭证 INSERT 用原生 SQL**：daybook_import 用 `db.execute(text("INSERT..."))` 是为了绕 ORM/DDL 不同步——现在 voucher_header 已对齐，可以改回 ORM 但不紧急
 
 ## 下一步
-1. 用户在凭证管理页将 12 月所有 DRAFT 凭证 POSTED
-2. 用户在 ValidatePage 模式 B 跑端到端：基准（11 月期末科目表）+ 12 月日期范围 + 12 月参考 BS/IS → 看 diff
-3. 若 diff 有大差异：定位是凭证录入问题、4 位母科目归一不一致、还是基准表解析问题
-4. A4-A6 验证通过后启动 Phase B（银行回单/发票 OCR 制单），需用户提供 Vision API key + 样例
+1. 用户重新导入 12 月序时账（带 sub_code）→ 凭证管理页「一键全部过账」
+2. ValidatePage 模式 B：基准（11 月期末科目表）+ 12 月日期范围 + 12 月参考科目余额表 → 看子科目树 + TB diff
+3. 若 diff 有差异：逐科目定位——凭证录入问题 / 4 位母科目归一不一致 / 基准表解析问题
+4. A8 验证通过后启动 Phase B（银行回单/发票 OCR 制单），需用户提供 Vision API key + 样例
